@@ -1,0 +1,27 @@
+name: Task
+description: A unit of work for one person, one branch, one PR
+labels: []
+body:
+  - type: textarea
+    id: goal
+    attributes: { label: Goal, description: What should exist when this is done? }
+    validations: { required: true }
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      value: |
+        - [ ]
+        - [ ] Tests cover the refusal / failure path
+        - [ ] `pnpm verify` passes
+    validations: { required: true }
+  - type: input
+    id: phase
+    attributes:
+      {
+        label: Phase,
+        placeholder: "Thin slice / Both rails / Decision + benchmark / Freeze / Ship",
+      }
+  - type: textarea
+    id: notes
+    attributes: { label: Notes, description: Links, contracts touched, dependencies }
