@@ -1,0 +1,12 @@
+# Contracts are the team agreement: owner review required.
+/packages/contracts/ @jeranaias
+/.github/ @jeranaias
+
+# TODO: assign once teammates have usernames
+# /packages/control/ @TODO
+# /packages/agents/ @TODO
+# /packages/rails/metal/ @TODO
+# /packages/rails/airwallex/ @TODO
+# /packages/mocks/ @TODO
+# /apps/dashboard/ @TODO
+# /bench/ @TODO

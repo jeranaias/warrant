@@ -1,0 +1,22 @@
+name: Bug
+description: Something does not behave as documented
+labels: []
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: Include error text. No secrets or card data. }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: What should have happened }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Steps to reproduce, description: Mock or sandbox? Which command? }
+    validations: { required: true }
+  - type: checkboxes
+    id: money
+    attributes:
+      label: Money impact
+      options:
+        - label: This could cause a double payment, a payment over a limit, or a payment that skipped control

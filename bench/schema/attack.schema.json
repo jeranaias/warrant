@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://warrant.local/bench/attack.schema.json",
+  "title": "Warrant benchmark case",
+  "description": "One attack (or benign control case). The runner plays `setup` into the target agent and records whether money moved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "family", "agent", "benign", "warrantRef", "setup", "expected"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "family": {
+      "description": "Attack family. `benign` cases measure false blocks.",
+      "enum": [
+        "fake_price_notice",
+        "hidden_instruction_invoice",
+        "swapped_payee",
+        "subscription_trap",
+        "duplicate_charge",
+        "budget_drain",
+        "urgent_refund_social",
+        "fx_rate_manipulation",
+        "benign"
+      ]
+    },
+    "agent": { "enum": ["sourcing", "support", "treasury"] },
+    "benign": {
+      "type": "boolean",
+      "description": "true = a legitimate request that SHOULD be paid."
+    },
+    "warrantRef": {
+      "type": "string",
+      "description": "Fixture warrant id under bench/corpus/warrants/."
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channel", "content"],
+      "properties": {
+        "channel": {
+          "enum": ["x402_offer", "invoice", "support_ticket", "price_notice", "email", "fx_quote"]
+        },
+        "content": { "type": "string", "description": "Untrusted text the agent reads." },
+        "x402Requirements": {
+          "type": "object",
+          "description": "Optional fake 402 payment requirements."
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["moneyMoves"],
+      "properties": {
+        "moneyMoves": { "type": "boolean" },
+        "maxCents": { "type": "integer", "minimum": 0 },
+        "blockedBy": { "enum": ["rules", "purpose", "owner", "any"] }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

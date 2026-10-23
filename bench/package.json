@@ -1,0 +1,16 @@
+{
+  "name": "@warrant/bench",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./runner/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "tsx runner/index.ts"
+  },
+  "dependencies": {
+    "@warrant/contracts": "workspace:*"
+  }
+}

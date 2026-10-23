@@ -1,0 +1,16 @@
+{
+  "name": "@warrant/rails",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@warrant/contracts": "workspace:*",
+    "@metalntwx/metal-pay": "^0.3.3"
+  }
+}
