@@ -22,8 +22,9 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 | `KillSwitchEvent`      | approval.ts | Revoked warrants, frozen cards, released reservations.                                                                     |
 | `LedgerEntry`          | ledger.ts   | Append-only, hash-chained. reserve / confirm / release / unconfirmed / inbound / kill_switch.                              |
 
-## Open questions (decide before Oct 29)
+## Decided (2026-10-23)
 
-- Warrant signing: ed25519 over canonical JSON. Which canonicalization (RFC 8785 JCS)?
-- Duplicate-guard window for "same payee + same amount" (proposed: 10 minutes).
-- Which categories always require owner approval.
+- Warrant signing: ed25519 over the RFC 8785 (JCS) canonical JSON of `WarrantBody`. See ADR-005.
+- Duplicate-guard window: same payee + same amount within **10 minutes** is a duplicate, in
+  addition to any repeat `idempotencyKey`. See ADR-006.
+- Always needs owner approval: see ADR-007.

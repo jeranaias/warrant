@@ -33,8 +33,8 @@
 2. `rules/` produces `RulesResult`. Any failure -> `blocked`. Purpose check is skipped.
 3. `purpose/` builds `PaymentSummary` from structured fields and asks the purpose model for a
    `PurposeVerdict`. `inconsistent` -> `blocked`; `uncertain` -> `needs_owner_approval`.
-4. Some categories always need the owner (budget changes, first payment to a payee, FX payout
-   above a threshold; exact list is an ADR to write).
+4. Some categories always need the owner (ADR-007: budget changes, first payment to a payee,
+   recurring payments, Airwallex transfers/FX of USD 100.00 or more, `uncertain` verdicts).
 5. Owner approval is bound to `shownHash`. Execution recomputes the hash; mismatch -> ask again.
 6. `ledger/` writes `reserve`, calls the rail with the idempotency key, then `confirm` or
    `release`. Timeout -> `unconfirmed` -> `getStatus()` -> resolve. Never retry blind.

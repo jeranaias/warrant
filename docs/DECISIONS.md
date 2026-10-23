@@ -50,3 +50,38 @@ Date: 2026-10-23 Status: proposed
 
 Decision: `no-restricted-imports` rules in `eslint.config.js` stop agents importing rails or
 control, rails importing control or agents, and the dashboard importing rails or agents.
+
+## ADR-005: Warrant signatures use RFC 8785 canonical JSON
+
+Date: 2026-10-23 Status: accepted
+
+Context: a signature over JSON only works if every signer and verifier serializes it the same way.
+Decision: sign `WarrantBody` with ed25519 over its RFC 8785 (JSON Canonicalization Scheme)
+serialization. The same canonicalization is used for `OwnerApproval.shownHash` and ledger hashes.
+Consequences: one canonicalize function in control, used everywhere; field order never matters.
+
+## ADR-006: Duplicate-payment guard window is 10 minutes
+
+Date: 2026-10-23 Status: accepted
+
+Decision: the `duplicate_guard` rule blocks (a) any repeat `idempotencyKey`, ever, and (b) the same
+payee + same amount + same rail within 10 minutes (inclusive). It is a constant in
+`packages/control/rules`, not a prompt or warrant field.
+Consequences: a legitimate repeat purchase within 10 minutes needs a different amount or owner
+approval. Revisit if the sourcing agent's pay-per-call pattern trips it; benign bench cases will
+show that.
+
+## ADR-007: What always needs owner approval
+
+Date: 2026-10-23 Status: accepted
+
+Decision: control returns `needs_owner_approval` (even when rules and purpose pass) for:
+
+1. any `BudgetChangeProposal`;
+2. the first payment to a payee (no prior confirmed payment in the ledger);
+3. any `recurring` payment (subscription traps);
+4. any `airwallex_transfer` or `airwallex_fx` of USD 100.00 (10000 cents) or more, inclusive;
+5. any `uncertain` purpose verdict.
+   Everything else that passes rules and gets `consistent` executes without asking.
+   Consequences: the demo shows owner approval on treasury moves while x402 micro-payments stay
+   automatic. The threshold is a code constant; changing it is a new ADR.

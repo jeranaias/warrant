@@ -22,9 +22,12 @@ prompt, or log it. Leave `RAILS_MODE=mock` until your sandbox access works.
 
 ## 3. Airwallex sandbox
 
-- Create your own sandbox account at https://demo.airwallex.com.
-- Create an API key (client id + key) and put them in `.env`.
-- Base URL: `https://api-demo.airwallex.com`.
+- Sign up for your own sandbox account: https://www.sandbox.airwallex.com/global/signup
+- Sandbox web app: https://www.sandbox.airwallex.com/app
+- In the web app, create an API key (client id + API key) and put both in `.env`.
+- API base URL: `https://api.sandbox.airwallex.com` (auth: `POST /api/v1/authentication/login`
+  with `x-client-id` and `x-api-key` headers, returns a short-lived bearer token).
+- Reference: https://www.airwallex.com/docs/developer-tools/sandbox-environment
 
 ## 4. Metal testnet
 
@@ -41,7 +44,8 @@ The repo's `.mcp.json` registers two Airwallex sandbox MCP servers:
 | `airwallex-developer` | https://mcp.sandbox.airwallex.com/developer | Developer tools against your sandbox |
 
 Open Claude Code in the repo root, approve the project MCP servers when prompted, then run `/mcp`
-to check both are connected (authenticate if asked). Use the docs MCP before writing any rails or
+to check both are connected. The docs MCP needs no login. The developer MCP uses OAuth: pick it
+in `/mcp` and sign in with **your own sandbox account**. Use the docs MCP before writing any rails or
 mock code, so API shapes match the real sandbox.
 
 ## 6. Run things
