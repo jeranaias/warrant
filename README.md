@@ -2,6 +2,8 @@
 
 Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 Business Agents).
 
+**Task board:** [Warrant hackathon project](https://github.com/users/jeranaias/projects/1) (Board, By phase, Roadmap, My work, By owner).
+
 Three AI agents run a small pay-per-call data business:
 
 - The **sourcing agent** buys upstream data over x402 on Metal.
