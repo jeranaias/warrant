@@ -5,6 +5,16 @@ agents (sourcing, support, treasury) run a small pay-per-call data business on M
 Airwallex. A control layer decides whether any payment happens. See `README.md` and
 `docs/ARCHITECTURE.md`.
 
+## Status: SETUP ONLY until the shortlist is announced
+
+The organizers asked teams not to start building until shortlisted teams are notified (build phase
+expected Oct 26-27 to Nov 13, 2026). Until then: docs, planning, accounts, keys and tooling checks
+only. **No feature code, no implementations, no new code in `packages/` beyond what's on `main`.**
+Everything that existed before the build phase is tagged `pre-build-2026-10-23`.
+
+Team: four registered members write code. The fifth is an offline advisor and reviewer only and
+must not write code or build anything.
+
 ## The architecture rule
 
 **Agents propose, control decides, money only leaves through control.**
@@ -58,6 +68,10 @@ pnpm bench            # attack benchmark runner
 - **Card data and keys stay out of model context**, prompts, logs, test fixtures and errors.
 
 ## Security
+
+- The Airwallex MCP servers (`.mcp.json`) are for **us** while we build: reading docs, checking real API
+  responses, setting up sandbox data. Never give them, or any Airwallex or Metal credentials, to the
+  Warrant agents. An agent holding them could move money without going through control.
 
 - No secrets in code, prompts, logs, fixtures or commits. Secrets live only in `.env`
   (gitignored); `.env.example` has names only.
