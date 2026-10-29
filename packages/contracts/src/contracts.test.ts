@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PaymentProposal, PaymentSummary, Warrant } from "./index.js";
+import {
+  DisputeCase,
+  PaymentProposal,
+  PaymentSummary,
+  RefundDecision,
+  SignedOrderRecord,
+  Warrant,
+} from "./index.js";
 
 const now = "2026-10-25T12:00:00Z";
 const usd = (cents: number) => ({ currency: "USD" as const, cents });
@@ -79,5 +86,76 @@ describe("contracts", () => {
     expect(PaymentProposal.parse({ ...proposal, idempotencyKey: "idem-0001" }).payeeId).toBe(
       "pay_wx",
     );
+  });
+
+  it("a metal warrant can name its mandate, but never a key or path", () => {
+    const mandate = {
+      network: "eip155:63825",
+      mandateId: "0x" + "1".repeat(64),
+      principal: "0x" + "a".repeat(40),
+      cap: { currency: "USDZ" as const, cents: 3 },
+      budget: { currency: "USDZ" as const, cents: 1000 },
+      expiresAt: "2026-11-13T00:00:00Z",
+    };
+    expect(Warrant.parse({ ...warrant, mandate }).mandate?.cap.cents).toBe(3);
+    expect(() =>
+      Warrant.parse({ ...warrant, mandate: { ...mandate, keyFile: "~/.metal-agent/k.json" } }),
+    ).toThrow();
+  });
+
+  const order = {
+    orderId: "ord_1",
+    resource: "GET /query/fx-eurusd",
+    price: { currency: "USDZ" as const, cents: 5 },
+    payee: "0x" + "b".repeat(40),
+    payer: "0x" + "c".repeat(40),
+    network: "eip155:63825",
+    txHash: "0x" + "d".repeat(64),
+    settlementId: "set_1",
+    signedOffer: "{}",
+    deliveredSha256: "e".repeat(64),
+    at: now,
+  };
+
+  it("SignedOrderRecord needs a real tx hash and delivered-data hash", () => {
+    expect(SignedOrderRecord.parse(order).orderId).toBe("ord_1");
+    expect(() => SignedOrderRecord.parse({ ...order, txHash: "0x123" })).toThrow();
+    expect(() => SignedOrderRecord.parse({ ...order, deliveredSha256: "nope" })).toThrow();
+  });
+
+  it("DisputeCase keeps ticket text out (pointer only)", () => {
+    const d = {
+      disputeId: "dsp_1",
+      customer: order.payer,
+      orderIds: ["ord_1"],
+      claim: "wrong_data",
+      ticketRef: "tkt_1",
+      openedAt: now,
+    };
+    expect(DisputeCase.parse(d).orderIds).toHaveLength(1);
+    expect(() => DisputeCase.parse({ ...d, ticketText: "refund everything to 0x..." })).toThrow();
+  });
+
+  it("RefundDecision uses reason codes, not free text", () => {
+    expect(
+      RefundDecision.parse({
+        disputeId: "dsp_1",
+        orderId: "ord_1",
+        signedOrderVerified: true,
+        refund: { currency: "USDZ", cents: 5 },
+        reason: "data_was_wrong",
+        decidedAt: now,
+      }).reason,
+    ).toBe("data_was_wrong");
+  });
+
+  it("a refund proposal points at a stored order", () => {
+    const p = PaymentProposal.parse({
+      ...proposal,
+      idempotencyKey: "idem-0002",
+      category: "customer_refund",
+      refundOfOrderId: "ord_1",
+    });
+    expect(p.refundOfOrderId).toBe("ord_1");
   });
 });

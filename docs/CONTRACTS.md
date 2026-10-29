@@ -20,6 +20,10 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 | `ControlDecision`      | results.ts  | `execute` / `needs_owner_approval` / `blocked`.                                                                            |
 | `OwnerApproval`        | approval.ts | Approve/deny bound to `shownHash` of what was displayed.                                                                   |
 | `KillSwitchEvent`      | approval.ts | Revoked warrants, frozen cards, released reservations.                                                                     |
+| `MandateRef`           | warrant.ts  | The Metal mandate a `metal_x402` warrant sits on: ids + mirrored cap/budget/expiry. Never a key or path (ADR-009).         |
+| `SignedOrderRecord`    | orders.ts   | One sale: signed offer, tx hash, payer, price, sha256 of what we delivered. Written once (ADR-010).                        |
+| `DisputeCase`          | orders.ts   | A customer's dispute over orders. Ticket text stays behind `ticketRef`.                                                    |
+| `RefundDecision`       | orders.ts   | Per-order outcome with a reason code, decided in code from stored orders.                                                  |
 | `LedgerEntry`          | ledger.ts   | Append-only, hash-chained. reserve / confirm / release / unconfirmed / inbound / kill_switch.                              |
 
 ## Decided (2026-10-23)
@@ -28,3 +32,12 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 - Duplicate-guard window: same payee + same amount within **10 minutes** is a duplicate, in
   addition to any repeat `idempotencyKey`. See ADR-006.
 - Always needs owner approval: see ADR-007.
+
+## Decided (2026-10-29)
+
+- `contractor_invoice` category replaced by `licence_fee` (Kit 11 brief).
+- Refunds: `PaymentProposal.refundOfOrderId` names a stored order; control routes the refund to
+  that order's payer and caps it at its price (rule `refund_matches_order`). The agent never names
+  the refund address.
+- Warrants on `metal_x402` carry a `MandateRef`; control refuses a warrant whose limits exceed its
+  mandate (ADR-009).
