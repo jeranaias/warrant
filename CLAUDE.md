@@ -5,15 +5,18 @@ agents (sourcing, support, treasury) run a small pay-per-call data business on M
 Airwallex. A control layer decides whether any payment happens. See `README.md` and
 `docs/ARCHITECTURE.md`.
 
-## Status: SETUP ONLY until the shortlist is announced
+## Status: BUILD PHASE (shortlisted 2026-10-29)
 
-The organizers asked teams not to start building until shortlisted teams are notified (build phase
-expected Oct 26-27 to Nov 13, 2026). Until then: docs, planning, accounts, keys and tooling checks
-only. **No feature code, no implementations, no new code in `packages/` beyond what's on `main`.**
+Submission due 2026-11-13 (~10:29 AM PT); we ship 2026-11-12. Work by lane (`docs/LANES.md`);
+Kit 11 and Kit 2 facts are in `docs/kits/HACKATHON.md`; the demo checklist is `docs/DEMO.md`.
 Everything that existed before the build phase is tagged `pre-build-2026-10-23`.
 
 Team: four registered members write code. The fifth is an offline advisor and reviewer only and
 must not write code or build anything.
+
+Stack: TypeScript everywhere; Python only for benchmark charts (ADR-008). Kit 11 numbers live in
+`packages/control/src/business.ts`, never in prompts (ADR-009). Metal: CLI for paying,
+`@metalntwx/metal-pay` for selling, signed orders stored (ADR-010).
 
 ## The architecture rule
 
