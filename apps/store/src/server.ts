@@ -5,7 +5,6 @@ import type { Network } from "@x402/core/types";
 import { paymentMiddleware } from "@x402/express";
 import { SIGNED_OFFER_REQUIRED, signedOfferOf } from "@metalntwx/metal-pay/mandates";
 import { QUERY_PRICE } from "@warrant/control";
-import { centsToUsdz } from "@warrant/rails";
 import { CATALOG } from "./catalog.js";
 import type { CatalogItem, Inventory } from "./catalog.js";
 import type { OrderStore } from "./orders.js";
@@ -36,7 +35,7 @@ export function routesFor(payTo: string, items: readonly CatalogItem[] = CATALOG
           scheme: "exact",
           network: METAL_TESTNET,
           payTo,
-          price: centsToUsdz(QUERY_PRICE.cents),
+          price: dollars(QUERY_PRICE.cents),
           extra: { ...SIGNED_OFFER_REQUIRED, resource: it.resource },
         },
         description: it.title,
@@ -105,6 +104,12 @@ export function createStoreApp(opts: StoreOptions): Express {
   });
   app.get("/healthz", (_req, res) => res.json({ ok: true, paid: Boolean(opts.x402) }));
   return app;
+}
+
+/** 5 -> "0.05": x402's price is a dollar amount. Integer math only. */
+export function dollars(cents: number): string {
+  if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("cents must be a whole number");
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
 }
 
 function batchOf(body: unknown): { batchId?: string } {

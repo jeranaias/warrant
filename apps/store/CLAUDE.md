@@ -6,8 +6,8 @@ price in `@warrant/control` `QUERY_PRICE`. Every route requires the buyer's **si
 bought. After each first settlement, `onAfterSettle` stores a `SignedOrderRecord` (signed order,
 tx hash, payer, sha256 of what we delivered). Support's dispute flow reads those records.
 
-**May import:** `@warrant/contracts`, `@warrant/control` (constants only), `@warrant/rails`
-(units only), `@metalntwx/metal-pay`, `@x402/*`, `express`, `viem`, node built-ins.
+**May import:** `@warrant/contracts`, `@warrant/control` (constants only), `@metalntwx/metal-pay`,
+`@x402/*` (pinned to the version metal-pay resolves, so there is one `x402ResourceServer` type), `express`, `viem`, node built-ins.
 
 **Must never:**
 

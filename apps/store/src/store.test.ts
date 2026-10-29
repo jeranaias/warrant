@@ -35,7 +35,10 @@ const deps = { signedOffer: () => "signed-offer-jwt", item, priceCents: 5, payTo
 
 describe("routes", () => {
   it("every item is its own route at the query price, requiring a signed order", () => {
-    const routes = routesFor(PAY_TO) as Record<string, { accepts: Record<string, unknown> }>;
+    const routes = routesFor(PAY_TO) as unknown as Record<
+      string,
+      { accepts: Record<string, unknown> }
+    >;
     expect(Object.keys(routes)).toEqual(CATALOG.map((c) => c.resource));
     for (const it of CATALOG) {
       const a = routes[it.resource]?.accepts;
