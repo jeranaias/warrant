@@ -6,10 +6,13 @@ Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 Business Age
 
 Three AI agents run a small pay-per-call data business:
 
-- The **sourcing agent** buys upstream data over x402 on Metal.
-- The **support agent** refunds buyers.
-- The **treasury agent** moves earnings into Airwallex, converts FX, pays a contractor's
-  foreign-currency invoice, and proposes budget changes.
+- Customers' agents buy market data from us per query (5 cents) over x402 on Metal and sign
+  each order.
+- The **sourcing agent** buys upstream data (at most 3 cents per purchase).
+- The **support agent** settles disputed charges by checking the stored signed orders, and refunds
+  when the data we sold was wrong.
+- The **treasury agent** moves earnings into Airwallex, pays a monthly licence fee invoiced in
+  euros, and proposes new limits within the 20 USDZ total.
 - An **Airwallex virtual card** (Kit 2) pays for a software seat.
 
 Agents only submit typed proposals. A control layer decides:
@@ -52,4 +55,4 @@ cp .env.example .env   # sandbox / testnet values only
 pnpm verify
 ```
 
-Status: scaffolding. The build period starts 2026-10-25.
+Status: build phase (shortlisted 2026-10-29). Submission due 2026-11-13; we ship 2026-11-12.
