@@ -72,18 +72,15 @@ importers:
       '@warrant/control':
         specifier: workspace:*
         version: link:../../packages/control
-      '@warrant/rails':
-        specifier: workspace:*
-        version: link:../../packages/rails
       '@x402/core':
-        specifier: ^2.28.0
+        specifier: 2.28.0
         version: 2.28.0
       '@x402/evm':
-        specifier: ^2.28.0
+        specifier: 2.28.0
         version: 2.28.0(typescript@5.9.3)
       '@x402/express':
-        specifier: ^2.28.0
-        version: 2.29.0(express@5.3.0)(typescript@5.9.3)
+        specifier: 2.28.0
+        version: 2.28.0(express@5.3.0)(typescript@5.9.3)
       express:
         specifier: ^5.1.0
         version: 5.3.0
@@ -777,17 +774,17 @@ packages:
   '@x402/evm@2.28.0':
     resolution: {integrity: sha512-BZuoaCKMoPQQuMTa4oibvoyI06WdCpgrzgdicUu8d+5NBMAfWb6LAmSQf1KkeiS8C+25/+2JGB4cHSL0VLGnSA==}
 
-  '@x402/express@2.29.0':
-    resolution: {integrity: sha512-0Ka1740ye02ZjSN3VeiEt3Gt7iINvTCl9nlP6ttGKSsySLMeMuDXJOzSOuzUnkJxy4LBxpG4Z+w3F46mhn6AUA==}
+  '@x402/express@2.28.0':
+    resolution: {integrity: sha512-/94ZT89ce9Y92TgAxMuBQiS32BbvZOh0ZziMxTR8js2dbroEZ8po5guayy8zHOG79/x0p5GHJ/yoUUC4faMnvA==}
     peerDependencies:
-      '@x402/paywall': ^2.29.0
-      express: ^4.22.3 || ^5.3.0
+      '@x402/paywall': ^2.28.0
+      express: ^4.0.0 || ^5.0.0
     peerDependenciesMeta:
       '@x402/paywall':
         optional: true
 
-  '@x402/extensions@2.29.0':
-    resolution: {integrity: sha512-FCpjZ6QR6ZtHTRZBV7VHMt7tc66LnTrpKDERiL3atXlLu4PlmgiulHt9PWE+Ktm5iUbXr3dAYZu2e7XrVd/XgA==}
+  '@x402/extensions@2.28.0':
+    resolution: {integrity: sha512-M3SVxO8DJnx7gpok/ODQp803jr21s1XrCMholNw0hSgOVvSPRksfTZ+CUNfJwteNaHmaAxGjPelXWBhTCMD9oQ==}
 
   '@x402/fetch@2.28.0':
     resolution: {integrity: sha512-kF5IjZIz/izg2TD/Zav+SVj0jtC0zBDfE7WcKCnMZWIsZcLCyL2GgvwXCn7CCSsNjpQ/z3Rz4OqTCA4AaeKySQ==}
@@ -2312,10 +2309,10 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/express@2.29.0(express@5.3.0)(typescript@5.9.3)':
+  '@x402/express@2.28.0(express@5.3.0)(typescript@5.9.3)':
     dependencies:
-      '@x402/core': 2.29.0
-      '@x402/extensions': 2.29.0(typescript@5.9.3)
+      '@x402/core': 2.28.0
+      '@x402/extensions': 2.28.0(typescript@5.9.3)
       express: 5.3.0
     transitivePeerDependencies:
       - bufferutil
@@ -2323,17 +2320,17 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@x402/extensions@2.29.0(typescript@5.9.3)':
+  '@x402/extensions@2.28.0(typescript@5.9.3)':
     dependencies:
       '@noble/curves': 1.9.7
       '@scure/base': 1.2.6
       '@signinwithethereum/siwe': 4.2.1(viem@2.57.10(typescript@5.9.3)(zod@4.6.7))
-      '@x402/core': 2.29.0
+      '@x402/core': 2.28.0
       ajv: 8.20.0
       jose: 5.10.0
       tweetnacl: 1.0.3
-      viem: 2.57.10(typescript@5.9.3)(zod@4.6.7)
-      zod: 4.6.7
+      viem: 2.57.10(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
     transitivePeerDependencies:
       - bufferutil
       - ethers
