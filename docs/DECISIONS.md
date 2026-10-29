@@ -156,3 +156,17 @@ Decision:
    testnet.
    Consequences: the CLI version is pinned (0.3.3); its output format is our parser's contract, so
    the parser has fixture tests taken from real runs.
+
+## ADR-011: Duplicate window does not apply to x402 purchases or refunds
+
+Date: 2026-10-29 Status: accepted (amends ADR-006)
+
+Context: ADR-006's "same payee + same amount + same rail within 10 minutes" rule would block the
+sourcing agent's normal pattern (many 2-cent purchases from one upstream) and two legitimate
+5-cent refunds to one customer.
+Decision: a repeated `idempotencyKey` is still refused on every rail, forever. The 10-minute
+payee + amount window applies only to Airwallex rails and not to refunds. x402 purchases are
+bounded by the cap, the budget and the mandate; refunds are bounded per order by
+`refund_matches_order` (one refund per order, at most its price).
+Consequences: a looping sourcing agent can only burn its own budget (10 USDZ), which the
+benchmark measures.
