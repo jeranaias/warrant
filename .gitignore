@@ -7,3 +7,5 @@ coverage/
 !.env.example
 .DS_Store
 bench/results/
+# local runtime data (orders, ledger)
+data/

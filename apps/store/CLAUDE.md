@@ -1,0 +1,18 @@
+# apps/store
+
+**Purpose:** our data business (Kit 11). Sells market data per query over x402 on Metal at the
+price in `@warrant/control` `QUERY_PRICE`. Every route requires the buyer's **signed order**
+(`requireSignedOffer` + `SIGNED_OFFER_REQUIRED`), one route per item so the order names what was
+bought. After each first settlement, `onAfterSettle` stores a `SignedOrderRecord` (signed order,
+tx hash, payer, sha256 of what we delivered). Support's dispute flow reads those records.
+
+**May import:** `@warrant/contracts`, `@warrant/control` (constants only), `@warrant/rails`
+(units only), `@metalntwx/metal-pay`, `@x402/*`, `express`, `viem`, node built-ins.
+
+**Must never:**
+
+- Set a price anywhere but `QUERY_PRICE` (ADR-009).
+- Do paid work that can't be undone before settlement, or return >= 400 after paid work
+  (that cancels the payment).
+- Edit or delete a stored order. The file is append-only.
+- Log the signed order's contents, keys or the RPC URL.

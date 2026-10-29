@@ -15,6 +15,7 @@
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "mocks": "pnpm --filter @warrant/mocks dev",
     "dashboard": "pnpm --filter @warrant/dashboard dev",
+    "store": "pnpm --filter @warrant/store dev",
     "bench": "pnpm --filter @warrant/bench start"
   },
   "devDependencies": {
