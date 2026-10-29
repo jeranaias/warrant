@@ -1,0 +1,37 @@
+name: Update lockfile
+
+# Run from the Actions tab (or `gh workflow run lockfile.yml -f branch=<branch>`) after changing a
+# package.json on a feature branch. Commits the refreshed pnpm-lock.yaml to that branch.
+# Never runs on main. Push any commit afterwards to re-trigger CI (bot pushes don't).
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Feature branch to update (not main)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    if: github.event.inputs.branch != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --no-frozen-lockfile --ignore-scripts
+      - name: Commit lockfile
+        run: |
+          if git diff --quiet -- pnpm-lock.yaml; then echo "lockfile unchanged"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore: update pnpm-lock.yaml"
+          git push

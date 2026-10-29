@@ -110,5 +110,6 @@ pnpm bench       # benchmark
 ## Troubleshooting
 
 - `pnpm install` fails on the lockfile in CI: run `pnpm install` locally and commit
-  `pnpm-lock.yaml`.
+  `pnpm-lock.yaml`, or run the **Update lockfile** workflow on your branch
+  (`gh workflow run lockfile.yml -f branch=<your-branch>`), then push any commit to re-run CI.
 - A rail call timed out: it is **unconfirmed**, not failed. Check status before doing anything.
