@@ -1,2 +1,3 @@
-// TODO(rails-metal): RailAdapter for metal_x402 using @metalntwx/metal-pay. Testnet only.
-export {};
+export * from "./units.js";
+export * from "./cli.js";
+export * from "./adapter.js";

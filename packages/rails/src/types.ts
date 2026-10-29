@@ -17,6 +17,11 @@ export interface RailInstruction {
   /** From the warrant's payee list, never from agent input. */
   routingRef: string;
   targetCurrency?: Money["currency"];
+  /**
+   * metal_x402 only: file name of the agent's mandate credential inside METAL_HOME, chosen by
+   * control from the warrant's mandate. Never a path, never from agent input.
+   */
+  credentialRef?: string;
 }
 
 export type RailStatus = "succeeded" | "failed" | "pending" | "unknown";
