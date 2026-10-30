@@ -1,6 +1,6 @@
 // Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
 // transactions, a transactions list, an opt-in wallet with INSUFFICIENT_FUNDS declines, simulated
-// deposits, FX quotes, conversions and beneficiaries.
+// deposits, FX quotes, conversions, beneficiaries and transfers.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -28,6 +28,12 @@ interface CardRec {
   currencies: string[]; // allowed_currencies, empty = all
   categories: string[]; // allowed_merchant_categories, empty = all
   spent: number;
+}
+
+interface TransferRec {
+  t: Json; // the public body; status is advanced in place
+  createdMs: number;
+  cents: number;
 }
 
 export interface AirwallexOptions {
@@ -64,6 +70,7 @@ export interface AirwallexMock {
     quotes: Map<string, QuoteRec>;
     conversions: Map<string, Json>;
     beneficiaries: Map<string, Json>;
+    transfers: Map<string, TransferRec>;
     rates: Map<string, number>; // pair -> rate in integer micro-units
   };
 }
@@ -166,6 +173,50 @@ function validIban(x: unknown): x is string {
 // ES + bank code 2100. Any other bank gets no bank_name (a known gap, ASSUMED).
 const BANK_NAMES: Record<string, string> = { "ES:2100": "CAIXABANK, S.A." };
 
+// The accepted transfer reasons, from the Airwallex docs.
+const TRANSFER_REASONS = [
+  "audio_visual_services",
+  "bill_payment",
+  "business_expenses",
+  "construction",
+  "donation_charitable_contribution",
+  "education_training",
+  "freight",
+  "goods_purchased",
+  "investment_capital",
+  "investment_proceeds",
+  "living_expenses",
+  "loan_credit_repayment",
+  "medical_services",
+  "pension",
+  "professional_business_services",
+  "real_estate",
+  "taxes",
+  "technical_services",
+  "transfer_to_own_account",
+  "travel",
+  "wages_salary",
+  "other_services",
+];
+
+// The payer profile the sandbox attached to every transfer on 2026-10-30 (fake sandbox data).
+const TRANSFER_PAYER = {
+  additional_info: {
+    business_incorporation_date: "2026-09-05",
+    business_registration_number: "123456789",
+    business_registration_type: "COMPANY",
+  },
+  address: {
+    city: "Los Angeles",
+    country_code: "US",
+    postcode: "90001",
+    state: "CA",
+    street_address: "0241 Alberto Island",
+  },
+  company_name: "Sandbox Business",
+  entity_type: "COMPANY",
+};
+
 export async function startAirwallexMock({
   port = 0,
   balances = {},
@@ -180,9 +231,11 @@ export async function startAirwallexMock({
     quotes: new Map(),
     conversions: new Map(),
     beneficiaries: new Map(),
+    transfers: new Map(),
     rates: new Map(),
   };
   const conversionRequests = new Set<string>();
+  const transferRequests = new Map<string, string>(); // request_id -> transfer id
   for (const [pair, rate] of Object.entries(rates)) {
     const micro = toMicro(rate);
     if (!/^[A-Z]{6}$/.test(pair) || micro === null) {
@@ -801,6 +854,129 @@ export async function startAirwallexMock({
     return { status: 201, body: rec };
   }
 
+  // The sandbox moved a new transfer from SCHEDULED to PROCESSING within about a second (probed 2026-10-30:
+  // PROCESSING on the next read, updated_at unchanged). The one-second threshold is ASSUMED.
+  function advance(rec: TransferRec): Json {
+    if (rec.t.status === "SCHEDULED" && now() - rec.createdMs >= 1000) rec.t.status = "PROCESSING";
+    return rec.t;
+  }
+
+  // POST /transfers/create. Probed 2026-10-30 with our own REST key (EUR to a EUR SEPA beneficiary, LOCAL):
+  // 201, status SCHEDULED, funding FUNDED, fee 0, and the wallet is debited at once (available and total
+  // both fall by the amount). A reused request_id is 400 duplicate_request_id with the first transfer's id
+  // in details. More than the wallet holds is 400 balance_insufficient (source "transfer"), nothing booked.
+  // An unknown beneficiary_id is 400 validation_failed with details.errors [{045, beneficiary_id}].
+  // Scope is same-currency LOCAL transfers (what the licence fee needs: convert first, then pay). ASSUMED:
+  // refusing SWIFT and a differing source_currency, every other validation code and source, that checks run
+  // validation first, then reuse, then funds, that a refused request does not use up its request_id, that the
+  // exact balance passes, that amounts may be decimal strings as well as numbers, and the payer profile.
+  function createTransfer(b: Json): Out {
+    const errors: { code: string; source: string }[] = [];
+    const bad = (code: string, source: string) => errors.push({ code, source });
+    const rid = b.request_id;
+    if (rid === undefined || rid === "") bad("field_required", "request_id");
+    else if (typeof rid !== "string" || rid.length > 50) bad("invalid_argument", "request_id");
+    const ben =
+      typeof b.beneficiary_id === "string" ? state.beneficiaries.get(b.beneficiary_id) : undefined;
+    if (b.beneficiary_id === undefined) bad("field_required", "beneficiary_id");
+    else if (!ben) bad("045", "beneficiary_id");
+    const benCcy = ben?.beneficiary.bank_details.account_currency;
+    if (b.transfer_currency === undefined) bad("field_required", "transfer_currency");
+    else if (!isCcy(b.transfer_currency) || (ben && b.transfer_currency !== benCcy)) {
+      bad("invalid_argument", "transfer_currency");
+    }
+    if (b.source_currency === undefined) bad("field_required", "source_currency");
+    else if (!isCcy(b.source_currency) || b.source_currency !== b.transfer_currency) {
+      bad("invalid_argument", "source_currency");
+    }
+    const hasTransfer = b.transfer_amount !== undefined;
+    const hasSource = b.source_amount !== undefined;
+    let cents: number | null = null;
+    if (hasTransfer === hasSource)
+      bad(hasTransfer ? "invalid_argument" : "field_required", "transfer_amount");
+    else {
+      const field = hasTransfer ? "transfer_amount" : "source_amount";
+      cents = toCents(b[field], 1, true);
+      if (cents === null) bad("invalid_argument", field);
+    }
+    if (b.transfer_method === undefined) bad("field_required", "transfer_method");
+    else if (b.transfer_method !== "LOCAL") bad("invalid_argument", "transfer_method");
+    if (b.reason === undefined) bad("field_required", "reason");
+    else if (!TRANSFER_REASONS.includes(b.reason)) bad("invalid_argument", "reason");
+    if (b.reference === undefined) bad("field_required", "reference");
+    else if (
+      typeof b.reference !== "string" ||
+      b.reference.length < 1 ||
+      b.reference.length > 140
+    ) {
+      bad("invalid_argument", "reference");
+    }
+    if (errors.length || !ben || cents === null) return validationFailed(errors);
+
+    const used = transferRequests.get(rid);
+    if (used !== undefined) {
+      const message = `The request ID ${rid} has been used for a transfer with the transfer ID ${used} before. Please use a different requestID if you wish to create a separate transfer.`;
+      return {
+        status: 400,
+        body: {
+          code: "duplicate_request_id",
+          details: { id: used, request_id: rid },
+          message,
+          source: "request_id",
+        },
+      };
+    }
+    const ccy: string = b.transfer_currency;
+    const wal = wallet.get(ccy);
+    if (!wal || cents > wal.available) {
+      return {
+        status: 400,
+        body: {
+          code: "balance_insufficient",
+          details: {},
+          message:
+            "There is insufficient Wallet balance to fund this transfer. Top up your Wallet balance or provide a lower amount.",
+          source: "transfer",
+        },
+      };
+    }
+    wal.available -= cents;
+    const ms = now();
+    const day = new Date(ms).toISOString().slice(0, 10);
+    const at = sec(ms);
+    const amount = cents / 100;
+    const transfer: Json = {
+      amount_beneficiary_receives: amount,
+      amount_payer_pays: amount,
+      beneficiary: ben.beneficiary,
+      beneficiary_id: b.beneficiary_id,
+      created_at: at,
+      fee_amount: 0,
+      fee_currency: ccy,
+      fee_paid_by: "PAYER",
+      funding: { status: "FUNDED" },
+      id: randomUUID(),
+      payer: TRANSFER_PAYER,
+      reason: b.reason,
+      reference: b.reference,
+      remarks: "",
+      request_id: rid,
+      short_reference_id: `P${day.slice(2, 4)}${day.slice(5, 7)}${day.slice(8, 10)}-${randomUUID().replaceAll("-", "").slice(0, 7).toUpperCase()}`,
+      source_amount: amount,
+      source_currency: ccy,
+      status: "SCHEDULED",
+      swift_charge_option: "SHARED",
+      transfer_amount: amount,
+      transfer_currency: ccy,
+      transfer_date: day,
+      transfer_method: "LOCAL",
+      updated_at: at,
+    };
+    state.transfers.set(transfer.id, { t: transfer, createdMs: ms, cents });
+    transferRequests.set(rid, transfer.id);
+    return { status: 201, body: transfer };
+  }
+
   function route(
     method: string,
     path: string,
@@ -902,6 +1078,15 @@ export async function startAirwallexMock({
       // Probed once, with an id from another sandbox account: an unknown id is 200 with NO body.
       const found = state.beneficiaries.get(bene[1] ?? "");
       return found ? { status: 200, body: found } : { status: 200, body: undefined };
+    }
+    if (method === "POST" && path === "/api/v1/transfers/create") return createTransfer(b);
+    const transfer = /^\/api\/v1\/transfers\/([^/]+)$/.exec(path);
+    if (method === "GET" && transfer) {
+      const found = state.transfers.get(transfer[1] ?? "");
+      // The 404 body is ASSUMED: an unknown transfer id was not probed.
+      return found
+        ? { status: 200, body: advance(found) }
+        : err(404, "resource_not_found", "Transfer not found");
     }
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }
