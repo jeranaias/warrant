@@ -12,4 +12,5 @@ export * from "./business.js";
 export * from "./crypto.js";
 export * from "./rules/index.js";
 export * from "./ledger/index.js";
-// TODO(control): export submitProposal(proposal): Promise<ControlDecision>
+export * from "./approvals/index.js";
+export * from "./controller.js";
