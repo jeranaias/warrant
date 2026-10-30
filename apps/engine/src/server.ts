@@ -2,10 +2,13 @@ import express from "express";
 import type { Express, Request } from "express";
 import { AgentRole } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
+import { classifyPay } from "@warrant/rails";
+import { UPSTREAM_URL } from "@warrant/mocks/metal";
 import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
-import { AGENTS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
+import { AGENTS, CREDENTIALS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
+import type { World } from "./world.js";
 
 /**
  * The engine: one local server that hands agents their work and runs what they propose through
@@ -32,7 +35,13 @@ interface LoggedEvent {
   event: ControlEvent;
 }
 
-export function createEngine(opts: EngineOptions = {}): { app: Express; controller: Controller } {
+export interface Engine {
+  app: Express;
+  controller: Controller;
+  world: World;
+}
+
+export function createEngine(opts: EngineOptions = {}): Engine {
   const clock = opts.clock ?? (() => new Date());
   const world = makeWorld(clock());
   const feed = new TaskFeed();
@@ -44,7 +53,7 @@ export function createEngine(opts: EngineOptions = {}): { app: Express; controll
     rails: world.rails,
     purpose: opts.purpose ?? placeholderPurpose,
     orders: () => world.orders,
-    credentialFor: () => "mock-credential.json",
+    credentialFor: (w) => CREDENTIALS[w.agentRole],
     clock,
     onEvent: (event) => log.push({ seq: log.length + 1, at: clock().toISOString(), event }),
   });
@@ -157,12 +166,47 @@ export function createEngine(opts: EngineOptions = {}): { app: Express; controll
     res.json({ events: log.filter((e) => e.seq > since) });
   });
 
+  // The mock Metal chain: each mandate's spend and limits, and every on-chain refusal.
+  app.get("/chain", (_req, res) => {
+    res.json({
+      upstreamPriceCents: world.upstream.price(),
+      mandates: world.chain.mandateList().map((m) => ({
+        credential: m.credential,
+        capCents: m.capCents,
+        budgetCents: m.budgetCents,
+        spentCents: m.spentCents,
+        revoked: m.revoked,
+      })),
+      refusals: world.chain.refusals,
+      payments: world.chain.txs.length,
+    });
+  });
+
+  // Scene control: the upstream provider changes its price (Kit 11: 2 cents, then 4).
+  app.post("/upstream/price", (req, res) => {
+    const cents = Number((req.body as { cents?: unknown } | undefined)?.cents);
+    try {
+      world.upstream.setPrice(cents);
+      res.json({ upstreamPriceCents: world.upstream.price() });
+    } catch (e) {
+      res.status(400).json({ error: (e as Error).message });
+    }
+  });
+
+  // Benchmark "limits only" mode: the sourcing agent pays upstream straight through its mandate,
+  // around control. Only the chain's mandate can refuse it.
+  app.post("/limits-only/pay", async (_req, res) => {
+    const run = world.chain.runner();
+    const r = await run(["pay", UPSTREAM_URL, "--mandate", "sourcing.json"], 60_000);
+    res.json({ outcome: classifyPay(r) });
+  });
+
   // For the analyzer only: what each task was (benign or which attack) and what should happen.
   app.get("/labels", (_req, res) => {
     res.json({ labels: feed.labels() });
   });
 
-  return { app, controller };
+  return { app, controller, world };
 }
 
 function roleOf(req: Request): AgentRole | undefined | null {
