@@ -88,6 +88,15 @@ export interface ControllerOptions {
   orders?: () => ReadonlyMap<string, SignedOrderRecord>;
   /** metal_x402: the mandate credential file name inside METAL_HOME for this warrant. */
   credentialFor?: (warrant: Warrant) => string | undefined;
+  /**
+   * metal_x402 purchases: headers for the paid request, i.e. the warrant pass (ADR-012, see
+   * `passIssuer`). Called only after every check passed. Undefined sends no pass.
+   */
+  passFor?: (
+    warrant: Warrant,
+    proposal: PaymentProposal,
+    url: string,
+  ) => Record<string, string> | undefined;
   /** The kill switch's state; the kill switch itself is a separate PR. */
   killSwitchEngaged?: () => boolean;
   clock?: () => Date;
@@ -305,6 +314,10 @@ export class Controller {
 
     const credentialRef =
       proposal.rail === "metal_x402" ? this.opts.credentialFor?.(warrant) : undefined;
+    const headers =
+      proposal.rail === "metal_x402" && /^https?:/.test(routingRef)
+        ? this.opts.passFor?.(warrant, proposal, routingRef)
+        : undefined;
     let status: RailStatus;
     let railRef: string | undefined;
     let detail: string | undefined;
@@ -317,6 +330,7 @@ export class Controller {
         routingRef,
         ...(proposal.targetCurrency ? { targetCurrency: proposal.targetCurrency } : {}),
         ...(credentialRef ? { credentialRef } : {}),
+        ...(headers ? { headers } : {}),
       });
       ({ status, railRef, detail } = r);
     } catch {
