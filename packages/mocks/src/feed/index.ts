@@ -108,14 +108,14 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
       offer(
         2,
         "Hourly EUR/USD forecast batch available. Price 0.02 USDZ per call.",
-        ok(k === 0 ? "first payment to upstream: owner approves once" : "routine purchase"),
+        ok("payee is on the signed warrant: pays without the owner"),
       );
     }
     invoice(
       "pay_licensor",
       eur(5000),
       "Invoice INV-1107: monthly data licence, EUR 50.00, due on receipt.",
-      ok("licence fee: first payment to licensor, owner approves"),
+      ok("licence fee under 100, payee on the warrant: pays without the owner"),
     );
   }
   if (name === "price_rise" || name === "all") {
@@ -130,7 +130,7 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
     dispute(
       ["ord_1"],
       "The EUR/USD numbers you sold me at 14:00 were from yesterday's batch. Please refund.",
-      ok("refund of one 5-cent order to its payer; owner approves the first refund", "owner"),
+      ok("refund of one 5-cent order to its payer: pays without the owner (ADR-013)"),
     );
   }
   if (name === "attacks" || name === "all") {

@@ -6,6 +6,8 @@ import {
   RefundDecision,
   SignedOrderRecord,
   Warrant,
+  WarrantGrant,
+  WarrantPass,
 } from "./index.js";
 
 const now = "2026-10-25T12:00:00Z";
@@ -121,6 +123,44 @@ describe("contracts", () => {
     expect(SignedOrderRecord.parse(order).orderId).toBe("ord_1");
     expect(() => SignedOrderRecord.parse({ ...order, txHash: "0x123" })).toThrow();
     expect(() => SignedOrderRecord.parse({ ...order, deliveredSha256: "nope" })).toThrow();
+  });
+
+  it("SignedOrderRecord keeps the buyer's warrant pass, bounded", () => {
+    expect(SignedOrderRecord.parse({ ...order, buyerPass: "eyJ9" }).buyerPass).toBe("eyJ9");
+    expect(() => SignedOrderRecord.parse({ ...order, buyerPass: "x".repeat(20_001) })).toThrow();
+  });
+
+  it("WarrantPass is strict and never carries a budget", () => {
+    const grant = {
+      grantId: "grt_1",
+      warrantId: "wrt_1",
+      warrantVersion: 1,
+      ownerId: "own_1",
+      payer: order.payer,
+      categories: ["data_purchase"],
+      perPaymentCap: { currency: "USDZ", cents: 10 },
+      sellers: [],
+      delegateKey: "AAAA",
+      ownerKeyId: "k1",
+      ownerKey: "AAAA",
+      notAfter: now,
+      ownerSig: "AAAA",
+    };
+    const pass = {
+      grantId: "grt_1",
+      nonce: "n1",
+      url: "https://store.example/query/fx-eurusd",
+      payTo: order.payee,
+      amount: { currency: "USDZ", cents: 5 },
+      category: "data_purchase",
+      proposalHash: "a".repeat(64),
+      at: now,
+    };
+    expect(WarrantPass.parse({ grant, pass, sig: "AAAA" }).pass.nonce).toBe("n1");
+    expect(() => WarrantGrant.parse({ ...grant, totalBudget: usd(5000) })).toThrow();
+    expect(() =>
+      WarrantPass.parse({ grant, pass: { ...pass, payTo: "me" }, sig: "AAAA" }),
+    ).toThrow();
   });
 
   it("DisputeCase keeps ticket text out (pointer only)", () => {

@@ -30,12 +30,14 @@ interface Attempt {
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const CRED_NAME = /^[A-Za-z0-9._-]+\.json$/;
+const HEADER_NAME = /^[A-Za-z0-9-]{1,64}$/;
 
 /**
  * metal_x402 rail (ADR-010). routingRef decides the operation:
  *   https://... or http://127.0.0.1... -> `pay <url> --mandate` (x402 purchase)
  *   0x<address>                         -> `mandate pull --to --payment-id` (refund / payout)
  * `instruction.credentialRef` names the mandate credential file inside METAL_HOME.
+ * `instruction.headers` ride on the paid request (`--header 'name: value'`), e.g. the warrant pass.
  */
 export class MetalAdapter implements RailAdapter {
   readonly rail = "metal_x402" as const;
@@ -80,6 +82,12 @@ export class MetalAdapter implements RailAdapter {
       }
     }
     const args = ["pay", url, "--mandate", cred, "--network", "testnet"];
+    for (const [name, value] of Object.entries(ins.headers ?? {})) {
+      if (!HEADER_NAME.test(name) || /[\r\n]/.test(value)) {
+        return failed("invalid header; nothing signed");
+      }
+      args.push("--header", `${name}: ${value}`);
+    }
     const outcome = classifyPay(await this.opts.run(args, this.timeout()));
     const result = toResult(outcome, ins.amount.cents);
     this.attempts.set(ins.idempotencyKey, {

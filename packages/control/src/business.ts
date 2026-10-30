@@ -23,6 +23,13 @@ export const QUERY_PRICE = usdz(5);
 export const UPSTREAM_PRICE_BEFORE = usdz(2);
 export const UPSTREAM_PRICE_AFTER = usdz(4);
 
+/**
+ * ADR-013: a refund goes through without the owner only up to this amount, and only for the
+ * first REFUNDS_WITHOUT_OWNER_PER_DAY refunds to one customer in 24 hours.
+ */
+export const REFUND_WITHOUT_OWNER_MAX = usdz(25);
+export const REFUNDS_WITHOUT_OWNER_PER_DAY = 2;
+
 /** Monthly licence fee, invoiced in euros. Our choice: the brief gives no amount. */
 export const LICENCE_FEE: Money = { currency: "EUR", cents: 5000 };
 
