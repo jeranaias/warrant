@@ -112,7 +112,7 @@ export class Controller {
   private readonly proposals = new Map<string, PaymentProposal>();
 
   constructor(private readonly opts: ControllerOptions) {
-    this.ledger = opts.ledger ?? new Ledger();
+    this.ledger = opts.ledger ?? new Ledger(undefined, opts.clock);
     this.purpose = opts.purpose ?? ownerReviewsEverything;
     this.clock = opts.clock ?? (() => new Date());
   }
