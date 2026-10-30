@@ -55,7 +55,8 @@ function bodies(now: Date): WarrantBody[] {
   return [
     {
       ...common,
-      ...AGENTS.sourcing,
+      agentId: AGENTS.sourcing.agentId,
+      warrantId: AGENTS.sourcing.warrantId,
       agentRole: "sourcing",
       purpose: "Buy upstream market data to resell to our customers.",
       allowedRails: ["metal_x402"],
@@ -74,7 +75,8 @@ function bodies(now: Date): WarrantBody[] {
     },
     {
       ...common,
-      ...AGENTS.support,
+      agentId: AGENTS.support.agentId,
+      warrantId: AGENTS.support.warrantId,
       agentRole: "support",
       purpose: "Refund customers for orders we got wrong, never more than they paid.",
       allowedRails: ["metal_x402"],
@@ -86,7 +88,8 @@ function bodies(now: Date): WarrantBody[] {
     {
       // The engine's treasury pays the EUR licence fee only. Earnings sweeps come with lane B.
       ...common,
-      ...AGENTS.treasury,
+      agentId: AGENTS.treasury.agentId,
+      warrantId: AGENTS.treasury.warrantId,
       agentRole: "treasury",
       purpose: "Pay the monthly data licence fee in euros.",
       allowedRails: ["airwallex_transfer"],
