@@ -10,6 +10,7 @@ interface CallInit {
   method?: string;
   body?: unknown;
   token?: string | null;
+  signal?: AbortSignal;
 }
 
 async function call(path: string, init: CallInit = {}) {
@@ -21,6 +22,7 @@ async function call(path: string, init: CallInit = {}) {
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+    ...(init.signal ? { signal: init.signal } : {}),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { status: res.status, json: (await res.json()) as any };
@@ -296,4 +298,65 @@ describe("authorization_controls allowlists", () => {
       expect(res.json.source).toBe("authorization_controls");
     },
   );
+});
+
+const CREATE = "/api/v1/issuing/cards/create";
+const SIMULATE = "/api/v1/simulation/issuing/create";
+
+describe("fault injection", () => {
+  it("5xx fails before doing any work, then recovers", async () => {
+    const holder = await makeHolder();
+    mock.fault({ kind: "5xx", method: "POST", path: CREATE });
+    const failed = await call(CREATE, { body: cardBody(holder) });
+    expect(failed.status).toBe(503);
+    expect(mock.state.cards.size).toBe(0);
+    const ok = await call(CREATE, { body: cardBody(holder) });
+    expect(ok.status).toBe(201);
+  });
+
+  it("timeout-after does the work, then holds the response past the client timeout", async () => {
+    const holder = await makeHolder();
+    mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: CREATE });
+    await expect(
+      call(CREATE, { body: cardBody(holder), signal: AbortSignal.timeout(50) }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    // The caller cannot tell: the card exists. Status must be checked by request_id, never retried blind.
+    expect(mock.state.cards.size).toBe(1);
+  });
+
+  it("duplicate runs the request twice server-side and still yields one card", async () => {
+    const body = cardBody(await makeHolder());
+    mock.fault({ kind: "duplicate", method: "POST", path: CREATE });
+    const first = await call(CREATE, { body });
+    const second = await call(CREATE, { body });
+    expect(first.json.card_id).toBe(second.json.card_id);
+    expect(mock.state.cards.size).toBe(1);
+  });
+
+  it("duplicate on simulate double-charges, because simulate has no idempotency", async () => {
+    const id = await makeCard([
+      { amount: 10, interval: "PER_TRANSACTION" },
+      { amount: 20, interval: "ALL_TIME" },
+    ]);
+    mock.fault({ kind: "duplicate", method: "POST", path: SIMULATE });
+    expect((await pay(id, 10)).json.status).toBe("PENDING");
+    expect(mock.state.transactions).toHaveLength(2);
+    const limits = await call(`/api/v1/issuing/cards/${id}/limits`);
+    expect(limits.json.limits.find((l: Limit) => l.interval === "ALL_TIME").remaining).toBe(0);
+  });
+
+  it("applies a fault only `times` requests, then clears", async () => {
+    const holder = await makeHolder();
+    mock.fault({ kind: "5xx", method: "POST", path: CREATE, times: 2 });
+    const codes = [];
+    for (let i = 0; i < 3; i++) codes.push((await call(CREATE, { body: cardBody(holder) })).status);
+    expect(codes).toEqual([503, 503, 201]);
+  });
+
+  it("matches method plus exact path, not a substring or another method", async () => {
+    const holder = await makeHolder();
+    mock.fault({ kind: "5xx", method: "GET", path: CREATE });
+    mock.fault({ kind: "5xx", method: "POST", path: "/cards/create" });
+    expect((await call(CREATE, { body: cardBody(holder) })).status).toBe(201);
+  });
 });

@@ -12,6 +12,13 @@ interface Out {
   body: unknown;
 }
 
+// A fault hits the next `times` (default 1) requests with this exact method and path.
+export type Fault = { method: string; path: string; times?: number } & (
+  | { kind: "5xx"; status?: number } // fails before any work: no side effect
+  | { kind: "duplicate" } // runs the request twice, returns the second response
+  | { kind: "timeout-after"; ms: number } // does the work, then holds the response for ms
+);
+
 interface CardRec {
   card: Json;
   limits: { interval: string; cents: number }[];
@@ -25,6 +32,7 @@ export interface AirwallexMock {
   url: string;
   server: Server;
   close(): Promise<void>;
+  fault(f: Fault): void;
   state: { cardholders: Map<string, Json>; cards: Map<string, CardRec>; transactions: Json[] };
 }
 
@@ -58,6 +66,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     transactions: [],
   };
   const tokens = new Set<string>();
+  const faults: { f: Fault; left: number }[] = [];
   const requestIds = new Map<string, { raw: string; card: Json }>();
 
   function createCard(b: Json, raw: string): Out {
@@ -290,7 +299,21 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString();
     const path = new URL(req.url ?? "/", "http://mock").pathname;
-    send(res, route(req.method ?? "GET", path, req.headers, raw));
+    const method = req.method ?? "GET";
+    const hit = faults.find((x) => x.left > 0 && x.f.method === method && x.f.path === path);
+    if (hit) hit.left--;
+    const f = hit?.f;
+    if (f?.kind === "5xx") {
+      return send(res, err(f.status ?? 503, "service_unavailable", "Injected fault"));
+    }
+    let out = route(method, path, req.headers, raw);
+    if (f?.kind === "duplicate") out = route(method, path, req.headers, raw);
+    if (f?.kind === "timeout-after") {
+      const timer = setTimeout(() => send(res, out), f.ms);
+      res.on("close", () => clearTimeout(timer));
+      return;
+    }
+    send(res, out);
   });
 
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
@@ -299,6 +322,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     url: `http://127.0.0.1:${addr.port}`,
     server,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    fault: (f) => void faults.push({ f, left: f.times ?? 1 }),
     state,
   };
 }
