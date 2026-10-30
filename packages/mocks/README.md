@@ -26,6 +26,10 @@ Rules:
 - FX math is integer cents (BigInt, no floats). The derived side is rounded to the nearest cent, ties up,
   which matches six real sandbox quotes and conversions (floor and ceil each get some wrong); the tie
   direction is an assumption. Two-decimal currencies only.
+- `GET /fx/conversions?request_id=` is how a caller checks a conversion after a timeout (never resend the
+  `request_id`: the real API rejects it). But on 2026-10-30 the real list did not show a conversion created
+  about half an hour earlier, though an older one was found by `request_id`. It lags. An empty answer means
+  "not known yet", not "not done": check the wallet balance and look again later. The mock lists at once.
 - The real conversion errors carry a `details` array with a `correlation_id`; the mock adds one.
 - Anything the real sandbox was not asked is marked `ASSUMED` in `src/airwallex/index.ts`.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
