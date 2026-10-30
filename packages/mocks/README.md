@@ -11,6 +11,8 @@ Rules:
 
 - Shapes follow the real sandbox APIs. Check them with the Airwallex docs MCP (see RUNBOOK).
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
-- No real keys. Mocks accept any token.
+- No real keys. Auth is strict: the Airwallex mock only accepts a bearer token it issued from
+  `POST /api/v1/authentication/login` (which needs `x-client-id` and `x-api-key`, any values).
+  Legacy shape, no `x-api-version`: the mock ignores that header.
 
 Run: `pnpm mocks` (ports from `.env`: `MOCK_AIRWALLEX_PORT`, `MOCK_METAL_PORT`).
