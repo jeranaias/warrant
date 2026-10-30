@@ -1,0 +1,26 @@
+{
+  "name": "@warrant/store",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@metalntwx/metal-pay": "^0.3.3",
+    "@warrant/contracts": "workspace:*",
+    "@warrant/control": "workspace:*",
+    "@x402/core": "2.28.0",
+    "@x402/evm": "2.28.0",
+    "@x402/express": "2.28.0",
+    "express": "^5.1.0",
+    "viem": "^2.57.10"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0"
+  }
+}
