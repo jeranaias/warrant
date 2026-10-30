@@ -449,16 +449,18 @@ describe("transactions list (legacy page_num / page_size)", () => {
     expect(res.json.items.every((t: Json) => t.card_id === a)).toBe(true);
   });
 
-  it("pages with page_num (from 0) and page_size, and reports has_more", async () => {
+  it("pages with page_num (from 0) and page_size, default 10, and reports has_more", async () => {
     const id = await makeCard();
-    for (const n of [1, 2, 3]) await pay(id, n);
-    const first = await call(`${TXNS}?card_id=${id}&page_size=2`);
-    expect(first.json.items).toHaveLength(2);
+    for (let n = 0; n < 12; n++) await pay(id, 1);
+    const first = await call(`${TXNS}?card_id=${id}&page_size=10`);
+    expect(first.json.items).toHaveLength(10);
     expect(first.json.has_more).toBe(true);
-    const second = await call(`${TXNS}?card_id=${id}&page_size=2&page_num=1`);
-    expect(second.json.items).toHaveLength(1);
+    const dflt = await call(`${TXNS}?card_id=${id}`);
+    expect(dflt.json.items).toHaveLength(10);
+    const second = await call(`${TXNS}?card_id=${id}&page_size=10&page_num=1`);
+    expect(second.json.items).toHaveLength(2);
     expect(second.json.has_more).toBe(false);
-    const past = await call(`${TXNS}?card_id=${id}&page_size=2&page_num=5`);
+    const past = await call(`${TXNS}?card_id=${id}&page_size=10&page_num=5`);
     expect(past.json).toEqual({ has_more: false, items: [] });
   });
 
@@ -469,17 +471,58 @@ describe("transactions list (legacy page_num / page_size)", () => {
     expect((await call(`${TXNS}?card_id=nope`)).json).toEqual({ has_more: false, items: [] });
   });
 
+  // Confirmed against the sandbox 2026-10-30: below 10 is this exact body, with an empty source.
+  it.each(["page_size=9", "page_size=1", "page_size=0", "page_size=-1"])(
+    "%s is BELOW_MIN_PAGE_SIZE, exactly as the sandbox answers",
+    async (qs) => {
+      const res = await call(`${TXNS}?${qs}`);
+      expect(res.status).toBe(400);
+      expect(res.json).toEqual({
+        code: "invalid_argument",
+        message: "BELOW_MIN_PAGE_SIZE",
+        source: "",
+      });
+    },
+  );
+
+  it("accepts the minimum page_size of 10 (inclusive)", async () => {
+    expect((await call(`${TXNS}?page_size=10`)).status).toBe(200);
+  });
+
   it.each([
-    ["page_size=0", "page_size"],
     ["page_size=101", "page_size"],
     ["page_size=1.5", "page_size"],
     ["page_size=1e1", "page_size"],
     ["page_num=-1", "page_num"],
     ["page_num=abc", "page_num"],
-  ])("refuses %s with 400", async (qs, source) => {
+  ])("refuses %s with 400 (ASSUMED source)", async (qs, source) => {
     const res = await call(`${TXNS}?${qs}`);
     expect(res.status).toBe(400);
     expect(res.json.source).toBe(source);
+  });
+
+  it("every error body carries source, as an empty string when there is none", async () => {
+    const holder = await makeHolder();
+    const bodies = [
+      (await call("/api/v1/issuing/cards/x", { token: null })).json, // 401
+      (await call("/api/v1/issuing/cards/nope")).json, // 404 card
+      (await call("/api/v1/nowhere")).json, // 404 route
+      (await call("/api/v1/issuing/cardholders/create", { body: { type: "DELEGATE" } })).json, // 400 with a source
+      (await call(UPDATE("nope"), { body: { card_status: "INACTIVE" } })).json, // 404 card update
+      (
+        await call("/api/v1/issuing/cards/create", {
+          body: { ...cardBody(holder), form_factor: "PHYSICAL" },
+        })
+      ).json,
+    ];
+    for (const body of bodies) {
+      expect(typeof body.code).toBe("string");
+      expect(typeof body.message).toBe("string");
+      expect(typeof body.source).toBe("string");
+    }
+    expect(bodies[0].source).toBe("");
+    expect(bodies[1].source).toBe("");
+    expect(bodies[3].source).toBe("email");
   });
 
   it("needs a token", async () => {

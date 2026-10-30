@@ -46,7 +46,7 @@ export interface AirwallexMock {
 const INTERVALS = ["PER_TRANSACTION", "DAILY", "WEEKLY", "MONTHLY", "ALL_TIME"];
 const err = (status: number, code: string, message: string, source?: string): Out => ({
   status,
-  body: { code, message, ...(source ? { source } : {}) }, // field names ASSUMED from the sandbox error text
+  body: { code, message, source: source ?? "" }, // sandbox error bodies always carry source, "" when empty
 });
 const stamp = () => new Date().toISOString().replace("Z", "+0000");
 const strList = (x: unknown): string[] | null =>
@@ -285,12 +285,21 @@ export async function startAirwallexMock({
     return { status: 200, body: view };
   }
 
-  // Legacy list: page_num from 0 and {has_more, items} are from the docs; the MCP only exposes the
-  // newer cursor model, so newest-first, default page_size 10 and max 100 are ASSUMED.
+  // Legacy list. Confirmed against the sandbox on 2026-10-30: the body is {has_more, items}, and a
+  // page_size below 10 is 400 BELOW_MIN_PAGE_SIZE with an empty source. page_num from 0 is from the
+  // docs. Newest first, default page_size 10 and max 100 are ASSUMED.
+  // The mock lists every simulated transaction, pending and declined included. The real legacy list
+  // returned NOTHING for pending or declined transactions on 2026-10-30 (no card_id, from_created_at or
+  // other filter changed that); they may only show once settled. So do not rely on this list for
+  // pending state: use the simulate response instead.
   function listTransactions(q: URLSearchParams): Out {
     const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
     if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
-    const pageSize = intParam(q, "page_size", 10, 1, 100);
+    const rawSize = q.get("page_size");
+    if (rawSize !== null && /^-?\d+$/.test(rawSize) && Number(rawSize) < 10) {
+      return err(400, "invalid_argument", "BELOW_MIN_PAGE_SIZE");
+    }
+    const pageSize = intParam(q, "page_size", 10, 10, 100);
     if (pageSize === null) return err(400, "invalid_argument", "Invalid page_size", "page_size");
     const cardId = q.get("card_id");
     const all = state.transactions.filter((t) => cardId === null || t.card_id === cardId).reverse();

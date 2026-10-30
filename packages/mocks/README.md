@@ -12,6 +12,9 @@ Local fake Airwallex and Metal servers so nobody waits on sandbox access.
 Rules:
 
 - Shapes follow the real sandbox APIs. Check them with the Airwallex docs MCP (see RUNBOOK).
+- The real legacy `GET /issuing/transactions` returned nothing for pending or declined transactions on
+  2026-10-30. They may only show once settled. Don't rely on this list for pending state; use the
+  simulate response. The mock lists them anyway, and enforces the sandbox's `page_size` minimum of 10.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
 - No real keys. Auth is strict: the Airwallex mock only accepts a bearer token it issued from
   `POST /api/v1/authentication/login` (which needs `x-client-id` and `x-api-key`, any values).
