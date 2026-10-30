@@ -12,6 +12,7 @@ import type {
 import type { RailAdapter, RailStatus } from "@warrant/rails";
 import { ApprovalBook } from "./approvals/index.js";
 import type { ApprovalView, PendingApproval } from "./approvals/index.js";
+import { REFUND_WITHOUT_OWNER_MAX, REFUNDS_WITHOUT_OWNER_PER_DAY } from "./business.js";
 import { verifyWarrant } from "./crypto.js";
 import { Ledger } from "./ledger/index.js";
 import type { Reservation } from "./ledger/index.js";
@@ -111,7 +112,7 @@ export class Controller {
   private readonly proposals = new Map<string, PaymentProposal>();
 
   constructor(private readonly opts: ControllerOptions) {
-    this.ledger = opts.ledger ?? new Ledger();
+    this.ledger = opts.ledger ?? new Ledger(undefined, opts.clock);
     this.purpose = opts.purpose ?? ownerReviewsEverything;
     this.clock = opts.clock ?? (() => new Date());
   }
@@ -290,9 +291,10 @@ export class Controller {
   private approvalReasons(p: PaymentProposal, w: Warrant, v: PurposeVerdict): string[] {
     const reasons: string[] = [];
     if (v.verdict === "uncertain") reasons.push(`purpose check uncertain: ${v.reasons.join(", ")}`);
-    if (!this.paidBefore(w, p.refundOfOrderId ?? p.payeeId, p.rail)) {
-      reasons.push(isRefund(p) ? "refund to a customer" : "first payment to this payee");
-    }
+    // ADR-013: signing the warrant approved its payees, so a first payment no longer asks.
+    // Refunds the rules accepted (real order, its payer, at most its price, once) ask only when
+    // they look unusual.
+    if (isRefund(p)) reasons.push(...this.unusualRefund(p, w));
     if (p.recurrence === "recurring") reasons.push("recurring payment");
     if (
       (p.rail === "airwallex_transfer" || p.rail === "airwallex_fx") &&
@@ -486,10 +488,29 @@ export class Controller {
     return w.payees.find((x) => x.payeeId === p.payeeId && x.rail === p.rail)?.routingRef;
   }
 
-  private paidBefore(w: Warrant, payeeId: string, rail: Rail): boolean {
-    return this.ledger
-      .activeReservations(w.warrantId)
-      .some((r) => r.payeeId === payeeId && r.rail === rail && r.state === "confirmed");
+  /** ADR-013: why a refund needs the owner, or [] when it may go through on its own. */
+  private unusualRefund(p: PaymentProposal, w: Warrant): string[] {
+    const why: string[] = [];
+    if (p.amount.cents > REFUND_WITHOUT_OWNER_MAX.cents) {
+      why.push(`refund over ${REFUND_WITHOUT_OWNER_MAX.cents} cents`);
+    }
+    const orders = this.opts.orders?.();
+    const payer = p.refundOfOrderId ? orders?.get(p.refundOfOrderId)?.payer : undefined;
+    if (orders && payer) {
+      const since = this.clock().getTime() - DAY_MS;
+      const recent = this.ledger
+        .activeReservations(w.warrantId)
+        .filter(
+          (r) =>
+            r.payeeId !== undefined &&
+            orders.get(r.payeeId)?.payer.toLowerCase() === payer.toLowerCase() &&
+            Date.parse(r.reservedAt) >= since,
+        ).length;
+      if (recent >= REFUNDS_WITHOUT_OWNER_PER_DAY) {
+        why.push(`refund number ${recent + 1} to this customer in 24 hours`);
+      }
+    }
+    return why;
   }
 
   private emit(e: ControlEvent): void {
