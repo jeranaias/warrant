@@ -21,6 +21,16 @@ read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 400
 **Owner side:** `GET /approvals` lists what waits; `POST /approvals/<proposalId>` with
 `{"decision":"approved"}` or `{"decision":"denied"}` answers it.
 
+**Owner controls:** `POST /kill` is the emergency stop (everything refused at once, approvals
+dropped, mock mandates revoked; the answer says how long it took). `POST /budget-changes` takes
+treasury's `BudgetChangeProposal`; it always waits in `/approvals`, and on approval the mandate is
+replaced and the next warrant version signed.
+
+**Mock Metal chain:** the Metal rail is the real `MetalAdapter` on an in-memory chain that enforces
+each mandate. `GET /chain` shows mandates, spend and on-chain refusals; `POST /upstream/price
+{"cents":4}` raises the provider's price; `POST /limits-only/pay` pays around Warrant (benchmark
+"limits only" mode). `pnpm scene` plays the Kit 11 price rise and limit change start to finish.
+
 **Scenarios:** `POST /scenario {"name":"normal|price_rise|dispute|attacks|all"}` replaces the queue
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is
 for the analyzer only: never show labels to an agent.

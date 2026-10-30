@@ -2,6 +2,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import type {
   AgentRole,
+  BudgetChangeProposal,
   Money,
   PaymentSummary,
   PurposeVerdict,
@@ -9,7 +10,7 @@ import type {
   Warrant,
   WarrantBody,
 } from "@warrant/contracts";
-import { AGENT_BUDGETS, QUERY_PRICE, signWarrant } from "@warrant/control";
+import { AGENT_BUDGETS, QUERY_PRICE, TOTAL_BUDGET, signWarrant } from "@warrant/control";
 import type { PurposeChecker } from "@warrant/control";
 import { MetalAdapter } from "@warrant/rails";
 import type { RailAdapter, RailInstruction, RailResult } from "@warrant/rails";
@@ -169,14 +170,14 @@ export const placeholderPurpose: PurposeChecker = {
   },
 };
 
-/** Mandate credential file per agent, as `metal-agent` names them inside METAL_HOME. */
-export const CREDENTIALS: Partial<Record<AgentRole, string>> = {
-  sourcing: "sourcing.json",
-  support: "support.json",
-};
-
 export interface World {
   ownerPublicKey: KeyObject;
+  /** Current mandate credential file per Metal agent; a limit change swaps it. */
+  credentials: Map<AgentRole, string>;
+  /** The owner's side of a budget change: replace the mandate, sign the next warrant version. */
+  applyBudgetChange: (warrant: Warrant, change: BudgetChangeProposal) => Promise<Warrant>;
+  /** ADR-009 #1: USDZ budgets across agents stay within TOTAL_BUDGET. */
+  budgetCheck: (warrant: Warrant, change: BudgetChangeProposal) => string[];
   warrants: Map<string, Warrant>;
   orders: Map<string, SignedOrderRecord>;
   chain: MockMetalChain;
@@ -212,8 +213,64 @@ export function makeWorld(now = new Date()): World {
     expiresAt: expires,
   });
 
+  const credentials = new Map<AgentRole, string>([
+    ["sourcing", "sourcing.json"],
+    ["support", "support.json"],
+  ]);
+
+  const applyBudgetChange = (w: Warrant, c: BudgetChangeProposal): Promise<Warrant> => {
+    const cap = c.newPerPaymentCap ?? w.perPaymentCap;
+    let mandate = w.mandate;
+    if (mandate) {
+      const old = credentials.get(w.agentRole);
+      if (!old) throw new Error(`no mandate credential for ${w.agentRole}`);
+      const next = `${w.agentRole}-v${w.version + 1}.json`;
+      const m = chain.replaceMandate(old, {
+        credential: next,
+        principal: PRINCIPAL,
+        capCents: cap.cents,
+        budgetCents: c.newTotalBudget.cents,
+        ...(chain.mandate(old).payees ? { payees: chain.mandate(old).payees } : {}),
+        expiresAt: expires,
+      });
+      credentials.set(w.agentRole, next);
+      mandate = { ...mandate, mandateId: m.mandateId, cap, budget: c.newTotalBudget };
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { signature, status, ...body } = w;
+    const signed = signWarrant(
+      {
+        ...body,
+        version: w.version + 1,
+        perPaymentCap: cap,
+        totalBudget: c.newTotalBudget,
+        ...(mandate ? { mandate } : {}),
+      },
+      privateKey,
+      "owner-demo",
+    );
+    warrants.set(w.warrantId, signed);
+    return Promise.resolve(signed);
+  };
+
+  const budgetCheck = (w: Warrant, c: BudgetChangeProposal): string[] => {
+    if (c.newTotalBudget.currency !== TOTAL_BUDGET.currency) return [];
+    const others = [...warrants.values()]
+      .filter(
+        (x) => x.warrantId !== w.warrantId && x.totalBudget.currency === TOTAL_BUDGET.currency,
+      )
+      .reduce((sum, x) => sum + x.totalBudget.cents, 0);
+    const total = others + c.newTotalBudget.cents;
+    return total > TOTAL_BUDGET.cents
+      ? [`all agents together would have ${total} cents, over the ${TOTAL_BUDGET.cents} total`]
+      : [];
+  };
+
   return {
     ownerPublicKey: publicKey,
+    credentials,
+    applyBudgetChange,
+    budgetCheck,
     warrants,
     orders,
     chain,

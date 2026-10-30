@@ -7,7 +7,7 @@ import { UPSTREAM_URL } from "@warrant/mocks/metal";
 import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
-import { AGENTS, CREDENTIALS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
+import { AGENTS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
 import type { World } from "./world.js";
 
 /**
@@ -53,7 +53,9 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     rails: world.rails,
     purpose: opts.purpose ?? placeholderPurpose,
     orders: () => world.orders,
-    credentialFor: (w) => CREDENTIALS[w.agentRole],
+    credentialFor: (w) => world.credentials.get(w.agentRole),
+    applyBudgetChange: world.applyBudgetChange,
+    budgetCheck: world.budgetCheck,
     clock,
     onEvent: (event) => log.push({ seq: log.length + 1, at: clock().toISOString(), event }),
   });
@@ -130,6 +132,12 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   app.post("/proposals", async (req, res) => {
     const result = await controller.submit(req.body);
     res.status(result.blockedBy === "malformed" ? 400 : 200).json(result);
+  });
+
+  // Treasury proposes new limits for an agent (BudgetChangeProposal). Always waits for the owner.
+  app.post("/budget-changes", (req, res) => {
+    const r = controller.proposeBudgetChange(req.body);
+    res.status(r.ok ? 200 : 400).json(r);
   });
 
   // Owner side (dashboard or a script standing in for the owner).
@@ -220,7 +228,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   // around control. Only the chain's mandate can refuse it.
   app.post("/limits-only/pay", async (_req, res) => {
     const run = world.chain.runner();
-    const r = await run(["pay", UPSTREAM_URL, "--mandate", "sourcing.json"], 60_000);
+    const cred = world.credentials.get("sourcing") ?? "sourcing.json";
+    const r = await run(["pay", UPSTREAM_URL, "--mandate", cred], 60_000);
     res.json({ outcome: classifyPay(r) });
   });
 
