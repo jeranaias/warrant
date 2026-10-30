@@ -127,7 +127,7 @@ export class Controller {
   private readonly budgetChanges = new Map<string, BudgetChangeProposal>();
 
   constructor(private readonly opts: ControllerOptions) {
-    this.ledger = opts.ledger ?? new Ledger();
+    this.ledger = opts.ledger ?? new Ledger(undefined, opts.clock);
     this.purpose = opts.purpose ?? ownerReviewsEverything;
     this.clock = opts.clock ?? (() => new Date());
   }
