@@ -12,6 +12,13 @@ interface Out {
   body: unknown;
 }
 
+// A fault hits the next `times` (default 1) requests with this exact method and path.
+export type Fault = { method: string; path: string; times?: number } & (
+  | { kind: "5xx"; status?: number } // fails before any work: no side effect
+  | { kind: "duplicate" } // runs the request twice, returns the second response
+  | { kind: "timeout-after"; ms: number } // does the work, then holds the response for ms
+);
+
 interface CardRec {
   card: Json;
   limits: { interval: string; cents: number }[];
@@ -25,6 +32,7 @@ export interface AirwallexMock {
   url: string;
   server: Server;
   close(): Promise<void>;
+  fault(f: Fault): void;
   state: { cardholders: Map<string, Json>; cards: Map<string, CardRec>; transactions: Json[] };
 }
 
@@ -58,6 +66,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     transactions: [],
   };
   const tokens = new Set<string>();
+  const faults: { f: Fault; left: number }[] = [];
   const requestIds = new Set<string>();
 
   function createCard(b: Json): Out {
@@ -215,7 +224,57 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     return { status: 200, body: txn };
   }
 
-  function route(method: string, path: string, headers: IncomingHttpHeaders, raw: string): Out {
+  // GET /issuing/cards: the summary list. Shape probed 2026-10-30: {has_more, items}, each item brand, card_id,
+  // masked card_number, card_status, cardholder_id, created_at, updated_at, oldest first (two cards). No
+  // request_id and no authorization_controls, so a caller unsure whether a create landed must retrieve each
+  // candidate by id and compare its request_id (the list has no request_id filter). cardholder_id and
+  // card_status are documented filters.
+  // CONFIRMED 2026-10-30: a card created seconds earlier was in the real list at once, unlike the transactions
+  // and conversions lists, which lag. So an empty answer here does mean "no such card yet" for a create that
+  // finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
+  // returns the same values.
+  // ASSUMED: page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the other lists, and no nick_name or
+  // date filters.
+  function listCards(q: URLSearchParams): Out {
+    const num = (k: string, dflt: number) =>
+      q.has(k) ? (/^\d+$/.test(q.get(k) ?? "") ? Number(q.get(k)) : null) : dflt;
+    const pageNum = num("page_num", 0);
+    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
+    const rawSize = q.get("page_size");
+    if (rawSize !== null && /^-?\d+$/.test(rawSize) && Number(rawSize) < 10) {
+      return err(400, "invalid_argument", "BELOW_MIN_PAGE_SIZE");
+    }
+    const pageSize = num("page_size", 100);
+    if (pageSize === null || pageSize > 200) {
+      return err(400, "invalid_argument", "Invalid page_size", "page_size");
+    }
+    const all = [...state.cards.values()]
+      .map((r) => r.card)
+      .filter((c) => !q.has("cardholder_id") || c.cardholder_id === q.get("cardholder_id"))
+      .filter((c) => !q.has("card_status") || c.card_status === q.get("card_status"))
+      .map((c) => ({
+        brand: c.brand,
+        card_id: c.card_id,
+        card_number: c.card_number,
+        card_status: c.card_status,
+        cardholder_id: c.cardholder_id,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+      }));
+    const end = (pageNum + 1) * pageSize;
+    return {
+      status: 200,
+      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
+    };
+  }
+
+  function route(
+    method: string,
+    path: string,
+    query: URLSearchParams,
+    headers: IncomingHttpHeaders,
+    raw: string,
+  ): Out {
     if (method === "POST" && path === "/api/v1/authentication/login") {
       if (!headers["x-client-id"] || !headers["x-api-key"])
         return err(401, "unauthorized", "Missing credentials");
@@ -262,6 +321,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
         : err(404, "resource_not_found", "Cardholder not found"); // ASSUMED code
     }
     if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b);
+    if (method === "GET" && path === "/api/v1/issuing/cards") return listCards(query);
     if (method === "GET" && card) {
       const rec = state.cards.get(card[1] ?? "");
       if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -286,8 +346,23 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString();
-    const path = new URL(req.url ?? "/", "http://mock").pathname;
-    send(res, route(req.method ?? "GET", path, req.headers, raw));
+    const url = new URL(req.url ?? "/", "http://mock");
+    const path = url.pathname;
+    const method = req.method ?? "GET";
+    const hit = faults.find((x) => x.left > 0 && x.f.method === method && x.f.path === path);
+    if (hit) hit.left--;
+    const f = hit?.f;
+    if (f?.kind === "5xx") {
+      return send(res, err(f.status ?? 503, "service_unavailable", "Injected fault"));
+    }
+    let out = route(method, path, url.searchParams, req.headers, raw);
+    if (f?.kind === "duplicate") out = route(method, path, url.searchParams, req.headers, raw);
+    if (f?.kind === "timeout-after") {
+      const timer = setTimeout(() => send(res, out), f.ms);
+      res.on("close", () => clearTimeout(timer));
+      return;
+    }
+    send(res, out);
   });
 
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
@@ -296,6 +371,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     url: `http://127.0.0.1:${addr.port}`,
     server,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    fault: (f) => void faults.push({ f, left: f.times ?? 1 }),
     state,
   };
 }
