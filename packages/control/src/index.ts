@@ -16,3 +16,4 @@ export * from "./ledger/index.js";
 export * from "./approvals/index.js";
 export * from "./controller.js";
 export * from "./pass/index.js";
+export * from "./killswitch/index.js";
