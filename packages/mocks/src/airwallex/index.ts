@@ -1,6 +1,6 @@
 // Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
 // transactions, a transactions list, an opt-in wallet with INSUFFICIENT_FUNDS declines, simulated
-// deposits and FX quotes.
+// deposits, FX quotes and conversions.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -62,6 +62,7 @@ export interface AirwallexMock {
     transactions: Json[];
     deposits: Json[];
     quotes: Map<string, QuoteRec>;
+    conversions: Map<string, Json>;
     rates: Map<string, number>; // pair -> rate in integer micro-units
   };
 }
@@ -71,6 +72,13 @@ const err = (status: number, code: string, message: string, source?: string): Ou
   status,
   body: { code, message, source: source ?? "" }, // sandbox error bodies always carry source, "" when empty
 });
+// FX service errors (conversions) also carry details: [{ code: "correlation_id", message: <uuid> }].
+// Probed on the duplicate request_id, insufficient_funds and expired_quote errors.
+const fxErr = (status: number, code: string, message: string, source: string): Out => {
+  const out = err(status, code, message, source);
+  const details = [{ code: "correlation_id", message: randomUUID() }];
+  return { ...out, body: { ...(out.body as Json), details } };
+};
 const stamp = () => new Date().toISOString().replace("Z", "+0000");
 const strList = (x: unknown): string[] | null =>
   x === undefined || x === null
@@ -81,8 +89,8 @@ const strList = (x: unknown): string[] | null =>
 const mask = (n: number) => "************" + String(1000 + (n % 9000));
 
 /** Money in cents (at least `min`), parsed from the decimal string. No exponent, max 2 decimals, no float math. */
-function toCents(x: unknown, min = 1): number | null {
-  if (typeof x !== "number") return null;
+function toCents(x: unknown, min = 1, text = false): number | null {
+  if (typeof x !== "number" && !(text && typeof x === "string")) return null;
   const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(x));
   if (!m) return null;
   const cents = Number(m[1] + (m[2] ?? "").padEnd(2, "0"));
@@ -145,8 +153,10 @@ export async function startAirwallexMock({
     transactions: [],
     deposits: [],
     quotes: new Map(),
+    conversions: new Map(),
     rates: new Map(),
   };
+  const conversionRequests = new Set<string>();
   for (const [pair, rate] of Object.entries(rates)) {
     const micro = toMicro(rate);
     if (!/^[A-Z]{6}$/.test(pair) || micro === null) {
@@ -460,6 +470,104 @@ export async function startAirwallexMock({
     return null;
   }
 
+  // Probed 2026-10-30 (our own sandbox key): create is 201 and the conversion is SETTLED at once, with
+  // settlement_cutoff_at equal to created_at; a repeated request_id is 400 invalid_argument whatever the
+  // body; selling a currency the wallet holds none of is 400 insufficient_funds, source "conversion"
+  // (not a SCHEDULED booking); a used-up quote is 400 expired_quote, source "quoteId". Trimmed from the
+  // real shape: awx_rate, mid_rate and rate_details. Unprobed and ASSUMED: the order of the checks, that
+  // a refused conversion does not consume its request_id, the other error messages and sources, the
+  // inclusive balance and quote-expiry edges, the 1.00 minimum for any currency, quote reuse (MULTI_USE
+  // was probed, reuse was not), quote_id echoed on the conversion, the UTC conversion_date, and the
+  // 7-character short_reference_id alphabet. A currency with no wallet holds zero here, while card
+  // purchases treat it as unlimited: a conversion needs real money behind it.
+  function createConversion(b: Json): Out {
+    const rid = b.request_id;
+    if (typeof rid !== "string" || rid === "") {
+      return fxErr(400, "field_required", "request_id is required", "request_id");
+    }
+    if (rid.length > 64) {
+      return fxErr(
+        400,
+        "invalid_argument",
+        "request_id must be at most 64 characters",
+        "request_id",
+      );
+    }
+    for (const f of ["buy_currency", "sell_currency"]) {
+      if (b[f] === undefined) return fxErr(400, "field_required", `${f} is required`, f);
+      if (!isCcy(b[f])) return fxErr(400, "invalid_argument", `Invalid ${f}`, f);
+    }
+    const sellDealt = b.sell_amount !== undefined;
+    if (!sellDealt && b.buy_amount === undefined) {
+      return fxErr(400, "field_required", "buy_amount or sell_amount is required", "sell_amount");
+    }
+    if (sellDealt && b.buy_amount !== undefined) {
+      return fxErr(
+        400,
+        "invalid_argument",
+        "Set only one of buy_amount and sell_amount",
+        "sell_amount",
+      );
+    }
+    const field = sellDealt ? "sell_amount" : "buy_amount";
+    const dealt = toCents(b[field], 1, true);
+    if (dealt === null) return fxErr(400, "invalid_argument", `Invalid ${field}`, field);
+    if (conversionRequests.has(rid)) {
+      const message = `request_id '${rid}' has been used in the past. Please use a different request_id for this request`;
+      return fxErr(400, "invalid_argument", message, "request_id");
+    }
+    let rate: { pair: string; micro: number; base: string } | null;
+    if (b.quote_id !== undefined) {
+      const q = typeof b.quote_id === "string" ? state.quotes.get(b.quote_id) : undefined;
+      if (!q) return fxErr(400, "invalid_quote_id", "Invalid quote", "quoteId");
+      if (now() > q.validToMs) return fxErr(400, "expired_quote", "Quote has expired", "quoteId");
+      if (q.buyCurrency !== b.buy_currency || q.sellCurrency !== b.sell_currency) {
+        return fxErr(400, "invalid_argument", "Quote does not match this conversion", "quoteId");
+      }
+      rate = { pair: q.pair, micro: q.micro, base: q.pair.slice(0, 3) };
+    } else {
+      rate = b.buy_currency === b.sell_currency ? null : rateFor(b.sell_currency, b.buy_currency);
+    }
+    if (!rate) return fxErr(400, "unsupported_currency", "No rate for this pair", "buy_currency");
+    if (dealt < 100) return fxErr(400, "amount_below_limit", "Amount is below the minimum", field);
+    const dealtCcy: string = sellDealt ? b.sell_currency : b.buy_currency;
+    const other = convert(dealt, dealtCcy === rate.base, rate.micro);
+    if (other === null) return fxErr(400, "amount_above_limit", "Amount too large", field);
+    const [buy, sell] = sellDealt ? [other, dealt] : [dealt, other];
+    const from = wallet.get(b.sell_currency);
+    if (!from || sell > from.available) {
+      return fxErr(400, "insufficient_funds", "insufficient_funds", "conversion");
+    }
+    from.available -= sell;
+    const to = wallet.get(b.buy_currency) ?? { available: 0, reserved: 0 };
+    to.available += buy;
+    wallet.set(b.buy_currency, to);
+    const ms = now();
+    const day = new Date(ms).toISOString().slice(0, 10);
+    const at = sec(ms);
+    const conversion = {
+      buy_amount: buy / 100,
+      buy_currency: b.buy_currency,
+      client_rate: rate.micro / 1_000_000,
+      conversion_date: day,
+      conversion_id: randomUUID(),
+      created_at: at,
+      currency_pair: rate.pair,
+      dealt_currency: dealtCcy,
+      ...(b.quote_id === undefined ? {} : { quote_id: b.quote_id }),
+      request_id: rid,
+      sell_amount: sell / 100,
+      sell_currency: b.sell_currency,
+      settlement_cutoff_at: at,
+      short_reference_id: `C${day.slice(2, 4)}${day.slice(5, 7)}${day.slice(8, 10)}-${randomUUID().replaceAll("-", "").slice(0, 7).toUpperCase()}`,
+      status: "SETTLED",
+      updated_at: at,
+    };
+    conversionRequests.add(rid);
+    state.conversions.set(conversion.conversion_id, conversion);
+    return { status: 201, body: conversion };
+  }
+
   function updateCard(id: string, b: Json): Out {
     const rec = state.cards.get(id);
     if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -590,6 +698,15 @@ export async function startAirwallexMock({
     if (method === "POST" && path === "/api/v1/simulation/deposit/create") return createDeposit(b);
     if (method === "GET" && path === "/api/v1/deposits") return listDeposits(query);
     if (method === "POST" && path === "/api/v1/fx/quotes/create") return createQuote(b);
+    if (method === "POST" && path === "/api/v1/fx/conversions/create") return createConversion(b);
+    const conversion = /^\/api\/v1\/fx\/conversions\/([^/]+)$/.exec(path);
+    if (method === "GET" && conversion) {
+      const found = state.conversions.get(conversion[1] ?? "");
+      // The 404 code is ASSUMED: only the success of GET by id was probed.
+      return found
+        ? { status: 200, body: found }
+        : fxErr(404, "resource_not_found", "Conversion not found", "conversion_id");
+    }
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }
 

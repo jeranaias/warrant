@@ -850,3 +850,231 @@ describe("rates and clock options", () => {
     },
   );
 });
+
+const CONVERT = "/api/v1/fx/conversions/create";
+const CONVERSION = (id: string) => `/api/v1/fx/conversions/${id}`;
+const FX = { rates: { EURUSD: "1.122223" }, balances: { USD: 100 } };
+
+// Sell 5 USD for EUR by default; every test overrides what it cares about.
+const convert = (patch: object = {}) =>
+  call(CONVERT, {
+    body: {
+      request_id: `conv_${++seq}`,
+      buy_currency: "EUR",
+      sell_currency: "USD",
+      sell_amount: "5",
+      ...patch,
+    },
+  });
+
+const quoteFor = async (validity = "HR_1") =>
+  (
+    await call(QUOTE, {
+      body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: 5, validity },
+    })
+  ).json;
+
+const CORRELATION = [{ code: "correlation_id", message: expect.any(String) }];
+
+describe("FX conversions", () => {
+  it("converts at the market rate, moves exact cents, and answers in the sandbox shape", async () => {
+    await restart({ ...FX, now: () => T0 });
+    const res = await convert({ request_id: "r1" });
+    expect(res.status).toBe(201);
+    // Real sandbox answer for the same request: 5.00 USD at 1.122223 bought 4.46 EUR, SETTLED at once.
+    expect(res.json).toMatchObject({
+      buy_amount: 4.46,
+      buy_currency: "EUR",
+      sell_amount: 5,
+      sell_currency: "USD",
+      client_rate: 1.122223,
+      currency_pair: "EURUSD",
+      dealt_currency: "USD",
+      request_id: "r1",
+      status: "SETTLED",
+      conversion_date: "2026-10-30",
+      created_at: "2026-10-30T20:08:32+0000",
+      settlement_cutoff_at: "2026-10-30T20:08:32+0000",
+      updated_at: "2026-10-30T20:08:32+0000",
+    });
+    expect(res.json.conversion_id).toEqual(expect.any(String));
+    expect(res.json.short_reference_id).toMatch(/^C261030-[A-Z0-9]{7}$/);
+    expect(res.json).not.toHaveProperty("quote_id");
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95, total_amount: 95 });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 4.46, total_amount: 4.46 });
+  });
+
+  it("reads a conversion back by id, and 404s an unknown one", async () => {
+    await restart(FX);
+    const made = await convert();
+    const got = await call(CONVERSION(made.json.conversion_id));
+    expect(got.status).toBe(200);
+    expect(got.json).toEqual(made.json);
+    const missing = await call(CONVERSION("nope"));
+    expect(missing.status).toBe(404); // ASSUMED: the 404 code and body were not probed
+    expect(missing.json.code).toBe("resource_not_found");
+    expect((await call(CONVERSION("x"), { token: null })).status).toBe(401);
+  });
+
+  it("derives the sell side when buy is the dealt side", async () => {
+    await restart(FX);
+    // 4.46 EUR x 1.122223 = 5.0051 USD, nearest cent 5.01
+    const res = await convert({ sell_amount: undefined, buy_amount: "4.46" });
+    expect(res.json).toMatchObject({ buy_amount: 4.46, sell_amount: 5.01, dealt_currency: "EUR" });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 94.99 });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 4.46 });
+  });
+
+  it("rounds an exact half cent up (the tie direction is ASSUMED)", async () => {
+    await restart({ rates: { EURUSD: "2.000000" }, balances: { USD: 10 } });
+    // 1.01 USD buys 0.505 EUR at 2.0: the tie goes up to 0.51
+    expect((await convert({ sell_amount: "1.01" })).json.buy_amount).toBe(0.51);
+  });
+
+  it("a quote locks its rate when the market moves, and can be used again", async () => {
+    await restart({ ...FX, now: () => T0 });
+    const q = await quoteFor();
+    mock.state.rates.set("EURUSD", 1_000_000); // the market moves to 1.000000
+    const locked = await convert({ quote_id: q.quote_id });
+    // quote_id echoed on the conversion is ASSUMED (the docs say so; not probed)
+    expect(locked.json).toMatchObject({
+      buy_amount: 4.46,
+      client_rate: 1.122223,
+      quote_id: q.quote_id,
+    });
+    expect((await convert({ quote_id: q.quote_id })).status).toBe(201); // MULTI_USE reuse: ASSUMED
+    const market = await convert();
+    expect(market.json).toMatchObject({ buy_amount: 5, client_rate: 1 });
+  });
+
+  it("refuses an expired quote with the sandbox body, valid up to valid_to_at inclusive", async () => {
+    let clock = T0;
+    await restart({ ...FX, now: () => clock });
+    const q = await quoteFor("MIN_1");
+    clock = T0 + 60_000; // exactly valid_to_at: still good (inclusive is ASSUMED from the docs)
+    expect((await convert({ quote_id: q.quote_id })).status).toBe(201);
+    clock = T0 + 60_001;
+    const late = await convert({ quote_id: q.quote_id });
+    expect(late.status).toBe(400);
+    expect(late.json).toEqual({
+      code: "expired_quote",
+      message: "Quote has expired",
+      source: "quoteId",
+      details: CORRELATION,
+    });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 });
+    expect(mock.state.conversions.size).toBe(1);
+  });
+
+  it("refuses an unknown quote and a quote for another direction", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 100, EUR: 100 } });
+    const unknown = await convert({ quote_id: "nope" });
+    expect(unknown.status).toBe(400);
+    expect(unknown.json).toMatchObject({ code: "invalid_quote_id", source: "quoteId" });
+    const q = await quoteFor(); // sell USD, buy EUR
+    const reversed = await convert({
+      quote_id: q.quote_id,
+      sell_currency: "EUR",
+      buy_currency: "USD",
+    });
+    expect(reversed.status).toBe(400);
+    expect(reversed.json).toMatchObject({ code: "invalid_argument", source: "quoteId" });
+    expect(mock.state.conversions.size).toBe(0);
+  });
+
+  it("rejects a repeated request_id, same body or not, with the sandbox body", async () => {
+    await restart(FX);
+    const first = await convert({ request_id: "dup-1" });
+    const again = await convert({ request_id: "dup-1" });
+    expect(again.status).toBe(400);
+    expect(again.json).toEqual({
+      code: "invalid_argument",
+      message:
+        "request_id 'dup-1' has been used in the past. Please use a different request_id for this request",
+      source: "request_id",
+      details: CORRELATION,
+    });
+    expect((await convert({ request_id: "dup-1", sell_amount: "6" })).status).toBe(400);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 }); // moved once
+    expect(mock.state.conversions.size).toBe(1);
+    expect((await call(CONVERSION(first.json.conversion_id))).json).toEqual(first.json);
+  });
+
+  it("does not consume a request_id on a refused conversion (ASSUMED)", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 1 } });
+    expect((await convert({ request_id: "retry-1" })).json.code).toBe("insufficient_funds");
+    await call(DEPOSIT, { body: { amount: 10, currency: "USD" } });
+    expect((await convert({ request_id: "retry-1" })).status).toBe(201);
+  });
+
+  it("refuses to sell more than is available, inclusive at the exact balance, nothing moves", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 5 } });
+    const over = await convert({ sell_amount: "5.01" });
+    expect(over.status).toBe(400);
+    // Real sandbox answer when selling a currency the wallet holds none of (SGD, 2026-10-30).
+    expect(over.json).toEqual({
+      code: "insufficient_funds",
+      message: "insufficient_funds",
+      source: "conversion",
+      details: CORRELATION,
+    });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 5 });
+    expect(await balanceOf("EUR")).toBeUndefined();
+    expect(mock.state.conversions.size).toBe(0);
+    expect((await convert({ sell_amount: "5" })).status).toBe(201); // exact balance passes (ASSUMED)
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 0 });
+  });
+
+  it("conversions spend available funds, not funds a card has reserved", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 10 } });
+    await pay(await makeCard([{ amount: 10, interval: "PER_TRANSACTION" }]), 5);
+    expect((await convert({ sell_amount: "5.01" })).json.code).toBe("insufficient_funds");
+    expect((await convert({ sell_amount: "5" })).status).toBe(201);
+  });
+
+  it("an unseeded currency is zero for conversions but unlimited for card purchases", async () => {
+    await restart({ rates: FX.rates }); // no wallet at all
+    expect((await convert()).json.code).toBe("insufficient_funds");
+    expect((await pay(await makeCard(), 5)).json.status).toBe("PENDING");
+  });
+
+  it("refuses a dealt amount under 1.00 (the limit is ASSUMED to apply to any currency)", async () => {
+    await restart(FX);
+    const low = await convert({ sell_amount: "0.99" });
+    expect(low.status).toBe(400);
+    expect(low.json.code).toBe("amount_below_limit");
+    expect((await convert({ sell_amount: "1.00" })).status).toBe(201);
+  });
+
+  it.each([
+    [{ request_id: undefined }, "field_required", "request_id"],
+    [{ request_id: "" }, "field_required", "request_id"],
+    [{ request_id: "x".repeat(65) }, "invalid_argument", "request_id"],
+    [{ buy_currency: undefined }, "field_required", "buy_currency"],
+    [{ sell_currency: "usd" }, "invalid_argument", "sell_currency"],
+    [{ sell_amount: undefined }, "field_required", "sell_amount"],
+    [{ buy_amount: "4" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "10.001" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "1e1" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "-5" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "abc" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: 0 }, "invalid_argument", "sell_amount"],
+    [{ buy_currency: "USD" }, "unsupported_currency", "buy_currency"],
+    [{ buy_currency: "GBP" }, "unsupported_currency", "buy_currency"],
+  ])("refuses %j with %s on %s, moving nothing", async (patch, code, source) => {
+    await restart(FX);
+    const res = await convert(patch);
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code, source });
+    expect(res.json.details).toEqual(CORRELATION);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 100 });
+    expect(mock.state.conversions.size).toBe(0);
+  });
+
+  it("needs a token", async () => {
+    await restart(FX);
+    const res = await call(CONVERT, { token: null, body: { request_id: "t" } });
+    expect(res.status).toBe(401);
+    expect((await call(CONVERT, { body: { request_id: "t" } })).status).toBe(400); // route exists
+  });
+});
