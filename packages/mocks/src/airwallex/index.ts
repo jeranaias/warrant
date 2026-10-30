@@ -997,6 +997,64 @@ export async function startAirwallexMock({
     return { status: 200, body: { items } };
   }
 
+  // POST /simulation/transfers/{id}/transition. Probed 2026-10-30 with our REST key: SENT then PAID work in
+  // that order and the wallet does not move after the create; a transition the transfer cannot make is
+  // HTTP 500 {code "operation_failed", message "Request could not be processed"}, not a 400 (seen for
+  // repeating PROCESSING and for FAILED from PROCESSING); CANCELLED from PROCESSING answers with status
+  // FAILED (failure_reason "simulation", failure_type "PAYMENT_RECALLED"), then the transfer reads back as
+  // CANCELLED with a failure block, and the amount returns to the wallet. ASSUMED: PROCESSING from SCHEDULED
+  // is allowed (the docs' order), every other pair is a 500, the 400 and 404 bodies, that a transfer cannot
+  // be cancelled from SCHEDULED or SENT, and that the answer is the transfer's own shape (the sandbox's
+  // answer used an older field order and added a swift_code to the beneficiary).
+  function transition(id: string, b: Json): Out {
+    const rec = state.transfers.get(id);
+    if (!rec) return err(404, "resource_not_found", "Transfer not found");
+    const next = b.next_status;
+    if (
+      typeof next !== "string" ||
+      !["PROCESSING", "SENT", "PAID", "FAILED", "CANCELLED", "OVERDUE"].includes(next)
+    ) {
+      return err(400, "invalid_argument", "Invalid next_status", "next_status");
+    }
+    const tr = advance(rec);
+    const touch = () => {
+      tr.updated_at = sec(now());
+    };
+    if (next === "PROCESSING" && tr.status === "SCHEDULED") {
+      tr.status = "PROCESSING";
+      touch();
+      return { status: 200, body: tr };
+    }
+    if (
+      (next === "SENT" && tr.status === "PROCESSING") ||
+      (next === "PAID" && tr.status === "SENT")
+    ) {
+      tr.status = next;
+      tr.dispatch_date = new Date(now()).toISOString().slice(0, 10);
+      touch();
+      return { status: 200, body: tr };
+    }
+    if (next === "CANCELLED" && tr.status === "PROCESSING") {
+      const wal = wallet.get(tr.transfer_currency);
+      if (wal) wal.available += rec.cents;
+      tr.status = "CANCELLED";
+      tr.failure = { details: { type: "PAYMENT_RECALLED" }, message: "simulation" };
+      touch();
+      const answer: Json = {
+        ...tr,
+        status: "FAILED",
+        failure_reason: "simulation",
+        failure_type: "PAYMENT_RECALLED",
+      };
+      Reflect.deleteProperty(answer, "failure");
+      return { status: 200, body: answer };
+    }
+    return {
+      status: 500,
+      body: { code: "operation_failed", message: "Request could not be processed" },
+    };
+  }
+
   function route(
     method: string,
     path: string,
@@ -1101,6 +1159,8 @@ export async function startAirwallexMock({
     }
     if (method === "POST" && path === "/api/v1/transfers/create") return createTransfer(b);
     if (method === "GET" && path === "/api/v1/transfers") return listTransfers(query);
+    const sim = /^\/api\/v1\/simulation\/transfers\/([^/]+)\/transition$/.exec(path);
+    if (method === "POST" && sim) return transition(sim[1] ?? "", b);
     const transfer = /^\/api\/v1\/transfers\/([^/]+)$/.exec(path);
     if (method === "GET" && transfer) {
       const found = state.transfers.get(transfer[1] ?? "");

@@ -1817,3 +1817,142 @@ describe("transfers list (GET /transfers)", () => {
     expect((await call(TRANSFERS)).status).toBe(200);
   });
 });
+
+const simulate = (id: string, next_status: unknown) =>
+  call(`/api/v1/simulation/transfers/${id}/transition`, { body: { next_status } });
+
+// Real answer (2026-10-30) to a transition the transfer cannot make: a 500, not a 400.
+const OPERATION_FAILED = { code: "operation_failed", message: "Request could not be processed" };
+
+describe("transfer status simulation", () => {
+  it("walks PROCESSING, SENT, PAID in order, and the wallet does not move after the create", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+
+    // Straight after the create it is still SCHEDULED, so PROCESSING is a legal next step (docs).
+    const processing = await simulate(id, "PROCESSING");
+    expect(processing.status).toBe(200);
+    expect(processing.json.status).toBe("PROCESSING");
+
+    clock = T0 + 4000;
+    const sent = await simulate(id, "SENT");
+    expect(sent.status).toBe(200);
+    expect(sent.json).toMatchObject({ status: "SENT", dispatch_date: "2026-10-30", id });
+    expect(sent.json.updated_at).toBe("2026-10-30T20:08:36+0000");
+
+    const paid = await simulate(id, "PAID");
+    expect(paid.status).toBe(200);
+    expect(paid.json.status).toBe("PAID");
+
+    const got = await call(`${TRANSFERS}/${id}`);
+    expect(got.json).toMatchObject({ status: "PAID", dispatch_date: "2026-10-30" });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95, total_amount: 95 });
+    expect((await call(`${TRANSFERS}?status=PAID`)).json.items.map((t: Json) => t.id)).toEqual([
+      id,
+    ]);
+  });
+
+  it("answers 500 operation_failed when asked for the status it already has", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    clock = T0 + 1000; // the transfer has moved to PROCESSING by itself
+    const again = await simulate(id, "PROCESSING");
+    expect(again.status).toBe(500);
+    expect(again.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe("PROCESSING");
+  });
+
+  it("refuses FAILED from PROCESSING with a 500, and nothing is refunded", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    clock = T0 + 1000;
+    const failed = await simulate(id, "FAILED");
+    expect(failed.status).toBe(500);
+    expect(failed.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe("PROCESSING");
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+  });
+
+  // Real answer (2026-10-30): simulating CANCELLED answers with status FAILED (PAYMENT_RECALLED), the
+  // transfer reads back as CANCELLED with a failure block, and the money returns to the wallet.
+  it("CANCELLED shows FAILED in the answer, settles as CANCELLED, and refunds the wallet", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+    clock = T0 + 1000;
+
+    const res = await simulate(id, "CANCELLED");
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({
+      id,
+      status: "FAILED",
+      failure_reason: "simulation",
+      failure_type: "PAYMENT_RECALLED",
+    });
+
+    const got = await call(`${TRANSFERS}/${id}`);
+    expect(got.json.status).toBe("CANCELLED");
+    expect(got.json.failure).toEqual({
+      details: { type: "PAYMENT_RECALLED" },
+      message: "simulation",
+    });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100, total_amount: 100 });
+    expect((await call(`${TRANSFERS}?status=CANCELLED`)).json.items.map((t: Json) => t.id)).toEqual(
+      [id],
+    );
+    expect((await call(`${TRANSFERS}?status=PROCESSING`)).json.items).toEqual([]);
+
+    // a second cancel is refused, so the refund happens once
+    expect((await simulate(id, "CANCELLED")).status).toBe(500);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100 });
+  });
+
+  // The 500 for the first two rows and for repeating a status is probed; the rest follow the docs'
+  // "no skipping, in order" rule and are ASSUMED to answer the same way.
+  it.each([
+    ["SCHEDULED", "SENT"],
+    ["SCHEDULED", "PAID"],
+    ["SCHEDULED", "CANCELLED"],
+    ["PROCESSING", "PAID"],
+    ["PROCESSING", "OVERDUE"],
+    ["SENT", "PROCESSING"],
+    ["SENT", "CANCELLED"],
+    ["PAID", "PROCESSING"],
+    ["PAID", "CANCELLED"],
+    ["CANCELLED", "SENT"],
+  ])("refuses %s -> %s with 500 operation_failed", async (from, next) => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    if (from !== "SCHEDULED") clock = T0 + 1000;
+    if (from === "SENT" || from === "PAID") await simulate(id, "SENT");
+    if (from === "PAID") await simulate(id, "PAID");
+    if (from === "CANCELLED") await simulate(id, "CANCELLED");
+    const before = (await call(`${TRANSFERS}/${id}`)).json.status;
+    const res = await simulate(id, next);
+    expect(res.status).toBe(500);
+    expect(res.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe(before);
+  });
+
+  // ASSUMED: the bodies for a bad next_status and an unknown transfer were not probed.
+  it("refuses a bad next_status with 400, an unknown transfer with 404, and needs a token", async () => {
+    const bid = await setup();
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    for (const bad of [undefined, "DONE", 5]) {
+      const res = await simulate(id, bad);
+      expect(res.status).toBe(400);
+      expect(res.json).toMatchObject({ code: "invalid_argument", source: "next_status" });
+    }
+    expect((await simulate("nope", "PROCESSING")).status).toBe(404);
+    const noToken = await call(`/api/v1/simulation/transfers/${id}/transition`, {
+      token: null,
+      body: { next_status: "PROCESSING" },
+    });
+    expect(noToken.status).toBe(401);
+  });
+});
