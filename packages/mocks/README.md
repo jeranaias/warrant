@@ -2,8 +2,10 @@
 
 Local fake Airwallex and Metal servers so nobody waits on sandbox access.
 
-- `src/airwallex/`: auth token, balances, beneficiaries, transfers, conversions, issued cards
-  (create, freeze), and the sandbox "simulate" calls the rails adapters use.
+- `src/airwallex/`: auth token, DELEGATE cardholders, issued cards (create, freeze with
+  `POST /issuing/cards/{id}/update`), `single_phase` simulated purchases, `GET /issuing/transactions`,
+  and `GET /balances/current`. Pass `startAirwallexMock({ balances: { USD: 100 } })` to seed a wallet;
+  without it there is no funds check. Still to do: beneficiaries, transfers, conversions.
 - `src/metal/`: an x402 seller that answers 402 with payment requirements, settles, and reports
   status by idempotency key.
 

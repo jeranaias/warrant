@@ -8,6 +8,8 @@ try {
   // No .env: fall back to the defaults from .env.example.
 }
 
-const airwallex = await startAirwallexMock(Number(process.env.MOCK_AIRWALLEX_PORT ?? 4010));
+const airwallex = await startAirwallexMock({
+  port: Number(process.env.MOCK_AIRWALLEX_PORT ?? 4010),
+});
 console.log(`mock airwallex listening on ${airwallex.url}`);
 // TODO(mocks): start the Metal mock on MOCK_METAL_PORT.

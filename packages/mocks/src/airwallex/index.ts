@@ -1,4 +1,5 @@
-// Mock Airwallex: auth, DELEGATE cardholders, virtual cards, simulated single-phase transactions.
+// Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
+// transactions, a transactions list, and an opt-in wallet with INSUFFICIENT_FUNDS declines.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -28,6 +29,12 @@ interface CardRec {
   spent: number;
 }
 
+export interface AirwallexOptions {
+  port?: number;
+  /** Seed wallet in major units per currency. Without it there is no wallet and no funds check. */
+  balances?: Record<string, number>;
+}
+
 export interface AirwallexMock {
   url: string;
   server: Server;
@@ -50,21 +57,39 @@ const strList = (x: unknown): string[] | null =>
       : null;
 const mask = (n: number) => "************" + String(1000 + (n % 9000));
 
-/** Positive money in cents, parsed from the decimal string. No exponent, max 2 decimals, no float math. */
-function toCents(x: unknown): number | null {
+/** Money in cents (at least `min`), parsed from the decimal string. No exponent, max 2 decimals, no float math. */
+function toCents(x: unknown, min = 1): number | null {
   if (typeof x !== "number") return null;
   const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(x));
   if (!m) return null;
   const cents = Number(m[1] + (m[2] ?? "").padEnd(2, "0"));
-  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  return Number.isSafeInteger(cents) && cents >= min ? cents : null;
 }
 
-export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
+/** Non-negative integer query param in [min, max], the default when absent, null when malformed. */
+function intParam(q: URLSearchParams, name: string, dflt: number, min: number, max: number) {
+  const v = q.get(name);
+  if (v === null) return dflt;
+  return /^\d+$/.test(v) && Number(v) >= min && Number(v) <= max ? Number(v) : null;
+}
+
+export async function startAirwallexMock({
+  port = 0,
+  balances = {},
+}: AirwallexOptions = {}): Promise<AirwallexMock> {
   const state: AirwallexMock["state"] = {
     cardholders: new Map(),
     cards: new Map(),
     transactions: [],
   };
+  // Wallet in cents. Money moves like the sandbox (probed 2026-10-30): an approval takes funds from
+  // available into reserved, so total is unchanged. pending_amount stays 0 (no deposits modelled).
+  const wallet = new Map<string, { available: number; reserved: number }>();
+  for (const [ccy, amount] of Object.entries(balances)) {
+    const cents = toCents(amount, 0);
+    if (cents === null) throw new Error("Invalid balances seed for " + ccy + ": " + String(amount));
+    wallet.set(ccy, { available: cents, reserved: 0 });
+  }
   const tokens = new Set<string>();
   const faults: { f: Fault; left: number }[] = [];
   const requestIds = new Map<string, { raw: string; card: Json }>();
@@ -179,10 +204,12 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     if (typeof ccy !== "string") {
       return err(400, "invalid_argument", "Invalid transaction_currency", "transaction_currency");
     }
-    // Declines are 200 + FAILED, like the sandbox LIMIT_EXCEEDED. Check order is ASSUMED:
-    // currency, then merchant category, then limits.
-    let failure: string | null =
-      rec.currencies.length && !rec.currencies.includes(ccy) ? "CURRENCY_NOT_ALLOWED" : null;
+    // Declines are 200 + FAILED, like the sandbox LIMIT_EXCEEDED. Check order is ASSUMED: card status,
+    // currency, merchant category, limits, then funds. A frozen card is CARD_INACTIVE (probed).
+    let failure: string | null = rec.card.card_status === "ACTIVE" ? null : "CARD_INACTIVE";
+    if (!failure && rec.currencies.length && !rec.currencies.includes(ccy)) {
+      failure = "CURRENCY_NOT_ALLOWED";
+    }
     if (!failure && ccy !== rec.currency) {
       return err(
         400,
@@ -200,7 +227,17 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
       l.interval === "PER_TRANSACTION" ? cents > l.cents : rec.spent + cents > l.cents,
     );
     if (!failure && over) failure = "LIMIT_EXCEEDED";
-    if (!failure) rec.spent += cents;
+    // INSUFFICIENT_FUNDS is inclusive (exact balance passes). Only seeded currencies are checked: an
+    // unseeded currency has unlimited funds (ASSUMED convenience; the real name is from the kit).
+    const funds = wallet.get(ccy);
+    if (!failure && funds && cents > funds.available) failure = "INSUFFICIENT_FUNDS";
+    if (!failure) {
+      rec.spent += cents;
+      if (funds) {
+        funds.available -= cents;
+        funds.reserved += cents;
+      }
+    }
     const amount = -(cents / 100);
     const txn = {
       transaction_id: randomUUID(),
@@ -227,7 +264,50 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     return { status: 200, body: txn };
   }
 
-  function route(method: string, path: string, headers: IncomingHttpHeaders, raw: string): Out {
+  function updateCard(id: string, b: Json): Out {
+    const rec = state.cards.get(id);
+    if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
+    // Freeze and unfreeze only. The real endpoint is a partial update (limits, nickname, ...); here any
+    // other key is a 400 (ASSUMED) rather than silently ignored, and CLOSED is out of scope.
+    const other = Object.keys(b).find((k) => k !== "card_status");
+    if (other) return err(400, "invalid_argument", "Only card_status can be updated", other);
+    if (b.card_status !== "ACTIVE" && b.card_status !== "INACTIVE") {
+      return err(400, "invalid_argument", "card_status must be ACTIVE or INACTIVE", "card_status");
+    }
+    rec.card.card_status = b.card_status;
+    rec.card.all_card_versions[0].card_status = b.card_status; // one version, updated in place (probed)
+    // The sandbox bumped updated_at on unfreeze but not on freeze; the mock always bumps (ASSUMED).
+    rec.card.updated_at = stamp();
+    // The update response is the create shape, without card_version / all_card_versions (probed).
+    const view = { ...rec.card };
+    delete view.card_version;
+    delete view.all_card_versions;
+    return { status: 200, body: view };
+  }
+
+  // Legacy list: page_num from 0 and {has_more, items} are from the docs; the MCP only exposes the
+  // newer cursor model, so newest-first, default page_size 10 and max 100 are ASSUMED.
+  function listTransactions(q: URLSearchParams): Out {
+    const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
+    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
+    const pageSize = intParam(q, "page_size", 10, 1, 100);
+    if (pageSize === null) return err(400, "invalid_argument", "Invalid page_size", "page_size");
+    const cardId = q.get("card_id");
+    const all = state.transactions.filter((t) => cardId === null || t.card_id === cardId).reverse();
+    const end = (pageNum + 1) * pageSize;
+    return {
+      status: 200,
+      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
+    };
+  }
+
+  function route(
+    method: string,
+    path: string,
+    query: URLSearchParams,
+    headers: IncomingHttpHeaders,
+    raw: string,
+  ): Out {
     if (method === "POST" && path === "/api/v1/authentication/login") {
       if (!headers["x-client-id"] || !headers["x-api-key"])
         return err(401, "unauthorized", "Missing credentials");
@@ -274,6 +354,22 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
         : err(404, "resource_not_found", "Cardholder not found"); // ASSUMED code
     }
     if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b, raw);
+    const update = /^\/api\/v1\/issuing\/cards\/([^/]+)\/update$/.exec(path);
+    if (method === "POST" && update) return updateCard(update[1] ?? "", b);
+    if (method === "GET" && path === "/api/v1/issuing/transactions") return listTransactions(query);
+    if (method === "GET" && path === "/api/v1/balances/current") {
+      // The real endpoint lists every currency, zero rows included; the mock lists only seeded ones.
+      const rows = [...wallet].map(([currency, w]) => ({
+        available_amount: w.available / 100,
+        currency,
+        pending_amount: 0,
+        reserved_amount: w.reserved / 100,
+        total_amount: (w.available + w.reserved) / 100,
+        prepayment_amount: 0,
+        account_type: "cash",
+      }));
+      return { status: 200, body: rows };
+    }
     if (method === "GET" && card) {
       const rec = state.cards.get(card[1] ?? "");
       if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -298,7 +394,8 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString();
-    const path = new URL(req.url ?? "/", "http://mock").pathname;
+    const url = new URL(req.url ?? "/", "http://mock");
+    const path = url.pathname;
     const method = req.method ?? "GET";
     const hit = faults.find((x) => x.left > 0 && x.f.method === method && x.f.path === path);
     if (hit) hit.left--;
@@ -306,8 +403,8 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     if (f?.kind === "5xx") {
       return send(res, err(f.status ?? 503, "service_unavailable", "Injected fault"));
     }
-    let out = route(method, path, req.headers, raw);
-    if (f?.kind === "duplicate") out = route(method, path, req.headers, raw);
+    let out = route(method, path, url.searchParams, req.headers, raw);
+    if (f?.kind === "duplicate") out = route(method, path, url.searchParams, req.headers, raw);
     if (f?.kind === "timeout-after") {
       const timer = setTimeout(() => send(res, out), f.ms);
       res.on("close", () => clearTimeout(timer));

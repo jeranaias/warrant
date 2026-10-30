@@ -5,6 +5,8 @@ import type { AirwallexMock } from "./index.js";
 let mock: AirwallexMock;
 let token: string;
 let seq = 0;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Json = Record<string, any>;
 
 interface CallInit {
   method?: string;
@@ -358,5 +360,208 @@ describe("fault injection", () => {
     mock.fault({ kind: "5xx", method: "GET", path: CREATE });
     mock.fault({ kind: "5xx", method: "POST", path: "/cards/create" });
     expect((await call(CREATE, { body: cardBody(holder) })).status).toBe(201);
+  });
+});
+
+const UPDATE = (id: string) => `/api/v1/issuing/cards/${id}/update`;
+const TXNS = "/api/v1/issuing/transactions";
+const BALANCES = "/api/v1/balances/current";
+
+async function restart(opts: Parameters<typeof startAirwallexMock>[0]) {
+  mock.server.closeAllConnections();
+  await mock.close();
+  mock = await startAirwallexMock(opts);
+  token = (await login()).json.token;
+}
+
+const balanceOf = async (currency: string) =>
+  (await call(BALANCES)).json.find((b: { currency: string }) => b.currency === currency);
+
+describe("freeze (card_status update)", () => {
+  it("a frozen card declines with CARD_INACTIVE and spends nothing, then works again", async () => {
+    const id = await makeCard([
+      { amount: 10, interval: "PER_TRANSACTION" },
+      { amount: 10, interval: "ALL_TIME" },
+    ]);
+    const frozen = await call(UPDATE(id), { body: { card_status: "INACTIVE" } });
+    expect(frozen.status).toBe(200);
+    expect(frozen.json).toMatchObject({ card_id: id, card_status: "INACTIVE" });
+    expect(frozen.json.card_number).toMatch(/^\*{12}\d{4}$/);
+    expect(frozen.json.all_card_versions).toBeUndefined(); // update returns the create shape
+    const seen = await call(`/api/v1/issuing/cards/${id}`);
+    expect(seen.json.card_status).toBe("INACTIVE");
+    expect(seen.json.all_card_versions[0].card_status).toBe("INACTIVE");
+
+    const declined = await pay(id, 5);
+    expect(declined.status).toBe(200);
+    expect(declined.json).toMatchObject({
+      status: "FAILED",
+      failure_reason: "CARD_INACTIVE",
+      transaction_type: "CLEARING",
+    });
+
+    const thawed = await call(UPDATE(id), { body: { card_status: "ACTIVE" } });
+    expect(thawed.json.card_status).toBe("ACTIVE");
+    expect((await pay(id, 10)).json.status).toBe("PENDING");
+    const limits = await call(`/api/v1/issuing/cards/${id}/limits`);
+    expect(limits.json.limits.find((l: Limit) => l.interval === "ALL_TIME").remaining).toBe(0);
+  });
+
+  it("freezing an already frozen card is fine", async () => {
+    const id = await makeCard();
+    expect((await call(UPDATE(id), { body: { card_status: "INACTIVE" } })).status).toBe(200);
+    expect((await call(UPDATE(id), { body: { card_status: "INACTIVE" } })).status).toBe(200);
+  });
+
+  it.each([
+    { card_status: "CLOSED" },
+    { card_status: "BOGUS" },
+    {},
+    { card_status: "INACTIVE", nick_name: "x" },
+  ])("refuses the update %j", async (body) => {
+    const id = await makeCard();
+    const res = await call(UPDATE(id), { body });
+    expect(res.status).toBe(400);
+    expect(res.json.code).toBe("invalid_argument");
+    expect((await call(`/api/v1/issuing/cards/${id}`)).json.card_status).toBe("ACTIVE");
+  });
+
+  it("returns 404 for an unknown card", async () => {
+    const res = await call(UPDATE("nope"), { body: { card_status: "INACTIVE" } });
+    expect(res.status).toBe(404);
+    expect(res.json.message).toBe("Card not found");
+  });
+});
+
+describe("transactions list (legacy page_num / page_size)", () => {
+  it("lists one card newest first with {has_more, items}, declines included", async () => {
+    const a = await makeCard();
+    const b = await makeCard();
+    await pay(a, 1);
+    await pay(a, 2);
+    await pay(b, 3);
+    await pay(a, 11); // over the 10.00 cap: FAILED
+    const res = await call(`${TXNS}?card_id=${a}`);
+    expect(res.status).toBe(200);
+    expect(res.json.has_more).toBe(false);
+    expect(res.json.items.map((t: Json) => t.transaction_amount)).toEqual([-11, -2, -1]);
+    expect(res.json.items[0]).toMatchObject({ status: "FAILED", failure_reason: "LIMIT_EXCEEDED" });
+    expect(res.json.items.every((t: Json) => t.card_id === a)).toBe(true);
+  });
+
+  it("pages with page_num (from 0) and page_size, and reports has_more", async () => {
+    const id = await makeCard();
+    for (const n of [1, 2, 3]) await pay(id, n);
+    const first = await call(`${TXNS}?card_id=${id}&page_size=2`);
+    expect(first.json.items).toHaveLength(2);
+    expect(first.json.has_more).toBe(true);
+    const second = await call(`${TXNS}?card_id=${id}&page_size=2&page_num=1`);
+    expect(second.json.items).toHaveLength(1);
+    expect(second.json.has_more).toBe(false);
+    const past = await call(`${TXNS}?card_id=${id}&page_size=2&page_num=5`);
+    expect(past.json).toEqual({ has_more: false, items: [] });
+  });
+
+  it("without card_id lists every card, and an unknown card_id is an empty list", async () => {
+    await pay(await makeCard(), 1);
+    await pay(await makeCard(), 1);
+    expect((await call(TXNS)).json.items).toHaveLength(2);
+    expect((await call(`${TXNS}?card_id=nope`)).json).toEqual({ has_more: false, items: [] });
+  });
+
+  it.each([
+    ["page_size=0", "page_size"],
+    ["page_size=101", "page_size"],
+    ["page_size=1.5", "page_size"],
+    ["page_size=1e1", "page_size"],
+    ["page_num=-1", "page_num"],
+    ["page_num=abc", "page_num"],
+  ])("refuses %s with 400", async (qs, source) => {
+    const res = await call(`${TXNS}?${qs}`);
+    expect(res.status).toBe(400);
+    expect(res.json.source).toBe(source);
+  });
+
+  it("needs a token", async () => {
+    expect((await call(TXNS, { token: null })).status).toBe(401);
+    expect((await call(TXNS)).status).toBe(200);
+  });
+});
+
+describe("balances and INSUFFICIENT_FUNDS (opt-in funds model)", () => {
+  it("serves the seeded wallet in the sandbox balance shape", async () => {
+    await restart({ balances: { USD: 20, EUR: 5.5 } });
+    const res = await call(BALANCES);
+    expect(res.status).toBe(200);
+    expect(res.json).toHaveLength(2);
+    expect(await balanceOf("USD")).toEqual({
+      available_amount: 20,
+      currency: "USD",
+      pending_amount: 0,
+      reserved_amount: 0,
+      total_amount: 20,
+      prepayment_amount: 0,
+      account_type: "cash",
+    });
+    expect((await balanceOf("EUR")).available_amount).toBe(5.5);
+  });
+
+  it("needs a token", async () => {
+    expect((await call(BALANCES, { token: null })).status).toBe(401);
+    expect((await call(BALANCES)).status).toBe(200);
+  });
+
+  it("an approval moves available into reserved; pending and total do not move", async () => {
+    await restart({ balances: { USD: 20 } });
+    await pay(await makeCard(), 5);
+    expect(await balanceOf("USD")).toMatchObject({
+      available_amount: 15,
+      reserved_amount: 5,
+      pending_amount: 0,
+      total_amount: 20,
+    });
+  });
+
+  it("is inclusive: the exact balance approves, one cent over declines INSUFFICIENT_FUNDS", async () => {
+    await restart({ balances: { USD: 10 } });
+    const id = await makeCard([{ amount: 20, interval: "PER_TRANSACTION" }]);
+    const over = await pay(id, 10.01);
+    expect(over.status).toBe(200);
+    expect(over.json).toMatchObject({ status: "FAILED", failure_reason: "INSUFFICIENT_FUNDS" });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 10, reserved_amount: 0 });
+    expect((await pay(id, 10)).json.status).toBe("PENDING");
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 0, reserved_amount: 10 });
+    expect((await pay(id, 0.01)).json.failure_reason).toBe("INSUFFICIENT_FUNDS");
+  });
+
+  it("other declines never touch the balance, and limits are checked before funds", async () => {
+    await restart({ balances: { USD: 100 } });
+    const id = await makeCard();
+    expect((await pay(id, 11)).json.failure_reason).toBe("LIMIT_EXCEEDED");
+    await call(UPDATE(id), { body: { card_status: "INACTIVE" } });
+    expect((await pay(id, 5)).json.failure_reason).toBe("CARD_INACTIVE");
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 100, reserved_amount: 0 });
+
+    await restart({ balances: { USD: 5 } });
+    const small = await makeCard([{ amount: 6, interval: "PER_TRANSACTION" }]);
+    expect((await pay(small, 8)).json.failure_reason).toBe("LIMIT_EXCEEDED"); // ASSUMED order
+  });
+
+  it("a zero seed is allowed and declines everything", async () => {
+    await restart({ balances: { USD: 0 } });
+    expect((await pay(await makeCard(), 0.01)).json.failure_reason).toBe("INSUFFICIENT_FUNDS");
+  });
+
+  it("has no wallet and no funds check unless seeded, and only checks seeded currencies", async () => {
+    expect((await call(BALANCES)).json).toEqual([]);
+    expect((await pay(await makeCard(), 10)).json.status).toBe("PENDING");
+    await restart({ balances: { EUR: 5 } });
+    expect((await pay(await makeCard(), 8)).json.status).toBe("PENDING"); // USD not seeded: ASSUMED
+  });
+
+  it.each([1e21, 10.001, -5])("refuses to start with the bad balance seed %s", async (amount) => {
+    await expect(startAirwallexMock({ balances: { USD: amount } })).rejects.toThrow(
+      /Invalid balances seed for USD/,
+    );
   });
 });
