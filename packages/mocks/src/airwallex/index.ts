@@ -67,21 +67,18 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
   };
   const tokens = new Set<string>();
   const faults: { f: Fault; left: number }[] = [];
-  const requestIds = new Map<string, { raw: string; card: Json }>();
+  const requestIds = new Set<string>();
 
-  function createCard(b: Json, raw: string): Out {
-    const prior = requestIds.get(b.request_id);
-    // The replay compares the raw request body, so the same fields in a different key order count as
-    // a different body. Same id + same body replays the card: ASSUMED, the probe only changed the body.
-    if (prior) {
-      return prior.raw === raw
-        ? { status: 201, body: prior.card }
-        : err(
-            400,
-            "invalid_argument",
-            "The provided ID is already associated with a previous request",
-            "request_id",
-          );
+  function createCard(b: Json): Out {
+    // Airwallex never replays a card create: a reused request_id is 400 whatever the body (sandbox,
+    // 2026-10-30, with the same body and with a different one).
+    if (requestIds.has(b.request_id)) {
+      return err(
+        400,
+        "invalid_argument",
+        "The provided ID is already associated with a previous request",
+        "request_id",
+      );
     }
     const bad = (source: string) => err(400, "invalid_argument", `Invalid ${source}`, source);
     if (typeof b.request_id !== "string" || !b.request_id) return bad("request_id");
@@ -153,7 +150,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
       categories,
       spent: 0,
     });
-    requestIds.set(b.request_id, { raw, card });
+    requestIds.add(b.request_id);
     return { status: 201, body: card };
   }
 
@@ -273,7 +270,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
         ? { status: 200, body: rec }
         : err(404, "resource_not_found", "Cardholder not found"); // ASSUMED code
     }
-    if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b, raw);
+    if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b);
     if (method === "GET" && card) {
       const rec = state.cards.get(card[1] ?? "");
       if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code

@@ -149,26 +149,19 @@ describe("cards", () => {
     expect((await post({ is_personalized: true })).status).toBe(400);
   });
 
-  it("replays the same request_id and body, rejects the same id with a different body", async () => {
+  it("rejects a reused request_id with 400, even with the same body (the sandbox never replays)", async () => {
     const body = cardBody(await makeHolder());
-    const first = await call("/api/v1/issuing/cards/create", { body });
+    expect((await call("/api/v1/issuing/cards/create", { body })).status).toBe(201);
     const again = await call("/api/v1/issuing/cards/create", { body });
-    expect(again.json.card_id).toBe(first.json.card_id);
+    expect(again.status).toBe(400);
+    expect(again.json).toMatchObject({
+      code: "invalid_argument",
+      message: "The provided ID is already associated with a previous request",
+      source: "request_id",
+    });
+    const changed = { ...body, created_by: "Someone Else" };
+    expect((await call("/api/v1/issuing/cards/create", { body: changed })).status).toBe(400);
     expect(mock.state.cards.size).toBe(1);
-
-    const changed = {
-      ...body,
-      authorization_controls: {
-        ...body.authorization_controls,
-        transaction_limits: {
-          currency: "USD",
-          limits: [{ amount: 20, interval: "PER_TRANSACTION" }],
-        },
-      },
-    };
-    const clash = await call("/api/v1/issuing/cards/create", { body: changed });
-    expect(clash.status).toBe(400);
-    expect(clash.json).toMatchObject({ code: "invalid_argument", source: "request_id" });
   });
 
   it.each([10.001, 1e21, 1e-7, 0, -5])(
