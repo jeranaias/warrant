@@ -410,7 +410,7 @@ export async function startAirwallexMock({
       validToMs: ms + validityMs,
     });
     return {
-      status: 201,
+      status: 200, // the sandbox answers a quote 200, while deposits and conversions are 201
       body: {
         buy_amount: buy / 100,
         buy_currency: b.buy_currency,
@@ -428,6 +428,27 @@ export async function startAirwallexMock({
         valid_to_at: sec(ms + validityMs),
         validity: b.validity,
       },
+    };
+  }
+
+  // Sandbox 2026-10-30: giving only one of page_num / page_size is 400 with this exact message and an empty
+  // source. Neither (everything), the paging limits, newest first and {has_more, items} are ASSUMED: the
+  // MCP printed a bare array and no real GET with both params has been captured yet.
+  function listDeposits(q: URLSearchParams): Out {
+    const all = [...state.deposits].reverse();
+    if (!q.has("page_num") && !q.has("page_size"))
+      return { status: 200, body: { has_more: false, items: all } };
+    if (!q.has("page_num") || !q.has("page_size")) {
+      return err(400, "invalid_argument", "both page_num and page_size need to be filled");
+    }
+    const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
+    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
+    const pageSize = intParam(q, "page_size", 10, 1, 1000);
+    if (pageSize === null) return err(400, "invalid_argument", "Invalid page_size", "page_size");
+    const end = (pageNum + 1) * pageSize;
+    return {
+      status: 200,
+      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
     };
   }
 
@@ -567,9 +588,7 @@ export async function startAirwallexMock({
     }
     if (method === "POST" && path === "/api/v1/simulation/issuing/create") return simulate(b);
     if (method === "POST" && path === "/api/v1/simulation/deposit/create") return createDeposit(b);
-    if (method === "GET" && path === "/api/v1/deposits") {
-      return { status: 200, body: { has_more: false, items: [...state.deposits].reverse() } };
-    }
+    if (method === "GET" && path === "/api/v1/deposits") return listDeposits(query);
     if (method === "POST" && path === "/api/v1/fx/quotes/create") return createQuote(b);
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }

@@ -655,6 +655,34 @@ describe("simulated deposits", () => {
     expect(res.json.items[0]).not.toHaveProperty("reference");
   });
 
+  // Sandbox 2026-10-30: GET /deposits?page_size=10 alone is this exact 400. Both or neither is allowed.
+  it("GET /deposits wants page_num and page_size together, and pages when it gets both", async () => {
+    for (const n of [1, 2, 3]) await call(DEPOSIT, { body: { amount: n, currency: "USD" } });
+    for (const qs of ["page_size=10", "page_num=0"]) {
+      const res = await call(`${DEPOSITS}?${qs}`);
+      expect(res.status).toBe(400);
+      expect(res.json).toEqual({
+        code: "invalid_argument",
+        message: "both page_num and page_size need to be filled",
+        source: "",
+      });
+    }
+    const first = await call(`${DEPOSITS}?page_num=0&page_size=2`);
+    expect(first.json.items.map((d: Json) => d.amount)).toEqual([3, 2]);
+    expect(first.json.has_more).toBe(true); // {has_more, items} is ASSUMED for deposits
+    const second = await call(`${DEPOSITS}?page_num=1&page_size=2`);
+    expect(second.json.items.map((d: Json) => d.amount)).toEqual([1]);
+    expect(second.json.has_more).toBe(false);
+    expect((await call(DEPOSITS)).json.items).toHaveLength(3); // neither param: everything (ASSUMED)
+    for (const qs of [
+      "page_num=-1&page_size=10",
+      "page_num=0&page_size=0",
+      "page_num=x&page_size=10",
+    ]) {
+      expect((await call(`${DEPOSITS}?${qs}`)).status).toBe(400);
+    }
+  });
+
   it.each([0, 1e21, 10.001, -5, "10"])("refuses the deposit amount %j", async (amount) => {
     const res = await call(DEPOSIT, { body: { amount, currency: "USD" } });
     expect(res.status).toBe(400);
@@ -687,7 +715,7 @@ describe("FX quotes", () => {
     const res = await call(QUOTE, {
       body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: 10, validity: "MIN_1" },
     });
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(200); // the sandbox quote create is 200, not 201
     // Sandbox probe 2026-10-30: the same request returned buy_amount 8.91 at client_rate 1.122579.
     expect(res.json).toMatchObject({
       buy_amount: 8.91,
