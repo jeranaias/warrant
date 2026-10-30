@@ -1,9 +1,18 @@
+import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { QUERY_PRICE } from "@warrant/control";
+import {
+  PASS_HEADER,
+  PassChecker,
+  QUERY_PRICE,
+  encodePass,
+  issueGrant,
+  issuePass,
+  keyB64,
+} from "@warrant/control";
 import { CATALOG, sampleInventory } from "./catalog.js";
 import { OrderStore } from "./orders.js";
 import { recordFromSettlement, sha256Of } from "./sale.js";
@@ -119,6 +128,72 @@ describe("store app (mock mode)", () => {
       expect(list).toHaveLength(1);
       expect(list[0]).not.toHaveProperty("signedOffer");
       expect((await fetch(`${base}/orders/nope`)).status).toBe(404);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+describe("store app: warrant pass (ADR-012)", () => {
+  const owner = generateKeyPairSync("ed25519");
+  const agent = generateKeyPairSync("ed25519");
+  const grant = issueGrant(
+    {
+      grantId: "grt_customer",
+      warrantId: "wrt_customer",
+      warrantVersion: 1,
+      ownerId: "customer-owner",
+      payer: PAYER,
+      categories: ["data_purchase"],
+      perPaymentCap: { currency: "USDZ", cents: 10 },
+      sellers: [PAY_TO],
+      delegateKey: keyB64(agent.publicKey),
+      ownerKeyId: "owner-1",
+      ownerKey: keyB64(owner.publicKey),
+      notAfter: "2099-01-01T00:00:00Z",
+    },
+    owner.privateKey,
+  );
+  const passFor = (url: string, cents: number) =>
+    encodePass(
+      issuePass(
+        grant,
+        {
+          grantId: grant.grantId,
+          nonce: `n-${url}-${cents}`,
+          url,
+          payTo: PAY_TO,
+          amount: { currency: "USDZ", cents },
+          category: "data_purchase",
+          proposalHash: "a".repeat(64),
+          at: new Date().toISOString(),
+        },
+        agent.privateKey,
+      ),
+    );
+
+  it("serves a buyer whose pass checks out and refuses (403) one without, or for another price", async () => {
+    const app = createStoreApp({
+      payTo: PAY_TO,
+      inventory: sampleInventory(),
+      orders: new OrderStore(),
+      passes: new PassChecker({ payTo: PAY_TO, category: "data_purchase" }),
+    });
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => server.once("listening", () => ok()));
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}${item.path}`;
+      const none = await fetch(url);
+      expect(none.status).toBe(403);
+      expect(((await none.json()) as { problems: string[] }).problems[0]).toMatch(
+        /no warrant pass/,
+      );
+      const cheap = await fetch(url, { headers: { [PASS_HEADER]: passFor(url, 1) } });
+      expect(cheap.status).toBe(403);
+      const good = passFor(url, QUERY_PRICE.cents);
+      expect((await fetch(url, { headers: { [PASS_HEADER]: good } })).status).toBe(200);
+      // The same pass twice is a replay.
+      expect((await fetch(url, { headers: { [PASS_HEADER]: good } })).status).toBe(403);
     } finally {
       server.close();
     }

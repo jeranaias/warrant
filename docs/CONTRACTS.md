@@ -24,6 +24,8 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 | `SignedOrderRecord`    | orders.ts   | One sale: signed offer, tx hash, payer, price, sha256 of what we delivered. Written once (ADR-010).                        |
 | `DisputeCase`          | orders.ts   | A customer's dispute over orders. Ticket text stays behind `ticketRef`.                                                    |
 | `RefundDecision`       | orders.ts   | Per-order outcome with a reason code, decided in code from stored orders.                                                  |
+| `WarrantGrant`         | pass.ts     | Owner-signed public part of a warrant a seller may see: payer, categories, cap, delegated key. No budgets (ADR-012).       |
+| `WarrantPass`          | pass.ts     | Grant + one purchase signed by the delegated key, sent as `x-warrant-pass` on the paid request (ADR-012).                  |
 | `LedgerEntry`          | ledger.ts   | Append-only, hash-chained. reserve / confirm / release / unconfirmed / inbound / kill_switch.                              |
 
 ## Decided (2026-10-23)
@@ -41,3 +43,8 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
   the refund address.
 - Warrants on `metal_x402` carry a `MandateRef`; control refuses a warrant whose limits exceed its
   mandate (ADR-009).
+
+## Decided (2026-10-30)
+
+- Warrant pass (ADR-012): `WarrantGrant` and `WarrantPass` are signed with ed25519 over JCS like
+  the warrant. `SignedOrderRecord.buyerPass` keeps the pass the buyer sent, as received.

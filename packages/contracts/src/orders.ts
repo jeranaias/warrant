@@ -30,6 +30,11 @@ export const SignedOrderRecord = z
     deliveredSha256: Sha256Hex,
     /** Upstream batch the delivered data came from, so a bad batch can be traced. */
     upstreamBatchId: Id.optional(),
+    /**
+     * The buyer's warrant pass (`x-warrant-pass`, base64url) as received, checked before we
+     * served (ADR-012). Dispute evidence: shows whose owner authorized the purchase.
+     */
+    buyerPass: z.string().min(1).max(20_000).optional(),
     at: Timestamp,
   })
   .strict();

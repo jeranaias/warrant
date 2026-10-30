@@ -4,13 +4,15 @@ import type { RoutesConfig, x402ResourceServer } from "@x402/core/server";
 import type { Network } from "@x402/core/types";
 import { paymentMiddleware } from "@x402/express";
 import { SIGNED_OFFER_REQUIRED, signedOfferOf } from "@metalntwx/metal-pay/mandates";
-import { QUERY_PRICE } from "@warrant/control";
+import { PASS_HEADER, QUERY_PRICE } from "@warrant/control";
 import { CATALOG } from "./catalog.js";
 import type { CatalogItem, Inventory } from "./catalog.js";
 import type { OrderStore } from "./orders.js";
 import { recordFromSettlement, responseBodyOf } from "./sale.js";
 
 export const METAL_TESTNET: Network = "eip155:63825";
+/** SignedOrderRecord.buyerPass's limit; a longer header is not kept (and never passes a check). */
+const MAX_PASS_CHARS = 20_000;
 
 export interface StoreOptions {
   /** Our Metal address (payTo). */
@@ -23,6 +25,26 @@ export interface StoreOptions {
    */
   x402?: x402ResourceServer;
   onError?: (msg: string) => void;
+  /**
+   * Warrant pass checks (ADR-012), usually a `PassChecker` from @warrant/control. When given, an
+   * item is served only to a buyer whose `x-warrant-pass` passes; a refusal answers 403, which
+   * cancels the x402 payment. Omit to serve without checking.
+   */
+  passes?: StorePassChecks;
+  /** Our public origin as buyers see it (e.g. a tunnel); passes name this URL. Default: the Host. */
+  publicOrigin?: string;
+}
+
+export interface StorePassChecks {
+  /** Before serving: the buyer's header, the URL it paid for and our price. */
+  check(header: string | undefined, url: string, priceCents: number): PassVerdict;
+  /** After settlement, with the account that paid. Returns a problem to record, if any. */
+  settled(header: string | undefined, payer: string): string | undefined;
+}
+
+export interface PassVerdict {
+  ok: boolean;
+  problems: string[];
 }
 
 /** x402 route table: one route per item, each requiring the buyer's signed order. */
@@ -64,7 +86,12 @@ export function createStoreApp(opts: StoreOptions): Express {
           payTo: opts.payTo,
           ...batchOf(body),
         });
-        if (record) opts.orders.add(record);
+        if (!record) return;
+        const buyerPass = passHeaderOf(ctx.transportContext);
+        const problem = opts.passes?.settled(buyerPass, record.payer);
+        if (problem) opts.onError?.(`order from ${record.payer}: ${problem}`);
+        const keep = buyerPass !== undefined && buyerPass.length <= MAX_PASS_CHARS;
+        opts.orders.add(keep ? { ...record, buyerPass } : record);
       } catch (e) {
         // Never throw out of the hook: the buyer has paid. Surface it for the operator instead.
         opts.onError?.(`could not store order: ${(e as Error).message}`);
@@ -74,7 +101,19 @@ export function createStoreApp(opts: StoreOptions): Express {
   }
 
   for (const it of CATALOG) {
-    app.get(it.path, (_req, res) => {
+    app.get(it.path, (req, res) => {
+      if (opts.passes) {
+        const origin = opts.publicOrigin ?? `${req.protocol}://${req.get("host") ?? ""}`;
+        const r = opts.passes.check(
+          req.get(PASS_HEADER),
+          `${origin}${req.path}`,
+          QUERY_PRICE.cents,
+        );
+        // 403 cancels the payment: a buyer whose owner did not authorize this is never charged.
+        if (!r.ok) {
+          return void res.status(403).json({ error: "warrant pass refused", problems: r.problems });
+        }
+      }
       const batch = opts.inventory.current(it.id);
       // 503 cancels the payment (handler >= 400), so the buyer is never charged for nothing.
       if (!batch) return void res.status(503).json({ error: "no data yet" });
@@ -104,6 +143,16 @@ export function createStoreApp(opts: StoreOptions): Express {
   });
   app.get("/healthz", (_req, res) => res.json({ ok: true, paid: Boolean(opts.x402) }));
   return app;
+}
+
+/** The buyer's pass from x402's transport context (the paid request's headers). */
+function passHeaderOf(transportContext: unknown): string | undefined {
+  const adapter = (transportContext as { request?: { adapter?: { getHeader?: unknown } } } | null)
+    ?.request?.adapter;
+  const get = adapter?.getHeader;
+  if (!adapter || typeof get !== "function") return undefined;
+  const v: unknown = (get as (name: string) => unknown).call(adapter, PASS_HEADER);
+  return typeof v === "string" && v ? v : undefined;
 }
 
 /** 5 -> "0.05": x402's price is a dollar amount. Integer math only. */
