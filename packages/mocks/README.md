@@ -29,17 +29,19 @@ Rules:
   which matches six real sandbox quotes and conversions (floor and ceil each get some wrong); the tie
   direction is an assumption. Two-decimal currencies only.
 - `GET /fx/conversions?request_id=` is how a caller checks a conversion after a timeout (never resend the
-  `request_id`: the real API rejects it). But on 2026-10-30 the real list did not show a conversion created
-  about half an hour earlier, though an older one was found by `request_id`. It lags. An empty answer means
-  "not known yet", not "not done": check the wallet balance and look again later. The mock lists at once.
+  `request_id`: the real API rejects it). Probed on 2026-10-30 with the key that made the conversion: it was
+  found on the first request, about 1h45m after it was created. Right after creation is not probed for
+  conversions (the real transfers list does show a new transfer in the same second), and the mock lists at
+  once. An earlier note that this list lags was wrong: that probe went through the MCP, which is a different
+  sandbox account and never had the conversion.
 - The real conversion errors carry a `details` array with a `correlation_id`; the mock adds one.
 - Anything the real sandbox was not asked is marked `ASSUMED` in `src/airwallex/index.ts`.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
 - After a timed-out `POST /issuing/cards/create`, never resend: a reused card `request_id` is a 400, even
   with the same body. Find the card with `GET /issuing/cards?cardholder_id=`, then `GET /issuing/cards/{id}`
   for each candidate and compare its `request_id` (the list has none). Confirmed against the real sandbox
-  on 2026-10-30: a card created seconds earlier was in the list at once, so this works for cards, unlike
-  the transactions and conversions lists, which lag.
+  on 2026-10-30 (through the MCP, create and list in the same account): a card created seconds earlier was
+  in the list at once, so this works for cards.
 - No real keys. Auth is strict: the Airwallex mock only accepts a bearer token it issued from
   `POST /api/v1/authentication/login` (which needs `x-client-id` and `x-api-key`, any values).
   Legacy shape, no `x-api-version`: the mock ignores that header.

@@ -565,10 +565,11 @@ export async function startAirwallexMock({
     return { status: 201, body: conversion };
   }
 
-  // GET /fx/conversions. Probed 2026-10-30: {has_more, items}, newest first, and request_id is a working
-  // filter (it found an older conversion). But the real list did NOT show a conversion created about half
-  // an hour earlier, filtered or not, so it lags. The mock lists every conversion at once, which is kinder
-  // than the real thing: after a timeout, an empty real answer means "not known yet", never "not done".
+  // GET /fx/conversions. Probed 2026-10-30 with our own REST key: {has_more, items}, and request_id is a
+  // working filter: asked about a conversion that same key had made about 1h45m earlier, the list returned
+  // it on the first request. An earlier note said the list lags; that came from asking the MCP, a different
+  // sandbox account, so it proved nothing. NOT probed: how soon after creation a conversion shows up (the
+  // real transfers list showed a new transfer in the same second). The mock lists every conversion at once.
   // ASSUMED: the filters other than request_id, page_size 10 to 1000 with the BELOW_MIN_PAGE_SIZE body of the
   // transactions list, and no from_created_at / to_created_at support.
   function listConversions(q: URLSearchParams): Out {
@@ -642,9 +643,9 @@ export async function startAirwallexMock({
   // request_id and no authorization_controls, so a caller unsure whether a create landed must retrieve each
   // candidate by id and compare its request_id (the list has no request_id filter). cardholder_id and
   // card_status are documented filters.
-  // CONFIRMED 2026-10-30: a card created seconds earlier was in the real list at once, unlike the transactions
-  // and conversions lists, which lag. So an empty answer here does mean "no such card yet" for a create that
-  // finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
+  // CONFIRMED 2026-10-30 (through the MCP: create and list in the same account): a card created seconds
+  // earlier was in the real list at once. So an empty answer here does mean "no such card yet" for a create
+  // that finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
   // returns the same values.
   // ASSUMED: page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the other lists, and no nick_name or
   // date filters.

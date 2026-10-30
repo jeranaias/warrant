@@ -1260,8 +1260,8 @@ describe("conversions list (GET /fx/conversions)", () => {
   });
 
   // After a timeout the caller must not resend: the conversion may exist. It looks the request up by
-  // request_id instead, and a resend would be refused anyway. The real list lagged on 2026-10-30 (see the
-  // README), so in production an empty answer is "not known yet", never "not done".
+  // request_id instead, and a resend would be refused anyway (the real API answers a reused request_id with
+  // a 400).
   it("after a timed-out create, the caller finds the conversion by request_id and does not resend", async () => {
     await restart(SEEDED);
     mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: CONVERT });
