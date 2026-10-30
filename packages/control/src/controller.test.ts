@@ -154,22 +154,24 @@ describe("submit path", () => {
     expect(controller.ledger.all()).toHaveLength(0);
   });
 
-  it("first payment waits for the owner, then pays on approval; the next one pays at once", async () => {
+  it("a payee on the signed warrant is paid at once, first time included (ADR-013)", async () => {
     const { controller, rail } = setup();
     const first = await controller.submit(proposal());
-    expect(first.decision?.outcome).toBe("needs_owner_approval");
-    expect(first.approval?.reasons).toEqual(["first payment to this payee"]);
-    expect(rail.calls).toHaveLength(0);
-
-    const ok = await approve(controller, first.decision?.proposalId ?? "");
-    expect(ok).toMatchObject({ ok: true, execution: { status: "succeeded", railRef: "0xtx" } });
+    expect(first.decision?.outcome).toBe("execute");
+    expect(first.execution).toMatchObject({ status: "succeeded", railRef: "0xtx" });
     expect(rail.calls[0]).toMatchObject({ routingRef: UPSTREAM, credentialRef: "sourcing.json" });
     expect(controller.ledger.spentCents("wrt_sourcing")).toBe(2);
+    expect(controller.approvals.list()).toHaveLength(0);
+  });
 
-    const second = await controller.submit(proposal());
-    expect(second.decision?.outcome).toBe("execute");
-    expect(second.execution?.status).toBe("succeeded");
-    expect(controller.ledger.spentCents("wrt_sourcing")).toBe(4);
+  it("an owner approval pays; nothing moves before it", async () => {
+    const { controller, rail } = setup();
+    const r = await controller.submit(proposal({ recurrence: "recurring" }));
+    expect(r.decision?.outcome).toBe("needs_owner_approval");
+    expect(rail.calls).toHaveLength(0);
+    const ok = await approve(controller, r.decision?.proposalId ?? "");
+    expect(ok).toMatchObject({ ok: true, execution: { status: "succeeded" } });
+    expect(rail.calls).toHaveLength(1);
   });
 
   it("the purpose checker never sees the agent's justification or any free text", async () => {
@@ -213,7 +215,7 @@ describe("submit path", () => {
 describe("owner approval binds to what was shown (ADR-007)", () => {
   it("a different hash is refused and nothing moves", async () => {
     const { controller, rail } = setup();
-    const r = await controller.submit(proposal());
+    const r = await controller.submit(proposal({ recurrence: "recurring" }));
     const id = r.decision?.proposalId ?? "";
     expect(await approve(controller, id, "approved", "0".repeat(64))).toMatchObject({
       ok: false,
@@ -225,7 +227,7 @@ describe("owner approval binds to what was shown (ADR-007)", () => {
 
   it("a new warrant version voids the approval: ask again", async () => {
     const { controller, rail, resign } = setup();
-    const r = await controller.submit(proposal());
+    const r = await controller.submit(proposal({ recurrence: "recurring" }));
     resign({ version: 2 });
     expect(await approve(controller, r.decision?.proposalId ?? "")).toMatchObject({
       ok: false,
@@ -236,7 +238,7 @@ describe("owner approval binds to what was shown (ADR-007)", () => {
 
   it("denied: nothing moves", async () => {
     const { controller, rail } = setup();
-    const r = await controller.submit(proposal());
+    const r = await controller.submit(proposal({ recurrence: "recurring" }));
     expect(await approve(controller, r.decision?.proposalId ?? "", "denied")).toMatchObject({
       ok: true,
       blockedBy: "owner",
@@ -246,7 +248,7 @@ describe("owner approval binds to what was shown (ADR-007)", () => {
 
   it("the rules run again at approval time (kill switch pressed while it waited)", async () => {
     const { controller, rail, kill } = setup();
-    const r = await controller.submit(proposal());
+    const r = await controller.submit(proposal({ recurrence: "recurring" }));
     kill();
     expect(await approve(controller, r.decision?.proposalId ?? "")).toMatchObject({
       ok: false,
@@ -300,7 +302,7 @@ describe("ledger around the rail", () => {
 describe("kill switch", () => {
   it("refuses new payments, drops pending approvals, and runs the outside steps", async () => {
     const { controller, rail } = setup();
-    const waiting = await controller.submit(proposal());
+    const waiting = await controller.submit(proposal({ recurrence: "recurring" }));
     const id = waiting.decision?.proposalId ?? "";
     expect(controller.approvals.get(id)).toBeDefined();
 

@@ -8,7 +8,7 @@ import { AGENTS, OWNER_ID } from "./world.js";
 /**
  * Kit 11 beat: the upstream price rises from 2 cents to 4, over sourcing's 3-cent cap.
  * Played on the mock chain, so the same story the testnet run tells (docs/TESTNET.md):
- *   1. purchases at 2 cents go through (the first one after the owner says yes)
+ *   1. purchases at 2 cents go through (the payee is on the signed warrant: no owner tap)
  *   2. the price rises; the 4-cent purchase is refused by our rules, before any chain call
  *   3. an agent that claims the old price is refused by the rail: the seller now asks 4
  *   4. sent around Warrant ("limits only"), the chain's mandate refuses it: mandate_cap_exceeded

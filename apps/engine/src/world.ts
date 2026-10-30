@@ -189,7 +189,7 @@ export function makeWorld(now = new Date()): World {
   const warrants = new Map(
     bodies(now).map((b) => [b.warrantId, signWarrant(b, privateKey, "owner-demo")]),
   );
-  const orders = new Map(["ord_1", "ord_2"].map((id) => [id, order(id, now)]));
+  const orders = new Map(["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now)]));
 
   // One mandate per Metal agent, same limits as its warrant (ADR-009 #2).
   const chain = new MockMetalChain();

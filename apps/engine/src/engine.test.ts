@@ -93,22 +93,27 @@ describe("engine: tasks in, decisions out", () => {
     expect((await fetch(`${base}/tasks?role=bogus`)).status).toBe(400);
   });
 
-  it("first purchase waits for the owner; approved, it pays; the next pays at once", async () => {
+  it("purchases from the payee on the warrant pay at once, the first one included", async () => {
     await post("/scenario", { name: "normal" });
     const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=sourcing");
-    const first = await post<Result>("/proposals", proposalFor(tasks[0] as AgentTask));
-    expect(first.body.decision?.outcome).toBe("needs_owner_approval");
+    for (const t of tasks.slice(0, 2)) {
+      const r = await post<Result>("/proposals", proposalFor(t));
+      expect(r.body.decision?.outcome).toBe("execute");
+      expect(r.body.execution?.status).toBe("succeeded");
+    }
+    expect((await get<{ pending: unknown[] }>("/approvals")).pending).toHaveLength(0);
+  });
 
-    const pending = await get<{ pending: { proposalId: string }[] }>("/approvals");
-    expect(pending.pending).toHaveLength(1);
-    const ok = await post<Result>(`/approvals/${first.body.decision?.proposalId}`, {
+  it("a recurring payment waits for the owner; approved, it pays", async () => {
+    await post("/scenario", { name: "normal" });
+    const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=treasury");
+    const p = { ...proposalFor(tasks[0] as AgentTask), recurrence: "recurring" as const };
+    const r = await post<Result>("/proposals", p);
+    expect(r.body.decision?.outcome).toBe("needs_owner_approval");
+    const ok = await post<Result>(`/approvals/${r.body.decision?.proposalId}`, {
       decision: "approved",
     });
     expect(ok.body.execution?.status).toBe("succeeded");
-
-    const second = await post<Result>("/proposals", proposalFor(tasks[1] as AgentTask));
-    expect(second.body.decision?.outcome).toBe("execute");
-    expect(second.body.execution?.status).toBe("succeeded");
   });
 
   it("price rise, payee swap and a fake vendor are refused by the rules", async () => {
@@ -125,16 +130,23 @@ describe("engine: tasks in, decisions out", () => {
     }
   });
 
-  it("a refund for an order that doesn't exist is refused; a real one goes to the owner", async () => {
+  it("refunds of real orders pay at once, a third in a day asks the owner, a fake order is refused", async () => {
     await post("/scenario", { name: "all" });
     const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=support");
     const real = tasks.find((t) => t.kind === "dispute" && t.orderIds[0] === "ord_1") as AgentTask;
-    expect((await post<Result>("/proposals", proposalFor(real))).body.decision?.outcome).toBe(
-      "needs_owner_approval",
+    const refund = (orderId: string) => ({ ...proposalFor(real), refundOfOrderId: orderId });
+    for (const id of ["ord_1", "ord_2"]) {
+      const r = await post<Result>("/proposals", refund(id));
+      expect(r.body.execution?.status, id).toBe("succeeded");
+    }
+    const third = await post<Result & { approval?: { reasons: string[] } }>(
+      "/proposals",
+      refund("ord_3"),
     );
-    const fake = proposalFor(real);
-    fake.refundOfOrderId = "ord_404";
-    expect((await post<Result>("/proposals", fake)).body.blockedBy).toBe("rules");
+    expect(third.body.decision?.outcome).toBe("needs_owner_approval");
+    expect(third.body.approval?.reasons).toEqual(["refund number 3 to this customer in 24 hours"]);
+    expect((await post<Result>("/proposals", refund("ord_404"))).body.blockedBy).toBe("rules");
+    expect((await post<Result>("/proposals", refund("ord_1"))).body.blockedBy).toBe("rules");
   });
 
   it("malformed proposals get 400; every step shows up in /events", async () => {
@@ -149,7 +161,11 @@ describe("engine: tasks in, decisions out", () => {
   it("the kill switch stops everything at once: approvals dropped, mandates revoked, payments refused", async () => {
     await post("/scenario", { name: "normal" });
     const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=treasury");
-    const waiting = await post<Result>("/proposals", proposalFor(tasks[0] as AgentTask));
+    const waiting = await post<Result>("/proposals", {
+      ...proposalFor(tasks[0] as AgentTask),
+      recurrence: "recurring",
+      amount: { currency: "EUR", cents: 4000 }, // not a duplicate of the earlier licence payment
+    });
     expect(waiting.body.decision?.outcome).toBe("needs_owner_approval");
 
     const kill = await post<{
