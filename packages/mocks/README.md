@@ -29,6 +29,11 @@ Rules:
 - The real conversion errors carry a `details` array with a `correlation_id`; the mock adds one.
 - Anything the real sandbox was not asked is marked `ASSUMED` in `src/airwallex/index.ts`.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
+- After a timed-out `POST /issuing/cards/create`, never resend: a reused card `request_id` is a 400, even
+  with the same body. Find the card with `GET /issuing/cards?cardholder_id=`, then `GET /issuing/cards/{id}`
+  for each candidate and compare its `request_id` (the list has none). Confirmed against the real sandbox
+  on 2026-10-30: a card created seconds earlier was in the list at once, so this works for cards, unlike
+  the transactions and conversions lists, which lag.
 - No real keys. Auth is strict: the Airwallex mock only accepts a bearer token it issued from
   `POST /api/v1/authentication/login` (which needs `x-client-id` and `x-api-key`, any values).
   Legacy shape, no `x-api-version`: the mock ignores that header.

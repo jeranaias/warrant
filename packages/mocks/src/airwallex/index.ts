@@ -612,12 +612,16 @@ export async function startAirwallexMock({
   }
 
   // GET /issuing/cards: the summary list. Shape probed 2026-10-30: {has_more, items}, each item brand, card_id,
-  // masked card_number, card_status, cardholder_id, created_at, updated_at, oldest first. No request_id and no
-  // authorization_controls, so a caller unsure whether a create landed must retrieve each candidate by id and
-  // compare its request_id (the list has no request_id filter). cardholder_id and card_status are documented
-  // filters. ASSUMED: a new card shows at once (the real transactions and conversions lists lagged, so this one
-  // may too: probe it before relying on it), page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the
-  // other lists, and no nick_name or date filters.
+  // masked card_number, card_status, cardholder_id, created_at, updated_at, oldest first (two cards). No
+  // request_id and no authorization_controls, so a caller unsure whether a create landed must retrieve each
+  // candidate by id and compare its request_id (the list has no request_id filter). cardholder_id and
+  // card_status are documented filters.
+  // CONFIRMED 2026-10-30: a card created seconds earlier was in the real list at once, unlike the transactions
+  // and conversions lists, which lag. So an empty answer here does mean "no such card yet" for a create that
+  // finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
+  // returns the same values.
+  // ASSUMED: page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the other lists, and no nick_name or
+  // date filters.
   function listCards(q: URLSearchParams): Out {
     const num = (k: string, dflt: number) =>
       q.has(k) ? (/^\d+$/.test(q.get(k) ?? "") ? Number(q.get(k)) : null) : dflt;
