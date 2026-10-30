@@ -7,13 +7,13 @@ Every payment crosses lanes in this order:
 A agent proposes -> C rules check -> A purpose check -> C ledger reserves -> C Metal x402 | B Airwallex card / FX -> D dashboard shows it
 ```
 
-| Lane | Name                    | Owner                | Packages                                                                    | Load                   |
-| ---- | ----------------------- | -------------------- | --------------------------------------------------------------------------- | ---------------------- |
-| A    | Agents & attacks        | Elisei (@truelumpen) | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
-| B    | Airwallex rails         | Max (@GoudyMT)       | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
-| C    | Core: Metal + ledger    | @jeranaias (lead)    | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
-| D    | Dashboard, demo & pitch | Eva                  | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
-| R    | Reviewer                | @jeranaias           | approves every PR before merge                                              | all lanes              |
+| Lane | Name                    | Owner                       | Packages                                                                    | Load                   |
+| ---- | ----------------------- | --------------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| A    | Agents & attacks        | Elisei (@truelumpen)        | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
+| B    | Airwallex rails         | Max (@GoudyMT)              | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
+| C    | Core: Metal + ledger    | @jeranaias (lead)           | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
+| D    | Dashboard, demo & pitch | Eva (@evacatalina123-cyber) | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
+| R    | Reviewer                | @jeranaias                  | approves every PR before merge                                              | all lanes              |
 
 Labels on the board: `lane:A`, `lane:B`, `lane:C`, `lane:D`.
 
@@ -57,6 +57,7 @@ or builds; audits benchmark scoring and joins two rehearsals before Nov 10.
 | Price 2c -> 4c, sourcing refused                  | A    | C    |
 | Treasury proposes limits; owner replaces mandates | C    | D    |
 | Disputed batch + refund decision                  | C    | A, B |
+| Seller proves who authorized it (warrant pass)    | C    | A, D |
 | Earnings to Airwallex, then EUR licence fee       | B    | C    |
 | Kit 2 card: pass, decline, freeze                 | B    | D    |
 
@@ -68,7 +69,7 @@ or builds; audits benchmark scoring and joins two rehearsals before Nov 10.
 | Nov 3 - Nov 7  | 2. Both rails       | Earnings -> Airwallex deposit -> EUR licence fee; dispute + refund; Kit 2 card; ledger across rails; purpose check |
 | Nov 8 - Nov 10 | 3. Decision + bench | Treasury proposal -> mandate replace; dashboard; kill switch; 150+ attacks                                         |
 | Nov 11         | 4. Freeze           | Bug fixes only; rehearse; record backup footage                                                                    |
-| Nov 12         | 5. Ship             | Video under 5 minutes; submit a day early (deadline Nov 13 ~10:29 AM PT)                                           |
+| Nov 12         | 5. Ship             | Video under 5 minutes; submit early (deadline now Nov 15, 11:59 PM PST; ADR-012)                                   |
 
 ## Day-1 agreements (all lanes)
 
