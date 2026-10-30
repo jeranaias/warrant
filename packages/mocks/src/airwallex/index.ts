@@ -977,6 +977,26 @@ export async function startAirwallexMock({
     return { status: 201, body: transfer };
   }
 
+  // GET /transfers. Probed 2026-10-30: the filter by request_id found a transfer created in the same
+  // second (so this is the after-timeout lookup, and it is immediate), and the envelope is {items} only,
+  // with no has_more. ASSUMED: newest first, the other filters (the documented ones: status, beneficiary_id,
+  // transfer_currency, short_reference_id), and that the cursor paging (page, page_size) is not needed:
+  // every match is returned.
+  function listTransfers(q: URLSearchParams): Out {
+    const filters = [
+      "request_id",
+      "status",
+      "beneficiary_id",
+      "transfer_currency",
+      "short_reference_id",
+    ];
+    const items = [...state.transfers.values()]
+      .reverse()
+      .map(advance)
+      .filter((tr) => filters.every((k) => !q.has(k) || tr[k] === q.get(k)));
+    return { status: 200, body: { items } };
+  }
+
   function route(
     method: string,
     path: string,
@@ -1080,6 +1100,7 @@ export async function startAirwallexMock({
       return found ? { status: 200, body: found } : { status: 200, body: undefined };
     }
     if (method === "POST" && path === "/api/v1/transfers/create") return createTransfer(b);
+    if (method === "GET" && path === "/api/v1/transfers") return listTransfers(query);
     const transfer = /^\/api\/v1\/transfers\/([^/]+)$/.exec(path);
     if (method === "GET" && transfer) {
       const found = state.transfers.get(transfer[1] ?? "");

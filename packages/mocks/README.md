@@ -7,8 +7,8 @@ Local fake Airwallex and Metal servers so nobody waits on sandbox access.
   `GET /balances/current`, simulated deposits (`POST /simulation/deposit/create`, `GET /deposits`), FX
   quotes (`POST /fx/quotes/create`) and conversions (`POST /fx/conversions/create`,
   `GET /fx/conversions/{id}`) and EUR SEPA beneficiaries (`POST /beneficiaries/create`,
-  `GET /beneficiaries/{id}`) and same-currency LOCAL transfers (`POST /transfers/create`, `GET /transfers/{id}`).
-  Still to do: the transfers list and simulated status transitions.
+  `GET /beneficiaries/{id}`) and same-currency LOCAL transfers (`POST /transfers/create`, `GET /transfers/{id}`,
+  `GET /transfers`). Still to do: simulated transfer status transitions.
 - `src/metal/`: an x402 seller that answers 402 with payment requirements, settles, and reports
   status by idempotency key.
 
@@ -54,7 +54,9 @@ Rules:
   `request_id` is `400 duplicate_request_id` with `details: {id, request_id}`, so the refusal itself tells the
   caller the existing transfer id. More than the wallet holds is `400 balance_insufficient` (source
   `transfer`), nothing booked. LOCAL transfers are free. The mock refuses SWIFT and any transfer that would
-  need a conversion (convert first, then pay).
+  need a conversion (convert first, then pay). `GET /transfers?request_id=` found a new transfer in the same
+  second and answers `{items}` with no `has_more`: that is the after-timeout lookup (look it up, never resend;
+  the refusal of a resend carries the existing transfer's id too).
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
 - After a timed-out `POST /issuing/cards/create`, never resend: a reused card `request_id` is a 400, even
   with the same body. Find the card with `GET /issuing/cards?cardholder_id=`, then `GET /issuing/cards/{id}`

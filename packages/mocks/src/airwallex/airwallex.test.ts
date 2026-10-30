@@ -1756,3 +1756,64 @@ describe("transfers refusals", () => {
     expect(mock.state.transfers.size).toBe(0);
   });
 });
+
+describe("transfers list (GET /transfers)", () => {
+  // Probed 2026-10-30: the new transfer was listed at once, and the envelope is {items} with no has_more.
+  it("finds a transfer by request_id straight after creating it, as {items}", async () => {
+    const bid = await setup();
+    const a = await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "list-a" }) });
+    await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "list-b" }) });
+    const res = await call(`${TRANSFERS}?request_id=list-a`);
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.json)).toEqual(["items"]);
+    expect(res.json.items).toHaveLength(1);
+    expect(res.json.items[0]).toMatchObject({ id: a.json.id, request_id: "list-a" });
+    expect((await call(`${TRANSFERS}?request_id=never-sent`)).json).toEqual({ items: [] });
+  });
+
+  it("lists newest first and filters by status, beneficiary, currency and short reference", async () => {
+    const bid = await setup();
+    const other = (await call(`${BENS}/create`, { body: benBody() })).json.id as string;
+    const first = await call(TRANSFER_CREATE, { body: trBody(bid) });
+    const second = await call(TRANSFER_CREATE, { body: trBody(other) });
+    const ids = async (qs: string) =>
+      (await call(`${TRANSFERS}?${qs}`)).json.items.map((t: Json) => t.id);
+    expect(await ids("")).toEqual([second.json.id, first.json.id]); // newest first: ASSUMED
+    expect(await ids(`beneficiary_id=${other}`)).toEqual([second.json.id]);
+    expect(await ids("transfer_currency=EUR")).toHaveLength(2);
+    expect(await ids("transfer_currency=USD")).toEqual([]);
+    expect(await ids("status=SCHEDULED")).toHaveLength(2);
+    expect(await ids("status=PAID")).toEqual([]);
+    expect(await ids(`short_reference_id=${first.json.short_reference_id}`)).toEqual([
+      first.json.id,
+    ]);
+  });
+
+  // The real answer to a timeout: the caller does not know the transfer id, so it looks the request up,
+  // and a blind resend is refused with the existing id in the refusal.
+  it("after a timed-out create the caller finds the transfer by request_id and never resends", async () => {
+    const bid = await setup();
+    const body = trBody(bid, { request_id: "timeout-1" });
+    mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: TRANSFER_CREATE });
+    await expect(
+      call(TRANSFER_CREATE, { body, signal: AbortSignal.timeout(50) }),
+    ).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    const found = await call(`${TRANSFERS}?request_id=timeout-1`);
+    expect(found.json.items).toHaveLength(1);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+
+    const resend = await call(TRANSFER_CREATE, { body });
+    expect(resend.status).toBe(400);
+    expect(resend.json.code).toBe("duplicate_request_id");
+    expect(resend.json.details.id).toBe(found.json.items[0].id);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+  });
+
+  it("needs a token", async () => {
+    await setup();
+    expect((await call(TRANSFERS, { token: null })).status).toBe(401);
+    expect((await call(TRANSFERS)).status).toBe(200);
+  });
+});
