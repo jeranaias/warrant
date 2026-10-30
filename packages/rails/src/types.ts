@@ -22,6 +22,11 @@ export interface RailInstruction {
    * control from the warrant's mandate. Never a path, never from agent input.
    */
   credentialRef?: string;
+  /**
+   * metal_x402 purchases only: headers sent with the paid request (the buyer's warrant pass,
+   * ADR-012). Built by control, never from agent input.
+   */
+  headers?: Record<string, string>;
 }
 
 export type RailStatus = "succeeded" | "failed" | "pending" | "unknown";

@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { HTTPFacilitatorClient, x402ResourceServer } from "@x402/core/server";
 import { METAL_NETWORKS, registerMetalScheme } from "@metalntwx/metal-pay";
 import { requireSignedOffer } from "@metalntwx/metal-pay/mandates";
+import { PassChecker } from "@warrant/control";
 import { sampleInventory } from "./catalog.js";
 import { OrderStore } from "./orders.js";
 import { createStoreApp } from "./server.js";
@@ -10,6 +11,12 @@ import { createStoreApp } from "./server.js";
 /**
  * Starts our store. RAILS_MODE=mock serves unpaid (for UI work). RAILS_MODE=sandbox charges real
  * testnet USDZ through Metal's facilitator and requires the buyer's signed order.
+ *
+ * Warrant pass (ADR-012): STORE_REQUIRE_PASS=1 serves only buyers whose `x-warrant-pass` checks
+ * out; 0 serves without checking. Default: on in sandbox, off in mock. In mock mode nothing is
+ * paid or settled, so the check is the same signatures-and-fit check but no payer key is ever
+ * pinned (that needs a settlement). STORE_PUBLIC_ORIGIN is our URL as buyers see it, if not the
+ * Host header (e.g. behind a tunnel).
  */
 const mode = process.env["RAILS_MODE"] ?? "mock";
 const port = Number(process.env["STORE_PORT"] ?? 4021);
@@ -35,14 +42,25 @@ if (mode !== "mock") {
   );
 }
 
+const requirePass = (process.env["STORE_REQUIRE_PASS"] ?? (mode === "mock" ? "0" : "1")) === "1";
+const storeAddress = payTo || "0x0000000000000000000000000000000000000000";
+const publicOrigin = process.env["STORE_PUBLIC_ORIGIN"];
+
 const app = createStoreApp({
-  payTo: payTo || "0x0000000000000000000000000000000000000000",
+  payTo: storeAddress,
   inventory,
   orders,
   ...(x402 ? { x402 } : {}),
+  ...(requirePass
+    ? { passes: new PassChecker({ payTo: storeAddress, category: "data_purchase" }) }
+    : {}),
+  ...(publicOrigin ? { publicOrigin } : {}),
   onError: (msg) => console.error(`[store] ${msg}`),
 });
 
 app.listen(port, "127.0.0.1", () => {
-  console.log(`[store] ${mode} mode on http://127.0.0.1:${port} (${orders.list().length} orders)`);
+  const pass = requirePass ? "passes required" : "passes not checked";
+  console.log(
+    `[store] ${mode} mode on http://127.0.0.1:${port}, ${pass} (${orders.list().length} orders)`,
+  );
 });

@@ -9,6 +9,8 @@
 - `ledger/`: append-only, hash-chained. Reserve, then confirm / release / unconfirmed.
 - `approvals/`: owner approval bound to a hash of exactly what was shown.
 - `killswitch/`: revoke all warrants, freeze cards, release open reservations.
+- `pass/`: warrant pass (ADR-012). Issues the pass control's purchases carry (`passIssuer`, the
+  Controller's `passFor` hook) and checks the passes our customers send (`PassChecker`).
 
 **May import:** `@warrant/contracts`, `@warrant/rails` (the interface), node built-ins, a model SDK
 for `purpose/` only.

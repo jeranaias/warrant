@@ -7,6 +7,7 @@
  *     -> approvals/   owner approval bound to shownHash when required
  *     -> ledger/      reserve -> rail.execute -> confirm | release | unconfirmed
  *   killswitch/       revoke all warrants, freeze cards, release open reservations
+ *   pass/             warrant pass: proof of the owner's authority on a paid request (ADR-012)
  */
 export * from "./business.js";
 export * from "./crypto.js";
@@ -14,3 +15,5 @@ export * from "./rules/index.js";
 export * from "./ledger/index.js";
 export * from "./approvals/index.js";
 export * from "./controller.js";
+export * from "./pass/index.js";
+export * from "./killswitch/index.js";
