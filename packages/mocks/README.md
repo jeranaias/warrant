@@ -12,9 +12,11 @@ Local fake Airwallex and Metal servers so nobody waits on sandbox access.
 Rules:
 
 - Shapes follow the real sandbox APIs. Check them with the Airwallex docs MCP (see RUNBOOK).
-- The real legacy `GET /issuing/transactions` returned nothing for pending or declined transactions on
-  2026-10-30. They may only show once settled. Don't rely on this list for pending state; use the
-  simulate response. The mock lists them anyway, and enforces the sandbox's `page_size` minimum of 10.
+- The legacy `GET /issuing/transactions` answers `{has_more, items}` and refuses a `page_size` below 10
+  (both confirmed against the real sandbox on 2026-10-30). Its item shape, and whether it shows pending and
+  declined transactions, are unverified: the probe that seemed to show an empty list used a key whose
+  account has no cards. The mock lists every simulated transaction. Use the simulate response for
+  pending state.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
 - After a timed-out `POST /issuing/cards/create`, never resend: a reused card `request_id` is a 400, even
   with the same body. Find the card with `GET /issuing/cards?cardholder_id=`, then `GET /issuing/cards/{id}`
