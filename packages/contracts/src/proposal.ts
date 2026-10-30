@@ -4,7 +4,7 @@ import { AgentRole, Currency, Id, Money, Rail, Timestamp } from "./common.js";
 export const SpendCategory = z.enum([
   "data_purchase",
   "customer_refund",
-  "contractor_invoice",
+  "licence_fee", // Kit 11: monthly licence fee invoiced in EUR
   "software_seat",
   "fx_conversion",
   "treasury_sweep",
@@ -34,6 +34,11 @@ export const PaymentProposal = z
     idempotencyKey: z.string().min(8).max(128),
     /** Pointer to the upstream offer/invoice/ticket in storage. Raw content is never inlined. */
     sourceRef: Id.optional(),
+    /**
+     * Refunds only: the stored signed order being refunded. Control routes the refund to that
+     * order's payer and caps it at that order's price; the agent never names the address.
+     */
+    refundOfOrderId: Id.optional(),
     /** FX only: the currency being bought. */
     targetCurrency: Currency.optional(),
     justification: z.string().max(2000),

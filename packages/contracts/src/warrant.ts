@@ -25,6 +25,24 @@ export const WarrantSignature = z
 export type WarrantSignature = z.infer<typeof WarrantSignature>;
 
 /**
+ * The Metal mandate a metal_x402 warrant sits on (ADR-009). The mandate enforces limits on chain;
+ * the warrant's limits must never exceed it. Ids only: never a key, a credential file or a path.
+ */
+export const MandateRef = z
+  .object({
+    network: z.enum(["eip155:63825"]),
+    /** Mandate id as printed by `metal-agent` (`mandate <id>`). */
+    mandateId: z.string().min(1).max(256),
+    /** The owner's smart account the mandate pays from. */
+    principal: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+    cap: Money,
+    budget: Money,
+    expiresAt: Timestamp,
+  })
+  .strict();
+export type MandateRef = z.infer<typeof MandateRef>;
+
+/**
  * The owner's signed grant of authority to ONE agent. All limits are inclusive:
  * a payment exactly equal to perPaymentCap is allowed; one cent over is not.
  */
@@ -43,6 +61,8 @@ export const WarrantBody = z
     totalBudget: Money,
     notBefore: Timestamp,
     expiresAt: Timestamp,
+    /** Required when allowedRails includes metal_x402 (checked in control). */
+    mandate: MandateRef.optional(),
   })
   .strict();
 export type WarrantBody = z.infer<typeof WarrantBody>;
