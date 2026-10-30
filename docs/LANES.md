@@ -7,13 +7,13 @@ Every payment crosses lanes in this order:
 A agent proposes -> C rules check -> A purpose check -> C ledger reserves -> C Metal x402 | B Airwallex card / FX -> D dashboard shows it
 ```
 
-| Lane | Name                    | Owner             | Packages                                                                    | Load                   |
-| ---- | ----------------------- | ----------------- | --------------------------------------------------------------------------- | ---------------------- |
-| A    | Agents & attacks        | TBD               | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
-| B    | Airwallex rails         | TBD               | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
-| C    | Core: Metal + ledger    | @jeranaias (lead) | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
-| D    | Dashboard, demo & pitch | TBD               | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
-| R    | Reviewer (advisor)      | Serge (offline)   | none: does not build or write code (organizer rule)                         | all lanes              |
+| Lane | Name                    | Owner                | Packages                                                                    | Load                   |
+| ---- | ----------------------- | -------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| A    | Agents & attacks        | Elisei (@truelumpen) | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
+| B    | Airwallex rails         | Max (@GoudyMT)       | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
+| C    | Core: Metal + ledger    | @jeranaias (lead)    | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
+| D    | Dashboard, demo & pitch | Eva                  | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
+| R    | Reviewer                | @jeranaias           | approves every PR before merge                                              | all lanes              |
 
 Labels on the board: `lane:A`, `lane:B`, `lane:C`, `lane:D`.
 
@@ -42,9 +42,10 @@ script; the video under 5 minutes; README setup steps; the live Demo Day version
 stranger follows the README and runs it; the demo runs end to end twice; backup footage recorded.
 Build on mock data from day 1.
 
-**R: Reviewer.** Advisor only, offline. May read and comment; never writes code, never pushes,
-never builds. Audits benchmark scoring (no inflated numbers). Joins two rehearsals before Nov 10.
-A teammate's approval is what counts for merging.
+**R: Reviewer.** Jesse approves every PR before merge (same-day turnaround). For PRs opened from
+his own account, his written "approved" plus an admin merge stands in for a GitHub approval.
+Serge is an offline advisor only (organizer rule): may read and comment, never writes code, pushes
+or builds; audits benchmark scoring and joins two rehearsals before Nov 10.
 
 ## Kit 11 beats and who carries them
 
