@@ -72,6 +72,23 @@ describe("classifyPay", () => {
     });
   });
 
+  it("a settled payment counts as paid even when the CLI crashes on exit (Windows, exit 127)", () => {
+    const o = classifyPay(
+      res({
+        code: 127,
+        stdout: PAID,
+        stderr:
+          "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\\win\\async.c, line 76",
+      }),
+    );
+    expect(o).toMatchObject({ kind: "paid", tx: TX });
+  });
+
+  it("a 200 without a real settlement hash is not paid", () => {
+    const noTx = PAID.replace(/^transaction .*$/m, "transaction pending");
+    expect(classifyPay(res({ code: 1, stdout: noTx })).kind).toBe("unknown");
+  });
+
   it("an on-chain mandate refusal is refused with its reason (the 4-cent purchase)", () => {
     const o = classifyPay(
       res({ code: 1, stderr: "error: payment refused: mandate_cap_exceeded; nothing was paid" }),
