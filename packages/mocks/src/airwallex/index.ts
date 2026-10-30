@@ -164,21 +164,18 @@ export async function startAirwallexMock({
   }
   const tokens = new Set<string>();
   const faults: { f: Fault; left: number }[] = [];
-  const requestIds = new Map<string, { raw: string; card: Json }>();
+  const requestIds = new Set<string>();
 
-  function createCard(b: Json, raw: string): Out {
-    const prior = requestIds.get(b.request_id);
-    // The replay compares the raw request body, so the same fields in a different key order count as
-    // a different body. Same id + same body replays the card: ASSUMED, the probe only changed the body.
-    if (prior) {
-      return prior.raw === raw
-        ? { status: 201, body: prior.card }
-        : err(
-            400,
-            "invalid_argument",
-            "The provided ID is already associated with a previous request",
-            "request_id",
-          );
+  function createCard(b: Json): Out {
+    // Airwallex never replays a card create: a reused request_id is 400 whatever the body (sandbox,
+    // 2026-10-30, with the same body and with a different one).
+    if (requestIds.has(b.request_id)) {
+      return err(
+        400,
+        "invalid_argument",
+        "The provided ID is already associated with a previous request",
+        "request_id",
+      );
     }
     const bad = (source: string) => err(400, "invalid_argument", `Invalid ${source}`, source);
     if (typeof b.request_id !== "string" || !b.request_id) return bad("request_id");
@@ -250,7 +247,7 @@ export async function startAirwallexMock({
       categories,
       spent: 0,
     });
-    requestIds.set(b.request_id, { raw, card });
+    requestIds.add(b.request_id);
     return { status: 201, body: card };
   }
 
@@ -506,6 +503,46 @@ export async function startAirwallexMock({
     };
   }
 
+  // GET /issuing/cards: the summary list. Shape probed 2026-10-30: {has_more, items}, each item brand, card_id,
+  // masked card_number, card_status, cardholder_id, created_at, updated_at, oldest first. No request_id and no
+  // authorization_controls, so a caller unsure whether a create landed must retrieve each candidate by id and
+  // compare its request_id (the list has no request_id filter). cardholder_id and card_status are documented
+  // filters. ASSUMED: a new card shows at once (the real transactions and conversions lists lagged, so this one
+  // may too: probe it before relying on it), page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the
+  // other lists, and no nick_name or date filters.
+  function listCards(q: URLSearchParams): Out {
+    const num = (k: string, dflt: number) =>
+      q.has(k) ? (/^\d+$/.test(q.get(k) ?? "") ? Number(q.get(k)) : null) : dflt;
+    const pageNum = num("page_num", 0);
+    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
+    const rawSize = q.get("page_size");
+    if (rawSize !== null && /^-?\d+$/.test(rawSize) && Number(rawSize) < 10) {
+      return err(400, "invalid_argument", "BELOW_MIN_PAGE_SIZE");
+    }
+    const pageSize = num("page_size", 100);
+    if (pageSize === null || pageSize > 200) {
+      return err(400, "invalid_argument", "Invalid page_size", "page_size");
+    }
+    const all = [...state.cards.values()]
+      .map((r) => r.card)
+      .filter((c) => !q.has("cardholder_id") || c.cardholder_id === q.get("cardholder_id"))
+      .filter((c) => !q.has("card_status") || c.card_status === q.get("card_status"))
+      .map((c) => ({
+        brand: c.brand,
+        card_id: c.card_id,
+        card_number: c.card_number,
+        card_status: c.card_status,
+        cardholder_id: c.cardholder_id,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+      }));
+    const end = (pageNum + 1) * pageSize;
+    return {
+      status: 200,
+      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
+    };
+  }
+
   function route(
     method: string,
     path: string,
@@ -558,7 +595,8 @@ export async function startAirwallexMock({
         ? { status: 200, body: rec }
         : err(404, "resource_not_found", "Cardholder not found"); // ASSUMED code
     }
-    if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b, raw);
+    if (method === "POST" && path === "/api/v1/issuing/cards/create") return createCard(b);
+    if (method === "GET" && path === "/api/v1/issuing/cards") return listCards(query);
     const update = /^\/api\/v1\/issuing\/cards\/([^/]+)\/update$/.exec(path);
     if (method === "POST" && update) return updateCard(update[1] ?? "", b);
     if (method === "GET" && path === "/api/v1/issuing/transactions") return listTransactions(query);
