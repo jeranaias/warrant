@@ -565,32 +565,6 @@ export async function startAirwallexMock({
     return { status: 201, body: conversion };
   }
 
-  // GET /fx/conversions. Probed 2026-10-30: {has_more, items}, newest first, and request_id is a working
-  // filter (it found an older conversion). But the real list did NOT show a conversion created about half
-  // an hour earlier, filtered or not, so it lags. The mock lists every conversion at once, which is kinder
-  // than the real thing: after a timeout, an empty real answer means "not known yet", never "not done".
-  // ASSUMED: the filters other than request_id, page_size 10 to 1000 with the BELOW_MIN_PAGE_SIZE body of the
-  // transactions list, and no from_created_at / to_created_at support.
-  function listConversions(q: URLSearchParams): Out {
-    const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
-    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
-    const rawSize = q.get("page_size");
-    if (rawSize !== null && /^-?\d+$/.test(rawSize) && Number(rawSize) < 10) {
-      return err(400, "invalid_argument", "BELOW_MIN_PAGE_SIZE");
-    }
-    const pageSize = intParam(q, "page_size", 100, 10, 1000);
-    if (pageSize === null) return err(400, "invalid_argument", "Invalid page_size", "page_size");
-    const filters = ["request_id", "buy_currency", "sell_currency", "status"];
-    const all = [...state.conversions.values()]
-      .reverse()
-      .filter((c) => filters.every((k) => !q.has(k) || c[k] === q.get(k)));
-    const end = (pageNum + 1) * pageSize;
-    return {
-      status: 200,
-      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
-    };
-  }
-
   function updateCard(id: string, b: Json): Out {
     const rec = state.cards.get(id);
     if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -763,7 +737,6 @@ export async function startAirwallexMock({
     if (method === "GET" && path === "/api/v1/deposits") return listDeposits(query);
     if (method === "POST" && path === "/api/v1/fx/quotes/create") return createQuote(b);
     if (method === "POST" && path === "/api/v1/fx/conversions/create") return createConversion(b);
-    if (method === "GET" && path === "/api/v1/fx/conversions") return listConversions(query);
     const conversion = /^\/api\/v1\/fx\/conversions\/([^/]+)$/.exec(path);
     if (method === "GET" && conversion) {
       const found = state.conversions.get(conversion[1] ?? "");
