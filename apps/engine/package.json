@@ -1,0 +1,23 @@
+{
+  "name": "@warrant/engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/server.ts"
+  },
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@warrant/contracts": "workspace:*",
+    "@warrant/control": "workspace:*",
+    "@warrant/mocks": "workspace:*",
+    "@warrant/rails": "workspace:*",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0"
+  }
+}
