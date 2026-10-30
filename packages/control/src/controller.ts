@@ -15,6 +15,8 @@ import type { ApprovalView, PendingApproval } from "./approvals/index.js";
 import { verifyWarrant } from "./crypto.js";
 import { Ledger } from "./ledger/index.js";
 import type { Reservation } from "./ledger/index.js";
+import { KillSwitch } from "./killswitch/index.js";
+import type { KillSwitchHooks, KillSwitchResult } from "./killswitch/index.js";
 import { checkRules } from "./rules/index.js";
 import type { RulesContext } from "./rules/index.js";
 
@@ -75,7 +77,8 @@ export type ControlEvent =
   | { type: "proposal"; proposal: PaymentProposal; result: SubmitResult }
   | { type: "approval_requested"; pending: PendingApproval }
   | { type: "approval_decided"; proposalId: string; ok: boolean; decision?: "approved" | "denied" }
-  | { type: "execution"; proposalId: string; execution: Execution };
+  | { type: "execution"; proposalId: string; execution: Execution }
+  | { type: "kill_switch"; result: KillSwitchResult };
 
 export interface ControllerOptions {
   ownerPublicKey: KeyObject;
@@ -88,7 +91,7 @@ export interface ControllerOptions {
   orders?: () => ReadonlyMap<string, SignedOrderRecord>;
   /** metal_x402: the mandate credential file name inside METAL_HOME for this warrant. */
   credentialFor?: (warrant: Warrant) => string | undefined;
-  /** The kill switch's state; the kill switch itself is a separate PR. */
+  /** An outside kill switch, OR'd with the controller's own (`engageKillSwitch`). */
   killSwitchEngaged?: () => boolean;
   clock?: () => Date;
   onEvent?: (e: ControlEvent) => void;
@@ -102,6 +105,7 @@ const isRefund = (p: PaymentProposal) =>
 export class Controller {
   readonly ledger: Ledger;
   readonly approvals = new ApprovalBook();
+  readonly killSwitch = new KillSwitch();
   private readonly purpose: PurposeChecker;
   private readonly clock: () => Date;
   private readonly proposals = new Map<string, PaymentProposal>();
@@ -172,6 +176,38 @@ export class Controller {
       }
     }
     return out;
+  }
+
+  /**
+   * The owner's emergency stop. Refuses every new payment from the first line, drops everything
+   * waiting for approval, then freezes cards and revokes mandates through the hooks.
+   */
+  async engageKillSwitch(
+    input: { ownerId: string; reason: string; warrantIds: string[] },
+    hooks: KillSwitchHooks = {},
+  ): Promise<KillSwitchResult> {
+    const now = this.clock();
+    this.killSwitch.flip(now);
+    for (const id of this.approvals.clear()) this.proposals.delete(id);
+    const result = await this.killSwitch.finish(
+      {
+        eventId: `kill_${now.getTime()}`,
+        ownerId: input.ownerId,
+        reason: input.reason.slice(0, 500),
+        revokedWarrantIds: input.warrantIds,
+        // Nothing is reserved without being handed to a rail at once; those settle or fail.
+        releasedReservationIds: [],
+        at: now.toISOString(),
+      },
+      hooks,
+      this.clock,
+    );
+    this.emit({ type: "kill_switch", result });
+    return result;
+  }
+
+  private stopped(): boolean {
+    return this.killSwitch.engaged || (this.opts.killSwitchEngaged?.() ?? false);
   }
 
   get purposeModel(): string {
@@ -284,6 +320,15 @@ export class Controller {
       };
     }
 
+    // The kill switch may have been pressed while the purpose model or the owner was thinking.
+    if (this.stopped()) {
+      return {
+        decision: decision(proposal, "blocked", rules, verdict, now),
+        blockedBy: "rules",
+        error: "kill switch engaged",
+      };
+    }
+
     let reservation: Reservation;
     try {
       reservation = this.ledger.reserve({
@@ -350,7 +395,7 @@ export class Controller {
     return {
       now,
       signatureValid: verifyWarrant(w, this.opts.ownerPublicKey),
-      killSwitchEngaged: this.opts.killSwitchEngaged?.() ?? false,
+      killSwitchEngaged: this.stopped(),
       committedCents: this.ledger.committedCents(w.warrantId),
       seenIdempotencyKeys: this.ledger.idempotencyKeys(),
       recentPayments: this.ledger.activeReservations(w.warrantId).map((r) => ({

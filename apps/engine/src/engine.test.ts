@@ -145,4 +145,30 @@ describe("engine: tasks in, decisions out", () => {
     const later = await get<{ events: unknown[] }>(`/events?since=${events.length}`);
     expect(later.events).toHaveLength(0);
   });
+
+  it("the kill switch stops everything at once: approvals dropped, mandates revoked, payments refused", async () => {
+    await post("/scenario", { name: "normal" });
+    const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=treasury");
+    const waiting = await post<Result>("/proposals", proposalFor(tasks[0] as AgentTask));
+    expect(waiting.body.decision?.outcome).toBe("needs_owner_approval");
+
+    const kill = await post<{
+      event: { revokedWarrantIds: string[] };
+      revokedMandates: string[];
+      problems: string[];
+      durationMs: number;
+    }>("/kill", { reason: "test" });
+    expect(kill.body.event.revokedWarrantIds).toHaveLength(3);
+    expect(kill.body.revokedMandates.sort()).toEqual(["sourcing.json", "support.json"]);
+    expect(kill.body.problems).toEqual([]);
+    expect((await get<{ pending: unknown[] }>("/approvals")).pending).toHaveLength(0);
+
+    await post("/scenario", { name: "normal" });
+    const next = await get<{ tasks: AgentTask[] }>("/tasks?role=sourcing");
+    const r = await post<Result>("/proposals", proposalFor(next.tasks[0] as AgentTask));
+    expect(r.body.blockedBy).toBe("rules");
+    const chain = await get<{ mandates: { revoked: boolean }[] }>("/chain");
+    expect(chain.mandates.every((m) => m.revoked)).toBe(true);
+    expect((await get<{ engaged: boolean }>("/kill")).engaged).toBe(true);
+  });
 });
