@@ -170,3 +170,40 @@ bounded by the cap, the budget and the mandate; refunds are bounded per order by
 `refund_matches_order` (one refund per order, at most its price).
 Consequences: a looping sourcing agent can only burn its own budget (10 USDZ), which the
 benchmark measures.
+
+## ADR-012: Build toward what Metal asked for; the deadline moved to Nov 15
+
+Date: 2026-10-30 Status: accepted
+
+Context: on the hackathon Slack (#metal-kits-11-and-12, 2026-10-29) Metal said what they want to
+see for the Metal Award: disputes and merchant purchase verification. What can a seller prove,
+then decide, when an agent's purchase is questioned? For example, a customer insists their agent
+never agreed to an order or a price, or a seller wants to know whether the agent is acting under a
+mandate a real human signed, and the seller settles it on its own terms. Other facts from the
+Slack: submissions are due **Sun Nov 15, 2026, 11:59 PM PST** (extended from Nov 13); current
+packages are `metal-agent` 0.3.3 and `metal-pay` 0.3.4; pay-per-call clearing is live on testnet
+in `metal-pay` (docs.metalntwx.com/agents/clearing). Other Kit 11 teams already use mandate caps,
+replace and revoke, signed orders, pull refunds and a sweep to Airwallex, so those are table
+stakes, not our edge.
+Decision:
+
+1. **Warrant pass (lane C).** A buying agent's request carries a pass signed by its owner's
+   control, sent as the `x-warrant-pass` header (`metal-agent pay --header`). The owner signs a
+   public grant once (payer, categories, per-payment cap, delegated key; never budgets or other
+   payees); control signs a pass per purchase (seller, URL, amount, category, nonce, proposal
+   hash). Sellers check both signatures and the fit to the grant before serving; a refusal
+   happens before the x402 payment settles. Our store checks customers' passes; the upstream
+   provider checks ours. Every stored order keeps the pass.
+2. **The dispute is the lead Metal beat (C leads, A and D with).** A customer disputes a batch.
+   The store answers from evidence alone: the signed order (item and price), the settlement
+   transaction, `verifyMandatePayment`, and the customer's pass (a human-signed grant). It then
+   decides on its own terms and refunds by `mandate pull` when the evidence says so.
+3. **What only we show**, in the demo, the README and the video: owner approval bound to exactly
+   what was shown (ADR-007); a purpose check that never sees agent text (ADR-003); the 150+
+   attack scores across unprotected, limits only and Warrant; the kill switch timed end to end;
+   the seller-side proof above.
+4. Pay-per-call clearing is a stretch goal, only after Nov 10.
+5. We still submit on **Nov 12**. Nov 13 to 15 is buffer for fixes, rehearsal and the video only.
+   Consequences: the dispute beat moves earlier in the demo script; lane C adds the pass to
+   `packages/control` and `apps/store`; lane A adds attacks that try to buy without a valid pass
+   or with someone else's.
