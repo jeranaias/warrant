@@ -11,12 +11,16 @@ import type {
 } from "@warrant/contracts";
 import { AGENT_BUDGETS, QUERY_PRICE, signWarrant } from "@warrant/control";
 import type { PurposeChecker } from "@warrant/control";
+import { MetalAdapter } from "@warrant/rails";
 import type { RailAdapter, RailInstruction, RailResult } from "@warrant/rails";
 import type { Rail } from "@warrant/contracts";
+import { MockMetalChain, UPSTREAM_PAY_TO, UPSTREAM_URL, addUpstream } from "@warrant/mocks/metal";
+import type { Upstream } from "@warrant/mocks/metal";
 
 /**
- * The engine's pretend world: an owner, three signed warrants, two stored orders, and rails that
- * always succeed. Everything is in memory and made fresh at startup. Nothing here touches a real
+ * The engine's pretend world: an owner, three signed warrants, two stored orders, a mock Metal
+ * chain that enforces each agent's mandate (with the upstream provider selling on it) and an
+ * Airwallex rail that always succeeds. Everything is in memory and made fresh at startup. Nothing here touches a real
  * key, account or network.
  */
 
@@ -24,9 +28,9 @@ const eur = (cents: number): Money => ({ currency: "EUR", cents });
 const addr = (c: string) => "0x" + c.repeat(40);
 
 export const OWNER_ID = "own_demo";
-export const UPSTREAM_ADDRESS = addr("1");
 export const CUSTOMER_ADDRESS = addr("c");
 const STORE_ADDRESS = addr("5");
+const PRINCIPAL = addr("a");
 
 export interface AgentIdentity {
   role: AgentRole;
@@ -46,7 +50,7 @@ function bodies(now: Date): WarrantBody[] {
   const mandate = (cap: Money, budget: Money) => ({
     network: "eip155:63825" as const,
     mandateId: "mnd_demo",
-    principal: addr("a"),
+    principal: PRINCIPAL,
     cap,
     budget,
     expiresAt,
@@ -65,7 +69,7 @@ function bodies(now: Date): WarrantBody[] {
           payeeId: "pay_upstream",
           displayName: "Upstream data provider",
           rail: "metal_x402",
-          routingRef: UPSTREAM_ADDRESS,
+          routingRef: UPSTREAM_URL,
           currency: "USDZ",
         },
       ],
@@ -165,11 +169,19 @@ export const placeholderPurpose: PurposeChecker = {
   },
 };
 
+/** Mandate credential file per agent, as `metal-agent` names them inside METAL_HOME. */
+export const CREDENTIALS: Partial<Record<AgentRole, string>> = {
+  sourcing: "sourcing.json",
+  support: "support.json",
+};
+
 export interface World {
   ownerPublicKey: KeyObject;
   warrants: Map<string, Warrant>;
   orders: Map<string, SignedOrderRecord>;
-  rails: Record<"metal_x402" | "airwallex_transfer", AlwaysPaysRail>;
+  chain: MockMetalChain;
+  upstream: Upstream;
+  rails: { metal_x402: MetalAdapter; airwallex_transfer: AlwaysPaysRail };
 }
 
 export function makeWorld(now = new Date()): World {
@@ -178,12 +190,42 @@ export function makeWorld(now = new Date()): World {
     bodies(now).map((b) => [b.warrantId, signWarrant(b, privateKey, "owner-demo")]),
   );
   const orders = new Map(["ord_1", "ord_2"].map((id) => [id, order(id, now)]));
+
+  // One mandate per Metal agent, same limits as its warrant (ADR-009 #2).
+  const chain = new MockMetalChain();
+  chain.fund(PRINCIPAL, 2000);
+  const upstream = addUpstream(chain, 2);
+  const expires = new Date("2026-11-20T00:00:00Z");
+  chain.addMandate({
+    credential: "sourcing.json",
+    principal: PRINCIPAL,
+    capCents: AGENT_BUDGETS.sourcing.perPaymentCap.cents,
+    budgetCents: AGENT_BUDGETS.sourcing.budget.cents,
+    payees: [UPSTREAM_PAY_TO],
+    expiresAt: expires,
+  });
+  chain.addMandate({
+    credential: "support.json",
+    principal: PRINCIPAL,
+    capCents: AGENT_BUDGETS.support.perPaymentCap.cents,
+    budgetCents: AGENT_BUDGETS.support.budget.cents,
+    expiresAt: expires,
+  });
+
   return {
     ownerPublicKey: publicKey,
     warrants,
     orders,
+    chain,
+    upstream,
     rails: {
-      metal_x402: new AlwaysPaysRail("metal_x402"),
+      // The real adapter and its real output parsers, talking to the mock chain.
+      metal_x402: new MetalAdapter({
+        run: chain.runner(),
+        metalHome: "mock-metal-home",
+        rpcUrl: "mock",
+        quote: (url) => Promise.resolve(url === UPSTREAM_URL ? upstream.price() : undefined),
+      }),
       airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
     },
   };
