@@ -608,3 +608,217 @@ describe("balances and INSUFFICIENT_FUNDS (opt-in funds model)", () => {
     );
   });
 });
+
+const DEPOSIT = "/api/v1/simulation/deposit/create";
+const DEPOSITS = "/api/v1/deposits";
+const QUOTE = "/api/v1/fx/quotes/create";
+const T0 = Date.parse("2026-10-30T20:08:32Z");
+
+describe("simulated deposits", () => {
+  it("returns PENDING like the sandbox and raises the wallet", async () => {
+    await restart({ balances: { USD: 5 } });
+    const res = await call(DEPOSIT, { body: { amount: 10, currency: "USD" } });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({ amount: 10, currency: "USD", status: "PENDING" });
+    expect(typeof res.json.deposit_id).toBe("string");
+    expect(res.json.created_at).toMatch(/^\d{4}-\d\d-\d\dT[\d:.]+\+00:00$/);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 15, total_amount: 15 });
+  });
+
+  it("creates the wallet for a currency nobody seeded, and then funds are checked for it", async () => {
+    expect((await call(BALANCES)).json).toEqual([]);
+    await call(DEPOSIT, { body: { amount: 5, currency: "USD" } });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 5 });
+    const id = await makeCard([{ amount: 10, interval: "PER_TRANSACTION" }]);
+    expect((await pay(id, 6)).json.failure_reason).toBe("INSUFFICIENT_FUNDS");
+    expect((await pay(id, 5)).json.status).toBe("PENDING");
+  });
+
+  it("lists deposits newest first with the reference and global_account_id round-tripped", async () => {
+    const hash = "0x" + "ab".repeat(32);
+    await call(DEPOSIT, {
+      body: { amount: 1, currency: "USD", reference: hash, global_account_id: "ga_1" },
+    });
+    await call(DEPOSIT, { body: { amount: 2.5, currency: "EUR" } });
+    const res = await call(DEPOSITS);
+    expect(res.status).toBe(200);
+    expect(res.json.has_more).toBe(false);
+    expect(res.json.items.map((d: Json) => d.amount)).toEqual([2.5, 1]);
+    expect(res.json.items[1]).toMatchObject({
+      currency: "USD",
+      reference: hash,
+      global_account_id: "ga_1",
+      status: "SETTLED",
+      type: "BANK_TRANSFER",
+    });
+    expect(res.json.items[1].created_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\+0000$/);
+    expect(res.json.items[0]).not.toHaveProperty("reference");
+  });
+
+  it.each([0, 1e21, 10.001, -5, "10"])("refuses the deposit amount %j", async (amount) => {
+    const res = await call(DEPOSIT, { body: { amount, currency: "USD" } });
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code: "invalid_argument", source: "amount" });
+    expect((await call(DEPOSITS)).json.items).toEqual([]);
+  });
+
+  it.each([{ currency: "usd" }, { currency: 5 }, {}])(
+    "refuses the currency in %j",
+    async (extra) => {
+      const res = await call(DEPOSIT, { body: { amount: 1, ...extra } });
+      expect(res.status).toBe(400);
+      expect(res.json.source).toBe("currency");
+    },
+  );
+
+  it("refuses a reference that is not a string, and needs a token", async () => {
+    const res = await call(DEPOSIT, { body: { amount: 1, currency: "USD", reference: 5 } });
+    expect(res.json.source).toBe("reference");
+    expect(
+      (await call(DEPOSIT, { token: null, body: { amount: 1, currency: "USD" } })).status,
+    ).toBe(401);
+    expect((await call(DEPOSITS, { token: null })).status).toBe(401);
+  });
+});
+
+describe("FX quotes", () => {
+  it("quotes in the market-pair direction with the sandbox shape", async () => {
+    await restart({ rates: { EURUSD: "1.122579" }, now: () => T0 });
+    const res = await call(QUOTE, {
+      body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: 10, validity: "MIN_1" },
+    });
+    expect(res.status).toBe(201);
+    // Sandbox probe 2026-10-30: the same request returned buy_amount 8.91 at client_rate 1.122579.
+    expect(res.json).toMatchObject({
+      buy_amount: 8.91,
+      buy_currency: "EUR",
+      sell_amount: 10,
+      sell_currency: "USD",
+      client_rate: 1.122579,
+      currency_pair: "EURUSD",
+      dealt_currency: "USD",
+      usage: "MULTI_USE",
+      validity: "MIN_1",
+      conversion_date: "2026-10-30",
+      valid_from_at: "2026-10-30T20:08:32+0000",
+      valid_to_at: "2026-10-30T20:09:32+0000",
+    });
+    expect(typeof res.json.quote_id).toBe("string");
+  });
+
+  // Real sandbox conversions (2026-10-30, sell USD, buy EUR, pair EURUSD): the derived amount is the
+  // exact quotient rounded to the NEAREST cent. Floor and ceil each get at least one of these wrong.
+  it.each([
+    ["1.124367", 56.23, 50.01],
+    ["1.124839", 56.26, 50.02],
+    ["1.125308", 56.28, 50.01],
+    ["1.125414", 56.29, 50.02],
+    ["1.125626", 56.3, 50.02],
+  ])(
+    "rounds to nearest like the sandbox: rate %s, sell %s USD buys %s EUR",
+    async (rate, sell, buy) => {
+      await restart({ rates: { EURUSD: rate } });
+      const res = await call(QUOTE, {
+        body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: sell, validity: "MIN_1" },
+      });
+      expect(res.json.buy_amount).toBe(buy);
+    },
+  );
+
+  it("derives the other side in all four directions", async () => {
+    await restart({ rates: { EURUSD: "1.122579" } });
+    const q = (body: object) =>
+      call(QUOTE, { body: { validity: "HR_1", ...body } }).then((r) => r.json);
+    // buy is the dealt side: 8.91 EUR costs 8.91 x 1.122579 = 10.0021 USD
+    expect(await q({ buy_currency: "EUR", sell_currency: "USD", buy_amount: 8.91 })).toMatchObject({
+      sell_amount: 10,
+      dealt_currency: "EUR",
+    });
+    // selling the base currency multiplies: 10 EUR x 1.122579 = 11.22579 USD, nearest cent is 11.23
+    expect(await q({ buy_currency: "USD", sell_currency: "EUR", sell_amount: 10 })).toMatchObject({
+      buy_amount: 11.23,
+      dealt_currency: "EUR",
+    });
+    // buying the quote currency: 11.23 USD costs 11.23 / 1.122579 = 10.0039 EUR
+    expect(await q({ buy_currency: "USD", sell_currency: "EUR", buy_amount: 11.23 })).toMatchObject(
+      {
+        sell_amount: 10,
+        dealt_currency: "USD",
+      },
+    );
+  });
+
+  it.each([
+    ["MIN_1", 60],
+    ["MIN_15", 900],
+    ["MIN_30", 1800],
+    ["HR_1", 3600],
+    ["HR_4", 14400],
+    ["HR_8", 28800],
+    ["HR_24", 86400],
+  ])("%s lasts %s seconds", async (validity, seconds) => {
+    await restart({ rates: { EURUSD: "1.122579" }, now: () => T0 });
+    const res = await call(QUOTE, {
+      body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: 10, validity },
+    });
+    const from = Date.parse(res.json.valid_from_at.replace("+0000", "Z"));
+    const to = Date.parse(res.json.valid_to_at.replace("+0000", "Z"));
+    expect((to - from) / 1000).toBe(seconds);
+  });
+
+  it.each([
+    [{ validity: "MIN_2" }, "validity"],
+    [{ validity: undefined }, "validity"],
+    [{ buy_amount: 5 }, "sell_amount"], // both amounts
+    [{ sell_amount: undefined }, "sell_amount"], // neither amount
+    [{ sell_amount: 10.001 }, "sell_amount"],
+    [{ sell_amount: 0 }, "sell_amount"],
+    [{ sell_currency: "usd" }, "sell_currency"],
+  ])("refuses the quote change %j", async (patch, source) => {
+    await restart({ rates: { EURUSD: "1.122579" } });
+    const body = {
+      buy_currency: "EUR",
+      sell_currency: "USD",
+      sell_amount: 10,
+      validity: "MIN_1",
+      ...patch,
+    };
+    const res = await call(QUOTE, { body });
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code: "invalid_argument", source });
+  });
+
+  it("refuses a pair with no seeded rate, and the same currency twice", async () => {
+    await restart({ rates: { EURUSD: "1.122579" } });
+    const base = { sell_amount: 10, validity: "MIN_1" };
+    const gbp = await call(QUOTE, { body: { ...base, buy_currency: "GBP", sell_currency: "USD" } });
+    expect(gbp.status).toBe(400);
+    expect(gbp.json.code).toBe("unsupported_currency");
+    const same = await call(QUOTE, {
+      body: { ...base, buy_currency: "USD", sell_currency: "USD" },
+    });
+    expect(same.json.code).toBe("unsupported_currency");
+    const noToken = await call(QUOTE, { token: null, body: base });
+    expect(noToken.status).toBe(401);
+  });
+});
+
+describe("rates and clock options", () => {
+  it.each(["abc", "0", "0.000000", "1.1234567", "-1", "", 1.1, null])(
+    "refuses to start with the bad rate %j",
+    async (rate) => {
+      await expect(startAirwallexMock({ rates: { EURUSD: rate as never } })).rejects.toThrow(
+        /Invalid rates seed for EURUSD/,
+      );
+    },
+  );
+
+  it.each(["EUR", "EURUSDX", "eurusd", "EUR-USD"])(
+    "refuses to start with the rate key %j",
+    async (key) => {
+      await expect(startAirwallexMock({ rates: { [key]: "1.1" } })).rejects.toThrow(
+        /Invalid rates seed/,
+      );
+    },
+  );
+});

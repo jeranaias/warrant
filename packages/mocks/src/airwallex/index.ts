@@ -1,5 +1,6 @@
 // Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
-// transactions, a transactions list, and an opt-in wallet with INSUFFICIENT_FUNDS declines.
+// transactions, a transactions list, an opt-in wallet with INSUFFICIENT_FUNDS declines, simulated
+// deposits and FX quotes.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -33,6 +34,21 @@ export interface AirwallexOptions {
   port?: number;
   /** Seed wallet in major units per currency. Without it there is no wallet and no funds check. */
   balances?: Record<string, number>;
+  /**
+   * FX rates as decimal strings, one per market pair (BASEQUOTE): { EURUSD: "1.122579" } means 1 EUR is
+   * 1.122579 USD. At most 6 decimals. One entry serves both directions.
+   */
+  rates?: Record<string, string>;
+  /** Clock in ms, so tests can expire quotes without sleeping. */
+  now?: () => number;
+}
+
+interface QuoteRec {
+  pair: string;
+  micro: number;
+  buyCurrency: string;
+  sellCurrency: string;
+  validToMs: number;
 }
 
 export interface AirwallexMock {
@@ -40,7 +56,14 @@ export interface AirwallexMock {
   server: Server;
   close(): Promise<void>;
   fault(f: Fault): void;
-  state: { cardholders: Map<string, Json>; cards: Map<string, CardRec>; transactions: Json[] };
+  state: {
+    cardholders: Map<string, Json>;
+    cards: Map<string, CardRec>;
+    transactions: Json[];
+    deposits: Json[];
+    quotes: Map<string, QuoteRec>;
+    rates: Map<string, number>; // pair -> rate in integer micro-units
+  };
 }
 
 const INTERVALS = ["PER_TRANSACTION", "DAILY", "WEEKLY", "MONTHLY", "ALL_TIME"];
@@ -73,15 +96,64 @@ function intParam(q: URLSearchParams, name: string, dflt: number, min: number, m
   return /^\d+$/.test(v) && Number(v) >= min && Number(v) <= max ? Number(v) : null;
 }
 
+const VALIDITY_MS: Record<string, number> = {
+  MIN_1: 60_000,
+  MIN_15: 900_000,
+  MIN_30: 1_800_000,
+  HR_1: 3_600_000,
+  HR_4: 14_400_000,
+  HR_8: 28_800_000,
+  HR_24: 86_400_000,
+};
+const isCcy = (x: unknown): x is string => typeof x === "string" && /^[A-Z]{3}$/.test(x);
+// Sandbox list and quote timestamps have no milliseconds: 2026-10-30T20:08:32+0000.
+const sec = (ms: number) => new Date(ms).toISOString().slice(0, 19) + "+0000";
+
+/** A rate decimal string as integer micro-units: positive, at most 6 decimals, no exponent. */
+function toMicro(x: unknown): number | null {
+  if (typeof x !== "string") return null;
+  const m = /^(\d+)(?:\.(\d{1,6}))?$/.exec(x);
+  if (!m) return null;
+  const micro = Number(m[1] + (m[2] ?? "").padEnd(6, "0"));
+  return Number.isSafeInteger(micro) && micro > 0 ? micro : null;
+}
+
+/**
+ * The other side of a deal, in cents, from the dealt side. A pair is BASEQUOTE and its rate is QUOTE per
+ * 1 BASE (the sandbox's market convention: EURUSD 1.122579 is 1.122579 USD per EUR). Base to quote
+ * multiplies by the rate, quote to base divides. Integer math only (BigInt), rounded to the NEAREST cent
+ * with ties up. Nearest is checked against five real sandbox conversions (2026-10-30): floor and ceil each
+ * get at least one wrong. The tie direction is ASSUMED. Whole amounts only: 2-decimal currencies.
+ */
+function convert(cents: number, fromBase: boolean, micro: number): number | null {
+  const n = BigInt(cents);
+  const r = BigInt(micro);
+  const [num, den] = fromBase ? [n * r, 1_000_000n] : [n * 1_000_000n, r];
+  const out = (2n * num + den) / (2n * den);
+  return out <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(out) : null;
+}
+
 export async function startAirwallexMock({
   port = 0,
   balances = {},
+  rates = {},
+  now = Date.now,
 }: AirwallexOptions = {}): Promise<AirwallexMock> {
   const state: AirwallexMock["state"] = {
     cardholders: new Map(),
     cards: new Map(),
     transactions: [],
+    deposits: [],
+    quotes: new Map(),
+    rates: new Map(),
   };
+  for (const [pair, rate] of Object.entries(rates)) {
+    const micro = toMicro(rate);
+    if (!/^[A-Z]{6}$/.test(pair) || micro === null) {
+      throw new Error(`Invalid rates seed for ${pair}: ${String(rate)}`);
+    }
+    state.rates.set(pair, micro);
+  }
   // Wallet in cents. Money moves like the sandbox (probed 2026-10-30): an approval takes funds from
   // available into reserved, so total is unchanged. pending_amount stays 0 (no deposits modelled).
   const wallet = new Map<string, { available: number; reserved: number }>();
@@ -264,6 +336,109 @@ export async function startAirwallexMock({
     return { status: 200, body: txn };
   }
 
+  // The sandbox answered a simulated deposit with PENDING and moved the balance within about a minute
+  // (probed 2026-10-30; pending_amount never moved). The mock credits available at once, answers PENDING,
+  // and lists the deposit as SETTLED. A currency with no wallet gets one, so from then on card purchases
+  // in it are funds-checked. The request body is ASSUMED (the MCP only sends amount and global_account_id)
+  // and so are the 201 and the {has_more, items} list shape (the MCP printed a bare array).
+  function createDeposit(b: Json): Out {
+    const bad = (source: string) => err(400, "invalid_argument", `Invalid ${source}`, source);
+    const cents = toCents(b.amount);
+    if (cents === null) return bad("amount");
+    if (!isCcy(b.currency)) return bad("currency");
+    for (const k of ["reference", "global_account_id"]) {
+      if (b[k] !== undefined && typeof b[k] !== "string") return bad(k);
+    }
+    const ccy: string = b.currency;
+    const ms = now();
+    const id = randomUUID();
+    const w = wallet.get(ccy) ?? { available: 0, reserved: 0 };
+    w.available += cents;
+    wallet.set(ccy, w);
+    state.deposits.push({
+      id,
+      amount: cents / 100,
+      created_at: sec(ms),
+      currency: ccy,
+      fee: { amount: 0, currency: ccy },
+      ...(b.global_account_id === undefined ? {} : { global_account_id: b.global_account_id }),
+      payer: {},
+      provider_transaction_id: randomUUID(),
+      ...(b.reference === undefined ? {} : { reference: b.reference }),
+      settled_at: sec(ms),
+      status: "SETTLED",
+      type: "BANK_TRANSFER",
+    });
+    const created_at = new Date(ms).toISOString().replace("Z", "+00:00");
+    return {
+      status: 201,
+      body: { deposit_id: id, amount: cents / 100, currency: ccy, status: "PENDING", created_at },
+    };
+  }
+
+  // Quote shape probed 2026-10-30 (EURUSD, sell 10 USD, MIN_1: usage MULTI_USE, 60 s, 6-decimal rate).
+  // Trimmed: awx_rate, mid_rate and rate_details are left out. valid_to_at is inclusive.
+  function createQuote(b: Json): Out {
+    const bad = (source: string) => err(400, "invalid_argument", `Invalid ${source}`, source);
+    if (!isCcy(b.buy_currency)) return bad("buy_currency");
+    if (!isCcy(b.sell_currency)) return bad("sell_currency");
+    const validityMs =
+      typeof b.validity === "string" && Object.hasOwn(VALIDITY_MS, b.validity)
+        ? VALIDITY_MS[b.validity]
+        : undefined;
+    if (validityMs === undefined) return bad("validity");
+    const sellDealt = b.sell_amount !== undefined;
+    if (sellDealt === (b.buy_amount !== undefined)) return bad("sell_amount"); // exactly one amount
+    const field = sellDealt ? "sell_amount" : "buy_amount";
+    const dealt = toCents(b[field]);
+    if (dealt === null) return bad(field);
+    const dealtCcy: string = sellDealt ? b.sell_currency : b.buy_currency;
+    const rate =
+      b.buy_currency === b.sell_currency ? null : rateFor(b.sell_currency, b.buy_currency);
+    // unsupported_currency is a documented code; using it for a missing rate is ASSUMED.
+    if (!rate) return err(400, "unsupported_currency", "No rate for this pair", "buy_currency");
+    const other = convert(dealt, dealtCcy === rate.base, rate.micro);
+    if (other === null) return err(400, "amount_above_limit", "Amount too large", field);
+    const [buy, sell] = sellDealt ? [other, dealt] : [dealt, other];
+    const ms = now();
+    const quote_id = randomUUID();
+    state.quotes.set(quote_id, {
+      pair: rate.pair,
+      micro: rate.micro,
+      buyCurrency: b.buy_currency,
+      sellCurrency: b.sell_currency,
+      validToMs: ms + validityMs,
+    });
+    return {
+      status: 201,
+      body: {
+        buy_amount: buy / 100,
+        buy_currency: b.buy_currency,
+        client_rate: rate.micro / 1_000_000, // same double as Number("1.122579"): exact integers divided once
+        // The sandbox date followed the account's local day (a 06:11Z conversion showed the day before);
+        // the mock uses the UTC date: ASSUMED.
+        conversion_date: new Date(ms).toISOString().slice(0, 10),
+        currency_pair: rate.pair,
+        dealt_currency: dealtCcy,
+        quote_id,
+        sell_amount: sell / 100,
+        sell_currency: b.sell_currency,
+        usage: "MULTI_USE",
+        valid_from_at: sec(ms),
+        valid_to_at: sec(ms + validityMs),
+        validity: b.validity,
+      },
+    };
+  }
+
+  function rateFor(sell: string, buy: string) {
+    for (const pair of [sell + buy, buy + sell]) {
+      const micro = state.rates.get(pair);
+      if (micro !== undefined) return { pair, micro, base: pair.slice(0, 3) };
+    }
+    return null;
+  }
+
   function updateCard(id: string, b: Json): Out {
     const rec = state.cards.get(id);
     if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -391,6 +566,11 @@ export async function startAirwallexMock({
       return { status: 200, body: { currency: rec.currency, limits } };
     }
     if (method === "POST" && path === "/api/v1/simulation/issuing/create") return simulate(b);
+    if (method === "POST" && path === "/api/v1/simulation/deposit/create") return createDeposit(b);
+    if (method === "GET" && path === "/api/v1/deposits") {
+      return { status: 200, body: { has_more: false, items: [...state.deposits].reverse() } };
+    }
+    if (method === "POST" && path === "/api/v1/fx/quotes/create") return createQuote(b);
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }
 
