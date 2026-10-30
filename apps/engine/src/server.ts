@@ -166,6 +166,29 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ events: log.filter((e) => e.seq > since) });
   });
 
+  // The owner's emergency stop. Everything stops at once; the timing is part of the answer.
+  app.post("/kill", async (req, res) => {
+    const reason = String(
+      (req.body as { reason?: unknown } | undefined)?.reason ?? "owner pressed stop",
+    );
+    const result = await controller.engageKillSwitch(
+      { ownerId: OWNER_ID, reason, warrantIds: [...world.warrants.keys()] },
+      {
+        revokeMandates: () => {
+          const live = world.chain.mandateList().filter((m) => !m.revoked);
+          for (const m of live) world.chain.revokeMandate(m.credential);
+          return Promise.resolve(live.map((m) => m.credential));
+        },
+      },
+    );
+    for (const [id, w] of world.warrants) world.warrants.set(id, { ...w, status: "revoked" });
+    res.json(result);
+  });
+
+  app.get("/kill", (_req, res) => {
+    res.json({ engaged: controller.killSwitch.engaged, last: controller.killSwitch.last ?? null });
+  });
+
   // The mock Metal chain: each mandate's spend and limits, and every on-chain refusal.
   app.get("/chain", (_req, res) => {
     res.json({

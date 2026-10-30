@@ -296,3 +296,73 @@ describe("ledger around the rail", () => {
     expect(rail.calls).toHaveLength(2);
   });
 });
+
+describe("kill switch", () => {
+  it("refuses new payments, drops pending approvals, and runs the outside steps", async () => {
+    const { controller, rail } = setup();
+    const waiting = await controller.submit(proposal());
+    const id = waiting.decision?.proposalId ?? "";
+    expect(controller.approvals.get(id)).toBeDefined();
+
+    const calls: string[] = [];
+    const result = await controller.engageKillSwitch(
+      { ownerId: "own_1", reason: "test", warrantIds: ["wrt_sourcing"] },
+      {
+        freezeCards: () => (calls.push("cards"), Promise.resolve({ frozenCardIds: ["card_1"] })),
+        revokeMandates: () => (calls.push("mandates"), Promise.resolve(["sourcing.json"])),
+      },
+    );
+    expect(calls.sort()).toEqual(["cards", "mandates"]);
+    expect(result.event).toMatchObject({
+      revokedWarrantIds: ["wrt_sourcing"],
+      frozenCardIds: ["card_1"],
+    });
+    expect(controller.approvals.list()).toHaveLength(0);
+    expect(await approve(controller, id)).toMatchObject({ ok: false });
+
+    const after = await controller.submit(proposal());
+    expect(after.blockedBy).toBe("rules");
+    expect(rail.calls).toHaveLength(0);
+  });
+
+  it("a failing outside step is reported, and payments stay stopped", async () => {
+    const { controller } = setup();
+    const result = await controller.engageKillSwitch(
+      { ownerId: "own_1", reason: "test", warrantIds: [] },
+      { freezeCards: () => Promise.reject(new Error("airwallex down")) },
+    );
+    expect(result.problems).toEqual(["freeze cards: airwallex down"]);
+    expect(controller.killSwitch.engaged).toBe(true);
+    expect((await controller.submit(proposal())).blockedBy).toBe("rules");
+  });
+
+  it("pressed while the purpose model thinks: refused before any money is held", async () => {
+    let gated = false;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((ok) => (release = ok));
+    const { controller, rail } = setup({
+      check: async (_w, s, now) => {
+        if (gated) await gate;
+        return {
+          proposalId: s.proposalId,
+          verdict: "consistent",
+          reasons: ["matches_warrant_purpose"],
+          explanation: "test",
+          model: "test-model",
+          evaluatedAt: now.toISOString(),
+        };
+      },
+    });
+    const first = await controller.submit(proposal());
+    await approve(controller, first.decision?.proposalId ?? "");
+    expect(rail.calls).toHaveLength(1);
+
+    gated = true;
+    const inFlight = controller.submit(proposal());
+    await controller.engageKillSwitch({ ownerId: "own_1", reason: "test", warrantIds: [] });
+    release();
+    expect(await inFlight).toMatchObject({ blockedBy: "rules", error: "kill switch engaged" });
+    expect(rail.calls).toHaveLength(1);
+    expect(controller.ledger.committedCents("wrt_sourcing")).toBe(2);
+  });
+});
