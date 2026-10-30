@@ -151,26 +151,19 @@ describe("cards", () => {
     expect((await post({ is_personalized: true })).status).toBe(400);
   });
 
-  it("replays the same request_id and body, rejects the same id with a different body", async () => {
+  it("rejects a reused request_id with 400, even with the same body (the sandbox never replays)", async () => {
     const body = cardBody(await makeHolder());
-    const first = await call("/api/v1/issuing/cards/create", { body });
+    expect((await call("/api/v1/issuing/cards/create", { body })).status).toBe(201);
     const again = await call("/api/v1/issuing/cards/create", { body });
-    expect(again.json.card_id).toBe(first.json.card_id);
+    expect(again.status).toBe(400);
+    expect(again.json).toMatchObject({
+      code: "invalid_argument",
+      message: "The provided ID is already associated with a previous request",
+      source: "request_id",
+    });
+    const changed = { ...body, created_by: "Someone Else" };
+    expect((await call("/api/v1/issuing/cards/create", { body: changed })).status).toBe(400);
     expect(mock.state.cards.size).toBe(1);
-
-    const changed = {
-      ...body,
-      authorization_controls: {
-        ...body.authorization_controls,
-        transaction_limits: {
-          currency: "USD",
-          limits: [{ amount: 20, interval: "PER_TRANSACTION" }],
-        },
-      },
-    };
-    const clash = await call("/api/v1/issuing/cards/create", { body: changed });
-    expect(clash.status).toBe(400);
-    expect(clash.json).toMatchObject({ code: "invalid_argument", source: "request_id" });
   });
 
   it.each([10.001, 1e21, 1e-7, 0, -5])(
@@ -304,6 +297,19 @@ describe("authorization_controls allowlists", () => {
 
 const CREATE = "/api/v1/issuing/cards/create";
 const SIMULATE = "/api/v1/simulation/issuing/create";
+const CARDS = "/api/v1/issuing/cards";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// What a caller does when it cannot tell whether a create landed: list the cardholder's cards, retrieve
+// each candidate by id (the list has no request_id) and compare its request_id.
+const findCard = async (cardholder_id: string, request_id: string) => {
+  const list = await call(`${CARDS}?cardholder_id=${cardholder_id}`);
+  for (const item of list.json.items) {
+    const card = await call(`${CARDS}/${item.card_id}`);
+    if (card.json.request_id === request_id) return card.json;
+  }
+  return undefined;
+};
 
 describe("fault injection", () => {
   it("5xx fails before doing any work, then recovers", async () => {
@@ -316,23 +322,48 @@ describe("fault injection", () => {
     expect(ok.status).toBe(201);
   });
 
-  it("timeout-after does the work, then holds the response past the client timeout", async () => {
+  it("timeout-after does the work, then holds the response; the caller finds the card by list + retrieve and never resends", async () => {
     const holder = await makeHolder();
+    const body = cardBody(holder);
     mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: CREATE });
-    await expect(
-      call(CREATE, { body: cardBody(holder), signal: AbortSignal.timeout(50) }),
-    ).rejects.toMatchObject({ name: "TimeoutError" });
-    // The caller cannot tell: the card exists. Status must be checked by request_id, never retried blind.
-    expect(mock.state.cards.size).toBe(1);
+    await expect(call(CREATE, { body, signal: AbortSignal.timeout(50) })).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+
+    // The caller cannot tell from the abort. It looks the card up instead of resending.
+    const found = await findCard(holder, body.request_id);
+    expect(found).toMatchObject({
+      request_id: body.request_id,
+      card_status: "ACTIVE",
+      cardholder_id: holder,
+    });
+    expect(found?.card_id).toMatch(UUID);
+
+    // A blind resend is refused, because Airwallex never replays a card create. One card exists.
+    const resend = await call(CREATE, { body });
+    expect(resend.status).toBe(400);
+    expect(resend.json.source).toBe("request_id");
+    expect((await call(`${CARDS}?cardholder_id=${holder}`)).json.items).toHaveLength(1);
   });
 
-  it("duplicate runs the request twice server-side and still yields one card", async () => {
-    const body = cardBody(await makeHolder());
+  it("duplicate runs the create twice: the caller sees the second run refused, yet one card exists, with a real card_id", async () => {
+    const holder = await makeHolder();
+    const body = cardBody(holder);
     mock.fault({ kind: "duplicate", method: "POST", path: CREATE });
-    const first = await call(CREATE, { body });
-    const second = await call(CREATE, { body });
-    expect(first.json.card_id).toBe(second.json.card_id);
-    expect(mock.state.cards.size).toBe(1);
+    const res = await call(CREATE, { body });
+    // The second run is the response, and it is the refusal: no card in it.
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code: "invalid_argument", source: "request_id" });
+    expect(res.json.card_id).toBeUndefined();
+
+    const list = await call(`${CARDS}?cardholder_id=${holder}`);
+    expect(list.json.items).toHaveLength(1);
+    const listed: string = list.json.items[0].card_id;
+    expect(listed).toMatch(UUID);
+    const card = await findCard(holder, body.request_id);
+    expect(card?.card_id).toBe(listed);
+    expect(card?.request_id).toBe(body.request_id);
+    expect((await call(`${CARDS}/${listed}`)).json.card_id).toBe(listed);
   });
 
   it("duplicate on simulate double-charges, because simulate has no idempotency", async () => {
@@ -606,5 +637,81 @@ describe("balances and INSUFFICIENT_FUNDS (opt-in funds model)", () => {
     await expect(startAirwallexMock({ balances: { USD: amount } })).rejects.toThrow(
       /Invalid balances seed for USD/,
     );
+  });
+});
+
+describe("cards list (GET /issuing/cards)", () => {
+  it("lists a cardholder's cards oldest first in the summary shape, without request_id or controls", async () => {
+    const a = await makeHolder();
+    const b = await makeHolder();
+    const first = await call(CREATE, { body: cardBody(a) });
+    await call(CREATE, { body: cardBody(a) });
+    await call(CREATE, { body: cardBody(b) });
+    const res = await call(`${CARDS}?cardholder_id=${a}`);
+    expect(res.status).toBe(200);
+    expect(res.json.has_more).toBe(false);
+    expect(res.json.items).toHaveLength(2);
+    // Shape probed 2026-10-30: the summary fields only, card number masked.
+    expect(res.json.items[0]).toEqual({
+      brand: "VISA",
+      card_id: first.json.card_id,
+      card_number: first.json.card_number,
+      card_status: "ACTIVE",
+      cardholder_id: a,
+      created_at: first.json.created_at,
+      updated_at: first.json.updated_at,
+    });
+    expect(res.json.items[0].card_number).toMatch(/^\*{12}\d{4}$/);
+    expect(res.json.items[0]).not.toHaveProperty("request_id");
+    expect(res.json.items[0]).not.toHaveProperty("authorization_controls");
+    expect(res.json.items.every((c: { cardholder_id: string }) => c.cardholder_id === a)).toBe(
+      true,
+    );
+  });
+
+  it("filters by card_status, lists every card without a filter, and an unknown cardholder is empty", async () => {
+    const holder = await makeHolder();
+    await call(CREATE, { body: cardBody(holder) });
+    await call(CREATE, { body: cardBody(await makeHolder()) });
+    expect((await call(CARDS)).json.items).toHaveLength(2);
+    expect((await call(`${CARDS}?card_status=ACTIVE`)).json.items).toHaveLength(2);
+    expect((await call(`${CARDS}?card_status=INACTIVE`)).json.items).toHaveLength(0);
+    expect((await call(`${CARDS}?cardholder_id=nobody`)).json).toEqual({
+      has_more: false,
+      items: [],
+    });
+  });
+
+  it("pages with page_num from 0 and page_size (default 100, minimum 10)", async () => {
+    const holder = await makeHolder();
+    const ids: string[] = [];
+    for (let n = 0; n < 12; n++)
+      ids.push((await call(CREATE, { body: cardBody(holder) })).json.card_id);
+    const first = await call(`${CARDS}?cardholder_id=${holder}&page_num=0&page_size=10`);
+    expect(first.json.items.map((c: { card_id: string }) => c.card_id)).toEqual(ids.slice(0, 10));
+    expect(first.json.has_more).toBe(true);
+    const second = await call(`${CARDS}?cardholder_id=${holder}&page_num=1&page_size=10`);
+    expect(second.json.items.map((c: { card_id: string }) => c.card_id)).toEqual(ids.slice(10));
+    expect(second.json.has_more).toBe(false);
+    expect((await call(`${CARDS}?cardholder_id=${holder}`)).json.items).toHaveLength(12);
+  });
+
+  // ASSUMED for this endpoint: the 10 minimum and the 200 maximum come from the docs and the MCP tool text.
+  it.each([
+    ["page_size=9", "BELOW_MIN_PAGE_SIZE"],
+    ["page_size=0", "BELOW_MIN_PAGE_SIZE"],
+    ["page_size=201", "Invalid page_size"],
+    ["page_size=1.5", "Invalid page_size"],
+    ["page_num=-1", "Invalid page_num"],
+    ["page_num=x", "Invalid page_num"],
+  ])("refuses %s with 400 %s", async (qs, message) => {
+    const res = await call(`${CARDS}?${qs}`);
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code: "invalid_argument", message });
+  });
+
+  it("needs a token", async () => {
+    expect((await call(CARDS, { token: null })).status).toBe(401);
+    expect((await call(CARDS)).status).toBe(200);
   });
 });
