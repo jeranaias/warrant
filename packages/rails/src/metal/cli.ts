@@ -90,7 +90,10 @@ export function classifyPay(r: CliResult): MetalOutcome {
   }
   const status = kv.get("status");
   const tx = kv.get("transaction");
-  if (r.code === 0 && status && /^2\d\d$/.test(status) && tx) {
+  // The exit code is not trusted here: on Windows, metal-agent 0.3.3 prints a settled payment and
+  // then crashes on exit (libuv "Assertion failed ... async.c", exit 127). A 2xx status plus a
+  // settlement transaction means the payment settled, whatever the exit code.
+  if (status && /^2\d\d$/.test(status) && tx && /^0x[0-9a-fA-F]{64}$/.test(tx)) {
     const amountCents = parseAmountCents(kv.get("amount"));
     const signedOffer = kv.get("signed-offer");
     return {
