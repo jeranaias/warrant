@@ -10,7 +10,6 @@ interface CallInit {
   method?: string;
   body?: unknown;
   token?: string | null;
-  signal?: AbortSignal;
 }
 
 async function call(path: string, init: CallInit = {}) {
@@ -22,7 +21,6 @@ async function call(path: string, init: CallInit = {}) {
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    ...(init.signal ? { signal: init.signal } : {}),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return { status: res.status, json: (await res.json()) as any };
@@ -48,6 +46,7 @@ type Limit = { amount: number; interval: string };
 const cardBody = (
   cardholder_id: string,
   limits: Limit[] = [{ amount: 10, interval: "PER_TRANSACTION" }],
+  extra: object = {},
 ) => ({
   request_id: `req_${++seq}`,
   cardholder_id,
@@ -58,12 +57,13 @@ const cardBody = (
   authorization_controls: {
     allowed_transaction_count: "MULTIPLE",
     transaction_limits: { currency: "USD", limits },
+    ...extra,
   },
 });
 
-async function makeCard(limits?: Limit[]) {
+async function makeCard(limits?: Limit[], extra?: object) {
   const res = await call("/api/v1/issuing/cards/create", {
-    body: cardBody(await makeHolder(), limits),
+    body: cardBody(await makeHolder(), limits, extra),
   });
   return res.json.card_id as string;
 }
@@ -207,7 +207,7 @@ describe("simulate transactions (single_phase only)", () => {
     expect(ok.json).toMatchObject({
       transaction_amount: -10,
       transaction_currency: "USD",
-      status: "CLEARED",
+      status: "PENDING",
     });
     expect(ok.json.masked_card_number).toMatch(/^\*{12}\d{4}$/);
 
@@ -237,52 +237,63 @@ describe("simulate transactions (single_phase only)", () => {
         { amount: 10, interval: "PER_TRANSACTION" },
         { amount: 15, interval },
       ]);
-      expect((await pay(id, 10)).json.status).toBe("CLEARED");
+      expect((await pay(id, 10)).json.status).toBe("PENDING");
       expect((await pay(id, 6)).json.failure_reason).toBe("LIMIT_EXCEEDED");
-      expect((await pay(id, 5)).json.status).toBe("CLEARED");
+      expect((await pay(id, 5)).json.status).toBe("PENDING");
       const limits = await call(`/api/v1/issuing/cards/${id}/limits`);
       expect(limits.json.limits.find((l: Limit) => l.interval === interval).remaining).toBe(0);
     },
   );
 });
 
-describe("fault injection", () => {
-  it("5xx fails before doing any work, then recovers", async () => {
-    const holder = await makeHolder();
-    mock.fault({ kind: "5xx", path: "/cards/create" });
-    const failed = await call("/api/v1/issuing/cards/create", { body: cardBody(holder) });
-    expect(failed.status).toBe(503);
-    expect(mock.state.cards.size).toBe(0);
-    const ok = await call("/api/v1/issuing/cards/create", { body: cardBody(holder) });
-    expect(ok.status).toBe(201);
+describe("authorization_controls allowlists", () => {
+  it("stores both allowlists on the card", async () => {
+    const id = await makeCard(undefined, {
+      allowed_currencies: ["USD"],
+      allowed_merchant_categories: ["5411"],
+    });
+    const got = await call(`/api/v1/issuing/cards/${id}`);
+    expect(got.json.authorization_controls).toMatchObject({
+      allowed_currencies: ["USD"],
+      allowed_merchant_categories: ["5411"],
+    });
   });
 
-  it("timeout-after does the work, then holds the response past the client timeout", async () => {
-    const holder = await makeHolder();
-    mock.fault({ kind: "timeout-after", ms: 400, path: "/cards/create" });
-    const body = cardBody(holder);
-    await expect(
-      call("/api/v1/issuing/cards/create", { body, signal: AbortSignal.timeout(50) }),
-    ).rejects.toMatchObject({ name: "TimeoutError" });
-    // The caller cannot tell: the card exists. Status must be checked by request_id, never retried blind.
-    expect(mock.state.cards.size).toBe(1);
+  it("declines a currency outside the allowlist with 200 FAILED, not 400", async () => {
+    const id = await makeCard(undefined, { allowed_currencies: ["USD"] });
+    const eur = await pay(id, 5, { single_phase: true, transaction_currency: "EUR" });
+    expect(eur.status).toBe(200);
+    expect(eur.json).toMatchObject({ status: "FAILED", failure_reason: "CURRENCY_NOT_ALLOWED" });
+    expect((await pay(id, 5)).json.status).toBe("PENDING");
   });
 
-  it("duplicate runs the request twice server-side and still yields one card", async () => {
-    const body = cardBody(await makeHolder());
-    mock.fault({ kind: "duplicate", path: "/cards/create" });
-    const first = await call("/api/v1/issuing/cards/create", { body });
-    const second = await call("/api/v1/issuing/cards/create", { body });
-    expect(first.json.card_id).toBe(second.json.card_id);
-    expect(mock.state.cards.size).toBe(1);
+  it("declines a merchant category outside the allowlist, and the decline spends nothing", async () => {
+    const id = await makeCard(
+      [
+        { amount: 10, interval: "PER_TRANSACTION" },
+        { amount: 10, interval: "ALL_TIME" },
+      ],
+      { allowed_merchant_categories: ["5411"] },
+    );
+    const bad = await pay(id, 10);
+    expect(bad.status).toBe(200);
+    expect(bad.json).toMatchObject({
+      status: "FAILED",
+      failure_reason: "MERCHANT_CATEGORY_NOT_ALLOWED",
+      merchant: { category_code: "7531" },
+    });
+    const ok = await pay(id, 10, { single_phase: true, merchant_category_code: "5411" });
+    expect(ok.json).toMatchObject({ status: "PENDING", merchant: { category_code: "5411" } });
   });
 
-  it("applies a fault only `times` requests, then clears", async () => {
-    const holder = await makeHolder();
-    mock.fault({ kind: "5xx", path: "/cards/create", times: 2 });
-    const codes = [];
-    for (let i = 0; i < 3; i++)
-      codes.push((await call("/api/v1/issuing/cards/create", { body: cardBody(holder) })).status);
-    expect(codes).toEqual([503, 503, 201]);
-  });
+  it.each([{ allowed_currencies: "USD" }, { allowed_merchant_categories: [5411] }])(
+    "refuses malformed allowlist %j",
+    async (extra) => {
+      const res = await call("/api/v1/issuing/cards/create", {
+        body: cardBody(await makeHolder(), undefined, extra),
+      });
+      expect(res.status).toBe(400);
+      expect(res.json.source).toBe("authorization_controls");
+    },
+  );
 });

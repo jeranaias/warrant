@@ -12,16 +12,12 @@ interface Out {
   body: unknown;
 }
 
-export type Fault = { path: string; times?: number } & (
-  | { kind: "5xx"; status?: number } // fails before any work: no side effect
-  | { kind: "duplicate" } // runs the request twice, returns the second response
-  | { kind: "timeout-after"; ms: number } // does the work, holds the response ms
-);
-
 interface CardRec {
   card: Json;
   limits: { interval: string; cents: number }[];
   currency: string;
+  currencies: string[]; // allowed_currencies, empty = all
+  categories: string[]; // allowed_merchant_categories, empty = all
   spent: number;
 }
 
@@ -29,7 +25,6 @@ export interface AirwallexMock {
   url: string;
   server: Server;
   close(): Promise<void>;
-  fault(f: Fault): void;
   state: { cardholders: Map<string, Json>; cards: Map<string, CardRec>; transactions: Json[] };
 }
 
@@ -39,6 +34,12 @@ const err = (status: number, code: string, message: string, source?: string): Ou
   body: { code, message, ...(source ? { source } : {}) }, // field names ASSUMED from the sandbox error text
 });
 const stamp = () => new Date().toISOString().replace("Z", "+0000");
+const strList = (x: unknown): string[] | null =>
+  x === undefined || x === null
+    ? []
+    : Array.isArray(x) && x.every((s) => typeof s === "string")
+      ? x
+      : null;
 const mask = (n: number) => "************" + String(1000 + (n % 9000));
 
 /** Positive money in cents, parsed from the decimal string. No exponent, max 2 decimals, no float math. */
@@ -58,11 +59,11 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
   };
   const tokens = new Set<string>();
   const requestIds = new Map<string, { raw: string; card: Json }>();
-  const faults: { f: Fault; left: number }[] = [];
 
   function createCard(b: Json, raw: string): Out {
     const prior = requestIds.get(b.request_id);
-    // Same id + same body replays the card: ASSUMED, the sandbox probe only covered a changed body.
+    // The replay compares the raw request body, so the same fields in a different key order count as
+    // a different body. Same id + same body replays the card: ASSUMED, the probe only changed the body.
     if (prior) {
       return prior.raw === raw
         ? { status: 201, body: prior.card }
@@ -89,12 +90,15 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
       limits.push({ interval: l.interval, cents });
     }
     if (!limits.length) return bad("authorization_controls");
+    const currencies = strList(ctl.allowed_currencies);
+    const categories = strList(ctl.allowed_merchant_categories);
+    if (!currencies || !categories) return bad("authorization_controls");
     const n = state.cards.size;
     const card = {
       alert_settings: { low_remaining_transaction_limit: { enabled: true, percent: 10 } },
       authorization_controls: {
-        allowed_currencies: [],
-        allowed_merchant_categories: [],
+        allowed_currencies: currencies,
+        allowed_merchant_categories: categories,
         allowed_transaction_count: ctl.allowed_transaction_count ?? "MULTIPLE",
         blocked_transaction_usages: [],
         transaction_limits: {
@@ -136,6 +140,8 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
       },
       limits,
       currency: card.authorization_controls.transaction_limits.currency,
+      currencies,
+      categories,
       spent: 0,
     });
     requestIds.set(b.request_id, { raw, card });
@@ -143,6 +149,8 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
   }
 
   function simulate(b: Json): Out {
+    // No idempotency here: the real simulator takes no request_id, so a duplicated or replayed call
+    // charges twice. That is the behaviour control must survive, so do not add a dedupe.
     // Two-phase (authorize, then capture or reverse) arrives with the capture/reverse endpoints.
     // The sandbox default is single_phase=false, so an omitted flag lands here too.
     if (b.single_phase !== true) {
@@ -158,40 +166,53 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     const cents = toCents(b.transaction_amount);
     if (cents === null)
       return err(400, "invalid_argument", "Invalid transaction_amount", "transaction_amount");
-    if (b.transaction_currency !== rec.currency) {
+    const ccy = b.transaction_currency;
+    if (typeof ccy !== "string") {
+      return err(400, "invalid_argument", "Invalid transaction_currency", "transaction_currency");
+    }
+    // Declines are 200 + FAILED, like the sandbox LIMIT_EXCEEDED. Check order is ASSUMED:
+    // currency, then merchant category, then limits.
+    let failure: string | null =
+      rec.currencies.length && !rec.currencies.includes(ccy) ? "CURRENCY_NOT_ALLOWED" : null;
+    if (!failure && ccy !== rec.currency) {
       return err(
         400,
         "invalid_argument",
-        "Mock supports the card's limit currency only",
+        "Mock supports the limit currency only",
         "transaction_currency",
       );
+    }
+    const mcc = String(b.merchant_category_code ?? "7531"); // 7531 is the sandbox default merchant
+    if (!failure && rec.categories.length && !rec.categories.includes(mcc)) {
+      failure = "MERCHANT_CATEGORY_NOT_ALLOWED";
     }
     // DAILY/WEEKLY/MONTHLY are cumulative with no reset: the mock has no clock rollover.
     const over = rec.limits.some((l) =>
       l.interval === "PER_TRANSACTION" ? cents > l.cents : rec.spent + cents > l.cents,
     );
-    if (!over) rec.spent += cents;
+    if (!failure && over) failure = "LIMIT_EXCEEDED";
+    if (!failure) rec.spent += cents;
     const amount = -(cents / 100);
     const txn = {
       transaction_id: randomUUID(),
-      transaction_type: over ? "AUTHORIZATION" : "CLEARING", // CLEARING: UNVERIFIED, single_phase=true not probed
+      transaction_type: "CLEARING", // single_phase=true approval verified; declined is from the docs
       transaction_date: stamp(),
       posted_date: stamp(),
       card_id: b.card_id,
       transaction_amount: amount,
-      transaction_currency: rec.currency,
+      transaction_currency: ccy,
       billing_amount: amount,
-      billing_currency: rec.currency,
+      billing_currency: ccy,
       merchant: {
         name: "AIRPRO_TX_GENERATOR",
         city: "A_CITY_NAME",
         country: "AUS",
-        category_code: "7531",
+        category_code: mcc,
       },
       auth_code: randomUUID().slice(0, 6).toUpperCase(),
       masked_card_number: rec.card.card_number,
-      status: over ? "FAILED" : "CLEARED", // CLEARED: UNVERIFIED, from the docs' single-message scenario
-      ...(over ? { failure_reason: "LIMIT_EXCEEDED" } : {}),
+      status: failure ? "FAILED" : "PENDING", // an approved single_phase is PENDING, not CLEARED
+      ...(failure ? { failure_reason: failure } : {}),
     };
     state.transactions.push(txn);
     return { status: 200, body: txn };
@@ -269,19 +290,7 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString();
     const path = new URL(req.url ?? "/", "http://mock").pathname;
-    const hit = faults.find((x) => x.left > 0 && path.includes(x.f.path));
-    if (hit) hit.left--;
-    const f = hit?.f;
-    if (f?.kind === "5xx")
-      return send(res, err(f.status ?? 503, "service_unavailable", "Injected fault"));
-    let out = route(req.method ?? "GET", path, req.headers, raw);
-    if (f?.kind === "duplicate") out = route(req.method ?? "GET", path, req.headers, raw);
-    if (f?.kind === "timeout-after") {
-      const timer = setTimeout(() => send(res, out), f.ms);
-      res.on("close", () => clearTimeout(timer));
-      return;
-    }
-    send(res, out);
+    send(res, route(req.method ?? "GET", path, req.headers, raw));
   });
 
   await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
@@ -290,7 +299,6 @@ export async function startAirwallexMock(port = 0): Promise<AirwallexMock> {
     url: `http://127.0.0.1:${addr.port}`,
     server,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-    fault: (f) => void faults.push({ f, left: f.times ?? 1 }),
     state,
   };
 }
