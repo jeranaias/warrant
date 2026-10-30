@@ -1,5 +1,5 @@
 import type { KeyObject } from "node:crypto";
-import { PaymentProposal, PurposeVerdict } from "@warrant/contracts";
+import { BudgetChangeProposal, PaymentProposal, PurposeVerdict } from "@warrant/contracts";
 import type {
   ControlDecision,
   Money,
@@ -79,7 +79,14 @@ export type ControlEvent =
   | { type: "approval_requested"; pending: PendingApproval }
   | { type: "approval_decided"; proposalId: string; ok: boolean; decision?: "approved" | "denied" }
   | { type: "execution"; proposalId: string; execution: Execution }
-  | { type: "kill_switch"; result: KillSwitchResult };
+  | { type: "kill_switch"; result: KillSwitchResult }
+  | {
+      type: "budget_changed";
+      proposalId: string;
+      warrantId: string;
+      fromVersion: number;
+      toVersion: number;
+    };
 
 export interface ControllerOptions {
   ownerPublicKey: KeyObject;
@@ -96,6 +103,13 @@ export interface ControllerOptions {
   killSwitchEngaged?: () => boolean;
   clock?: () => Date;
   onEvent?: (e: ControlEvent) => void;
+  /**
+   * Owner side, run only after the owner approved a BudgetChangeProposal: replace the Metal
+   * mandate when the warrant has one, then sign and store the next warrant version (ADR-009 #4).
+   */
+  applyBudgetChange?: (warrant: Warrant, change: BudgetChangeProposal) => Promise<Warrant>;
+  /** Extra checks on a budget change, e.g. the total across all agents (ADR-009 #1). */
+  budgetCheck?: (warrant: Warrant, change: BudgetChangeProposal) => string[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -110,6 +124,7 @@ export class Controller {
   private readonly purpose: PurposeChecker;
   private readonly clock: () => Date;
   private readonly proposals = new Map<string, PaymentProposal>();
+  private readonly budgetChanges = new Map<string, BudgetChangeProposal>();
 
   constructor(private readonly opts: ControllerOptions) {
     this.ledger = opts.ledger ?? new Ledger();
@@ -128,9 +143,10 @@ export class Controller {
   }
 
   /** The owner's answer to a pending approval. */
-  async decideApproval(raw: unknown): Promise<SubmitResult & { ok: boolean }> {
+  async decideApproval(raw: unknown): Promise<SubmitResult & { ok: boolean; warrant?: Warrant }> {
     const proposalId =
       raw && typeof raw === "object" && "proposalId" in raw ? String(raw.proposalId) : "";
+    if (this.budgetChanges.has(proposalId)) return this.decideBudgetChange(raw, proposalId);
     const proposal = this.proposals.get(proposalId);
     const warrant = proposal ? this.opts.getWarrant(proposal.warrantId) : undefined;
     const current = proposal && warrant ? this.approvalView(proposal, warrant) : undefined;
@@ -189,7 +205,10 @@ export class Controller {
   ): Promise<KillSwitchResult> {
     const now = this.clock();
     this.killSwitch.flip(now);
-    for (const id of this.approvals.clear()) this.proposals.delete(id);
+    for (const id of this.approvals.clear()) {
+      this.proposals.delete(id);
+      this.budgetChanges.delete(id);
+    }
     const result = await this.killSwitch.finish(
       {
         eventId: `kill_${now.getTime()}`,
@@ -205,6 +224,94 @@ export class Controller {
     );
     this.emit({ type: "kill_switch", result });
     return result;
+  }
+
+  /**
+   * Treasury proposes new limits for a warrant. Always the owner's decision (ADR-007 item 1);
+   * nothing changes until the owner approves exactly what was shown.
+   */
+  proposeBudgetChange(raw: unknown): {
+    ok: boolean;
+    approval?: PendingApproval;
+    problems?: string[];
+  } {
+    const parsed = BudgetChangeProposal.safeParse(raw);
+    if (!parsed.success) return { ok: false, problems: ["malformed budget change"] };
+    const change = parsed.data;
+    const warrant = this.opts.getWarrant(change.warrantId);
+    if (!warrant) return { ok: false, problems: ["no such warrant"] };
+    const problems = this.budgetProblems(warrant, change);
+    if (problems.length > 0) return { ok: false, problems };
+    this.budgetChanges.set(change.proposalId, change);
+    const approval = this.approvals.request(
+      change.proposalId,
+      budgetView(change, warrant),
+      ["budget change: always the owner's decision"],
+      this.clock(),
+    );
+    this.emit({ type: "approval_requested", pending: approval });
+    return { ok: true, approval };
+  }
+
+  private async decideBudgetChange(
+    raw: unknown,
+    proposalId: string,
+  ): Promise<SubmitResult & { ok: boolean; warrant?: Warrant }> {
+    const change = this.budgetChanges.get(proposalId);
+    const warrant = change ? this.opts.getWarrant(change.warrantId) : undefined;
+    const current = change && warrant ? budgetView(change, warrant) : undefined;
+    const outcome = this.approvals.decide(raw, current);
+    if (!outcome.ok) {
+      if (!this.approvals.get(proposalId)) this.budgetChanges.delete(proposalId);
+      this.emit({ type: "approval_decided", proposalId, ok: false });
+      return { ok: false, error: outcome.error };
+    }
+    this.budgetChanges.delete(proposalId);
+    this.emit({ type: "approval_decided", proposalId, ok: true, decision: outcome.decision });
+    if (outcome.decision === "denied") return { ok: true, blockedBy: "owner" };
+    if (!change || !warrant) return { ok: false, error: "budget change no longer known" };
+
+    // Spend may have moved while the owner looked: check again before anything changes.
+    const problems = this.budgetProblems(warrant, change);
+    if (problems.length > 0) return { ok: false, blockedBy: "rules", error: problems.join("; ") };
+    if (!this.opts.applyBudgetChange) return { ok: false, error: "no owner signer configured" };
+    let next: Warrant;
+    try {
+      next = await this.opts.applyBudgetChange(warrant, change);
+    } catch (e) {
+      return { ok: false, error: `could not apply: ${(e as Error).message}`.slice(0, 300) };
+    }
+    if (!verifyWarrant(next, this.opts.ownerPublicKey) || next.version <= warrant.version) {
+      return { ok: false, error: "the new warrant is not a newer version signed by the owner" };
+    }
+    this.emit({
+      type: "budget_changed",
+      proposalId,
+      warrantId: warrant.warrantId,
+      fromVersion: warrant.version,
+      toVersion: next.version,
+    });
+    return { ok: true, warrant: next };
+  }
+
+  private budgetProblems(w: Warrant, c: BudgetChangeProposal): string[] {
+    const problems: string[] = [];
+    if (this.stopped()) problems.push("kill switch engaged");
+    const cap = c.newPerPaymentCap ?? w.perPaymentCap;
+    const currency = w.totalBudget.currency;
+    if (c.newTotalBudget.currency !== currency || cap.currency !== currency) {
+      problems.push(`amounts must be in ${currency}`);
+    }
+    // A replaced mandate carries its spend forward, so the new budget must exceed it.
+    const committed = this.ledger.committedCents(w.warrantId);
+    if (c.newTotalBudget.cents <= committed) {
+      problems.push(
+        `new budget ${c.newTotalBudget.cents} must exceed ${committed} already committed`,
+      );
+    }
+    if (cap.cents > c.newTotalBudget.cents) problems.push("per-payment cap exceeds the budget");
+    problems.push(...(this.opts.budgetCheck?.(w, c) ?? []));
+    return problems;
   }
 
   private stopped(): boolean {
@@ -516,6 +623,18 @@ export class Controller {
   private emit(e: ControlEvent): void {
     this.opts.onEvent?.(e);
   }
+}
+
+/** What the owner approves for a budget change: fixed fields only, so spend can't void it. */
+function budgetView(c: BudgetChangeProposal, w: Warrant): ApprovalView {
+  return {
+    kind: "budget_change",
+    proposalId: c.proposalId,
+    proposedBy: c.agentId,
+    warrant: { warrantId: w.warrantId, version: w.version, agentId: w.agentId, role: w.agentRole },
+    from: { perPaymentCap: w.perPaymentCap, totalBudget: w.totalBudget },
+    to: { perPaymentCap: c.newPerPaymentCap ?? w.perPaymentCap, totalBudget: c.newTotalBudget },
+  };
 }
 
 function decision(
