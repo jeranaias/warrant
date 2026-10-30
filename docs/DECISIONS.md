@@ -207,3 +207,26 @@ Decision:
    Consequences: the dispute beat moves earlier in the demo script; lane C adds the pass to
    `packages/control` and `apps/store`; lane A adds attacks that try to buy without a valid pass
    or with someone else's.
+
+## ADR-013: Fewer owner taps: a signed payee is approved; ordinary refunds go through
+
+Date: 2026-10-30 Status: accepted (amends ADR-007 item 2)
+
+Context: ADR-007 asked the owner about the first payment to every payee and about every refund.
+The owner already named each payee when signing the warrant, so the first-payment question asked
+again about something decided. Refunds are already bounded by `refund_matches_order` (a stored
+order, paid back to its own payer, at most its price, once). Too many questions is why people
+switch safety checks off; the owner's taps per demo run is a number we show.
+Decision:
+
+1. ADR-007 item 2 is withdrawn: a payee on the signed warrant is paid without asking, first
+   payment included. A payee that is not on the warrant is still refused by the rules.
+2. A refund the rules accept goes through without the owner unless it looks unusual: more than
+   `REFUND_WITHOUT_OWNER_MAX` (25 cents), or the third or later refund to the same customer
+   within 24 hours (`REFUNDS_WITHOUT_OWNER_PER_DAY` = 2). Both are code constants in
+   `business.ts`.
+3. Items 1, 3, 4 and 5 of ADR-007 are unchanged: budget changes, recurring payments, Airwallex
+   transfers or FX of 100.00 or more, and an `uncertain` purpose verdict always ask.
+   Consequences: the normal demo run needs the owner only for the budget change and anything
+   unusual. A later "always allow this" choice on the approval screen would turn a repeated
+   approval into a new signed warrant version; it is not built yet.

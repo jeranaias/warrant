@@ -13,9 +13,11 @@ Local fake Airwallex and Metal servers so nobody waits on sandbox access.
 Rules:
 
 - Shapes follow the real sandbox APIs. Check them with the Airwallex docs MCP (see RUNBOOK).
-- The real legacy `GET /issuing/transactions` returned nothing for pending or declined transactions on
-  2026-10-30. They may only show once settled. Don't rely on this list for pending state; use the
-  simulate response. The mock lists them anyway, and enforces the sandbox's `page_size` minimum of 10.
+- The legacy `GET /issuing/transactions` answers `{has_more, items}` and refuses a `page_size` below 10
+  (both confirmed against the real sandbox on 2026-10-30). Its item shape, and whether it shows pending and
+  declined transactions, are unverified: the probe that seemed to show an empty list used a key whose
+  account has no cards. The mock lists every simulated transaction. Use the simulate response for
+  pending state.
 - Seeding: `startAirwallexMock({ balances: { USD: 100 }, rates: { EURUSD: "1.122579" }, now })`.
   `rates` are decimal strings, one per market pair (BASEQUOTE, QUOTE per 1 BASE, so one entry covers both
   directions). `now` is a clock in ms for expiring quotes in tests.

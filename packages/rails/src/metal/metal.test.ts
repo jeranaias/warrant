@@ -186,6 +186,27 @@ describe("MetalAdapter", () => {
     expect(f.calls[0]?.slice(0, 3)).toEqual(["pay", "http://127.0.0.1:4022/data", "--mandate"]);
   });
 
+  it("sends control's headers (the warrant pass) with the paid request", async () => {
+    const f = fake(res({ stdout: PAID }));
+    const a = new MetalAdapter({ run: f.run, metalHome: "/m", rpcUrl: "https://rpc" });
+    await a.execute(ins({ headers: { "x-warrant-pass": "eyJwYXNzIjp7fX0" } }));
+    const args = f.calls[0] ?? [];
+    expect(args[args.indexOf("--header") + 1]).toBe("x-warrant-pass: eyJwYXNzIjp7fX0");
+  });
+
+  it("refuses a header that could smuggle another line, without calling the CLI", async () => {
+    const f = fake();
+    const a = new MetalAdapter({ run: f.run, metalHome: "/m", rpcUrl: "https://rpc" });
+    const bad = [{ "x-warrant-pass": "a\r\nx-other: b" }, { "bad name": "a" }];
+    for (const headers of bad) {
+      const r = await a.execute(
+        ins({ idempotencyKey: `idem-${Object.keys(headers)[0]}`, headers }),
+      );
+      expect(r).toEqual({ status: "failed", detail: "invalid header; nothing signed" });
+    }
+    expect(f.calls).toHaveLength(0);
+  });
+
   it("refuses before signing when the seller's price differs from what control approved", async () => {
     const f = fake();
     const a = new MetalAdapter({
