@@ -7,13 +7,13 @@ Every payment crosses lanes in this order:
 A agent proposes -> C rules check -> A purpose check -> C ledger reserves -> C Metal x402 | B Airwallex card / FX -> D dashboard shows it
 ```
 
-| Lane | Name                    | Owner                | Packages                                                                    | Load                   |
-| ---- | ----------------------- | -------------------- | --------------------------------------------------------------------------- | ---------------------- |
-| A    | Agents & attacks        | Elisei (@truelumpen) | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
-| B    | Airwallex rails         | Max (@GoudyMT)       | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
-| C    | Core: Metal + ledger    | @jeranaias (lead)    | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
-| D    | Dashboard, demo & pitch | Eva                  | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
-| R    | Reviewer                | @jeranaias           | approves every PR before merge                                              | all lanes              |
+| Lane | Name                    | Owner                       | Packages                                                                    | Load                   |
+| ---- | ----------------------- | --------------------------- | --------------------------------------------------------------------------- | ---------------------- |
+| A    | Agents & attacks        | Elisei (@truelumpen)        | `packages/agents`, `packages/control/purpose`, `bench`                      | medium-high            |
+| B    | Airwallex rails         | Max (@GoudyMT)              | `packages/rails/airwallex`, `packages/mocks/airwallex`                      | medium                 |
+| C    | Core: Metal + ledger    | @jeranaias (lead)           | `packages/contracts`, `control/{rules,ledger}`, `rails/metal`, `apps/store` | highest, critical path |
+| D    | Dashboard, demo & pitch | Eva (@evacatalina123-cyber) | `apps/dashboard`, `docs/DEMO.md`, README, video                             | medium, peaks late     |
+| R    | Reviewer                | @jeranaias                  | approves every PR before merge                                              | all lanes              |
 
 Labels on the board: `lane:A`, `lane:B`, `lane:C`, `lane:D`.
 
