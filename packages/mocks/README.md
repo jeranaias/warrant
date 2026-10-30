@@ -6,7 +6,8 @@ Local fake Airwallex and Metal servers so nobody waits on sandbox access.
   `POST /issuing/cards/{id}/update`), `single_phase` simulated purchases, `GET /issuing/transactions`,
   `GET /balances/current`, simulated deposits (`POST /simulation/deposit/create`, `GET /deposits`), FX
   quotes (`POST /fx/quotes/create`) and conversions (`POST /fx/conversions/create`,
-  `GET /fx/conversions/{id}`). Still to do: beneficiaries and transfers.
+  `GET /fx/conversions/{id}`) and EUR SEPA beneficiaries (`POST /beneficiaries/create`,
+  `GET /beneficiaries/{id}`). Still to do: transfers.
 - `src/metal/`: an x402 seller that answers 402 with payment requirements, settles, and reports
   status by idempotency key.
 
@@ -36,6 +37,17 @@ Rules:
   sandbox account and never had the conversion.
 - The real conversion errors carry a `details` array with a `correlation_id`; the mock adds one.
 - Anything the real sandbox was not asked is marked `ASSUMED` in `src/airwallex/index.ts`.
+- **The Airwallex MCP and a REST key are different sandbox accounts.** Wallets, beneficiaries, cards and
+  conversions made through one are invisible to the other: a beneficiary made through the MCP gave a 200 with an
+  empty body on `GET` and a `045` when used in a transfer. Two earlier "findings" came from mixing them up and
+  were withdrawn. Probe the shapes our adapter will see with the REST key (`curl.exe` with `$e` and `$t`).
+- Beneficiaries (probed 2026-10-30 with a REST key): creating the same one twice is two `201`s with two ids, so
+  duplicates are allowed and "created once" is the caller's job. The echo has no `company_name`, has `bank_name`
+  filled in from the IBAN, and defaults `payer_entity_type` to `COMPANY`. A bad IBAN is `400`
+  `validation_failed` with `details.errors[{code: "083", source: "beneficiary.bank_details.iban"}]` and no
+  top-level `source`. An unknown id is `200` with no body. The sandbox also checks a bank directory (the docs
+  example IBAN `ES8023100001180000012345` is rejected, `ES9121000418450200051332` works); the mock only checks
+  the mod-97 checksum and the country, and knows one bank name.
 - Support fault injection: timeouts, duplicate responses, 5xx. Control must survive these.
 - After a timed-out `POST /issuing/cards/create`, never resend: a reused card `request_id` is a 400, even
   with the same body. Find the card with `GET /issuing/cards?cardholder_id=`, then `GET /issuing/cards/{id}`

@@ -1287,3 +1287,192 @@ describe("conversions list (GET /fx/conversions)", () => {
     expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 });
   });
 });
+
+const BENS = "/api/v1/beneficiaries";
+// A real Spanish IBAN (CaixaBank, bank code 2100). The sandbox rejected the docs example
+// ES8023100001180000012345 even though its checksum is fine: it also looks the bank up.
+const GOOD_IBAN = "ES9121000418450200051332";
+
+const benBody = (): Json => ({
+  beneficiary: {
+    type: "BANK_ACCOUNT",
+    entity_type: "COMPANY",
+    company_name: "Warrant Licence Fee Probe SL",
+    address: {
+      street_address: "Calle de Prueba 1",
+      city: "Madrid",
+      state: "ES-M",
+      postcode: "28001",
+      country_code: "ES",
+    },
+    bank_details: {
+      account_currency: "EUR",
+      account_name: "Warrant Licence Fee Probe SL",
+      bank_country_code: "ES",
+      iban: GOOD_IBAN,
+    },
+  },
+  transfer_methods: ["LOCAL"],
+  nickname: "warrant-licence-fee-probe",
+});
+
+/** A copy of the body with the value at a dotted path replaced, or removed when `value` is undefined. */
+function edit(path: string, value?: unknown): Json {
+  const body = benBody();
+  const keys = path.split(".");
+  const last = keys.pop() as string;
+  let node = body;
+  for (const k of keys) node = node[k];
+  if (value === undefined) Reflect.deleteProperty(node, last);
+  else node[last] = value;
+  return body;
+}
+
+const VALIDATION_MESSAGE =
+  "The request failed our schema validation. Refer to the errors object for erroneous fields, codes and parameters.";
+
+describe("beneficiaries", () => {
+  it("creates a EUR SEPA company beneficiary and echoes the sandbox shape", async () => {
+    const res = await call(`${BENS}/create`, { body: benBody() });
+    expect(res.status).toBe(201);
+    // Real REST answer (2026-10-30): no company_name in the echo, bank_name added from the IBAN, and
+    // payer_entity_type defaulted to COMPANY.
+    expect(res.json).toEqual({
+      beneficiary: {
+        address: {
+          city: "Madrid",
+          country_code: "ES",
+          postcode: "28001",
+          state: "ES-M",
+          street_address: "Calle de Prueba 1",
+        },
+        bank_details: {
+          account_currency: "EUR",
+          account_name: "Warrant Licence Fee Probe SL",
+          bank_country_code: "ES",
+          bank_name: "CAIXABANK, S.A.",
+          iban: GOOD_IBAN,
+        },
+        entity_type: "COMPANY",
+        type: "BANK_ACCOUNT",
+      },
+      id: expect.any(String),
+      nickname: "warrant-licence-fee-probe",
+      payer_entity_type: "COMPANY",
+      transfer_methods: ["LOCAL"],
+    });
+  });
+
+  it("reads it back by id; an unknown id is 200 with an empty body, as the sandbox answered", async () => {
+    const made = await call(`${BENS}/create`, { body: benBody() });
+    const got = await call(`${BENS}/${made.json.id}`);
+    expect(got.status).toBe(200);
+    expect(got.json).toEqual(made.json);
+
+    // Probed once, with an id that belongs to another sandbox account: 200 and no body at all.
+    const res = await fetch(`${mock.url}${BENS}/nope`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("");
+  });
+
+  it("allows duplicates: the same beneficiary created twice is 201 both times, with two ids", async () => {
+    const first = await call(`${BENS}/create`, { body: benBody() });
+    const second = await call(`${BENS}/create`, { body: benBody() });
+    expect([first.status, second.status]).toEqual([201, 201]);
+    expect(second.json.id).not.toBe(first.json.id);
+    expect(mock.state.beneficiaries.size).toBe(2);
+  });
+
+  it("refuses a bad IBAN with the exact sandbox body", async () => {
+    const res = await call(`${BENS}/create`, {
+      body: edit("beneficiary.bank_details.iban", "ES9121000418450200051333"),
+    });
+    expect(res.status).toBe(400);
+    // Real REST answer (2026-10-30). Note: no top-level "source" on this error shape.
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code: "083", source: "beneficiary.bank_details.iban" }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(mock.state.beneficiaries.size).toBe(0);
+  });
+
+  // The 083 code for these is ASSUMED: only the wrong-checksum case was probed.
+  it.each([
+    ["a country prefix that differs from bank_country_code", "DE89370400440532013000"],
+    ["lowercase letters", "es9121000418450200051332"],
+    ["too short", "ES91"],
+    ["not a string", 12345],
+  ])("refuses an IBAN with %s", async (_why, iban) => {
+    const res = await call(`${BENS}/create`, { body: edit("beneficiary.bank_details.iban", iban) });
+    expect(res.status).toBe(400);
+    expect(res.json.details.errors).toEqual([
+      { code: "083", source: "beneficiary.bank_details.iban" },
+    ]);
+  });
+
+  // A valid-checksum IBAN with an unknown bank code is accepted here, a known gap: the real sandbox
+  // rejected the docs example ES8023100001180000012345 (bank 2310) with 083, so it checks a bank directory.
+  it("does not mirror the sandbox's bank directory: a valid IBAN of any bank is accepted", async () => {
+    const res = await call(`${BENS}/create`, {
+      body: edit("beneficiary.bank_details.iban", "ES8023100001180000012345"),
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.beneficiary.bank_details).not.toHaveProperty("bank_name");
+  });
+
+  // Error codes and sources for these are ASSUMED: field_required for a missing field, invalid_argument
+  // for a bad value, in the same validation_failed envelope.
+  it.each([
+    ["company_name is missing", "beneficiary.company_name", undefined, "field_required"],
+    ["company_name is empty", "beneficiary.company_name", "", "invalid_argument"],
+    ["entity_type is PERSONAL", "beneficiary.entity_type", "PERSONAL", "invalid_argument"],
+    [
+      "account_currency is USD",
+      "beneficiary.bank_details.account_currency",
+      "USD",
+      "invalid_argument",
+    ],
+    [
+      "account_name is all digits",
+      "beneficiary.bank_details.account_name",
+      "12345",
+      "invalid_argument",
+    ],
+    [
+      "bank_country_code is missing",
+      "beneficiary.bank_details.bank_country_code",
+      undefined,
+      "field_required",
+    ],
+    ["the street is too short", "beneficiary.address.street_address", "Ab", "invalid_argument"],
+    ["the city is missing", "beneficiary.address.city", undefined, "field_required"],
+    ["the postcode is missing", "beneficiary.address.postcode", undefined, "field_required"],
+    [
+      "the address country is missing",
+      "beneficiary.address.country_code",
+      undefined,
+      "field_required",
+    ],
+    ["transfer_methods is missing", "transfer_methods", undefined, "field_required"],
+    ["transfer_methods is SWIFT only", "transfer_methods", ["SWIFT"], "invalid_argument"],
+    ["transfer_methods is empty", "transfer_methods", [], "invalid_argument"],
+  ])("refuses a body where %s", async (_why, path, value, code) => {
+    const res = await call(`${BENS}/create`, { body: edit(path, value) });
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code, source: path }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(mock.state.beneficiaries.size).toBe(0);
+  });
+
+  it("needs a token", async () => {
+    expect((await call(`${BENS}/create`, { token: null, body: benBody() })).status).toBe(401);
+    expect((await call(`${BENS}/nope`, { token: null })).status).toBe(401);
+    expect((await call(`${BENS}/create`, { body: benBody() })).status).toBe(201);
+  });
+});

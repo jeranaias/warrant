@@ -1,6 +1,6 @@
 // Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
 // transactions, a transactions list, an opt-in wallet with INSUFFICIENT_FUNDS declines, simulated
-// deposits, FX quotes and conversions.
+// deposits, FX quotes, conversions and beneficiaries.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -63,6 +63,7 @@ export interface AirwallexMock {
     deposits: Json[];
     quotes: Map<string, QuoteRec>;
     conversions: Map<string, Json>;
+    beneficiaries: Map<string, Json>;
     rates: Map<string, number>; // pair -> rate in integer micro-units
   };
 }
@@ -141,6 +142,30 @@ function convert(cents: number, fromBase: boolean, micro: number): number | null
   return out <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(out) : null;
 }
 
+// Validation failures on beneficiaries (and transfers) share one envelope, probed 2026-10-30: note there
+// is no top-level "source", the failing fields are listed in details.errors.
+const VALIDATION_MESSAGE =
+  "The request failed our schema validation. Refer to the errors object for erroneous fields, codes and parameters.";
+const validationFailed = (errors: { code: string; source: string }[]): Out => ({
+  status: 400,
+  body: { code: "validation_failed", details: { errors }, message: VALIDATION_MESSAGE },
+});
+
+/** Country, two check digits, then 11 to 30 letters or digits, and the ISO 7064 mod-97 check. */
+function validIban(x: unknown): x is string {
+  if (typeof x !== "string" || !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(x)) return false;
+  const digits = (x.slice(4) + x.slice(0, 4)).replace(/[A-Z]/g, (c) =>
+    String(c.charCodeAt(0) - 55),
+  );
+  let rem = 0;
+  for (const ch of digits) rem = (rem * 10 + Number(ch)) % 97;
+  return rem === 1;
+}
+
+// The sandbox adds bank_name from the IBAN (a bank directory). The mock knows only the bank we probed:
+// ES + bank code 2100. Any other bank gets no bank_name (a known gap, ASSUMED).
+const BANK_NAMES: Record<string, string> = { "ES:2100": "CAIXABANK, S.A." };
+
 export async function startAirwallexMock({
   port = 0,
   balances = {},
@@ -154,6 +179,7 @@ export async function startAirwallexMock({
     deposits: [],
     quotes: new Map(),
     conversions: new Map(),
+    beneficiaries: new Map(),
     rates: new Map(),
   };
   const conversionRequests = new Set<string>();
@@ -682,6 +708,99 @@ export async function startAirwallexMock({
     };
   }
 
+  // POST /beneficiaries/create. Shape probed 2026-10-30 with our own REST key (a beneficiary made through
+  // the MCP lives in a different sandbox account and is invisible here): 201 with the beneficiary echoed
+  // WITHOUT company_name, bank_name added from the IBAN, payer_entity_type defaulting to COMPANY, and a new
+  // id every time (the same beneficiary twice is two 201s). A bad IBAN is 400 validation_failed with
+  // details.errors [{code "083", source "beneficiary.bank_details.iban"}] and no top-level source.
+  // Scope is EUR SEPA companies: PERSONAL, other currencies and SWIFT are refused. ASSUMED: those refusals,
+  // every other error code and source (field_required / invalid_argument), that only presence is checked
+  // for postcode and state (the sandbox wants 5 digits and an ES-xx state for Spain), and that the 083 code
+  // also covers a malformed IBAN or one whose country differs from bank_country_code.
+  function createBeneficiary(b: Json): Out {
+    const ben: Json = b.beneficiary ?? {};
+    const bank: Json = ben.bank_details ?? {};
+    const addr: Json = ben.address ?? {};
+    const errors: { code: string; source: string }[] = [];
+    const text = (v: unknown, source: string, min: number, max: number) => {
+      if (v === undefined) errors.push({ code: "field_required", source });
+      else if (typeof v !== "string" || v.length < min || v.length > max) {
+        errors.push({ code: "invalid_argument", source });
+      }
+    };
+    if (ben.entity_type === undefined)
+      errors.push({ code: "field_required", source: "beneficiary.entity_type" });
+    else if (ben.entity_type !== "COMPANY")
+      errors.push({ code: "invalid_argument", source: "beneficiary.entity_type" });
+    if (ben.type !== undefined && ben.type !== "BANK_ACCOUNT") {
+      errors.push({ code: "invalid_argument", source: "beneficiary.type" });
+    }
+    text(ben.company_name, "beneficiary.company_name", 1, 100);
+    if (bank.account_currency === undefined) {
+      errors.push({ code: "field_required", source: "beneficiary.bank_details.account_currency" });
+    } else if (bank.account_currency !== "EUR") {
+      errors.push({
+        code: "invalid_argument",
+        source: "beneficiary.bank_details.account_currency",
+      });
+    }
+    text(bank.account_name, "beneficiary.bank_details.account_name", 2, 200);
+    if (typeof bank.account_name === "string" && /^\d+$/.test(bank.account_name)) {
+      errors.push({ code: "invalid_argument", source: "beneficiary.bank_details.account_name" });
+    }
+    text(bank.bank_country_code, "beneficiary.bank_details.bank_country_code", 2, 2);
+    const countryMismatch =
+      typeof bank.bank_country_code === "string" &&
+      validIban(bank.iban) &&
+      bank.iban.slice(0, 2) !== bank.bank_country_code;
+    if (!validIban(bank.iban) || countryMismatch) {
+      errors.push({ code: "083", source: "beneficiary.bank_details.iban" });
+    }
+    text(addr.street_address, "beneficiary.address.street_address", 5, 200);
+    text(addr.city, "beneficiary.address.city", 1, 50);
+    text(addr.state, "beneficiary.address.state", 1, 50);
+    text(addr.postcode, "beneficiary.address.postcode", 1, 20);
+    text(addr.country_code, "beneficiary.address.country_code", 2, 2);
+    const methods = b.transfer_methods;
+    if (methods === undefined) errors.push({ code: "field_required", source: "transfer_methods" });
+    else if (
+      !Array.isArray(methods) ||
+      methods.length === 0 ||
+      methods.some((m) => m !== "LOCAL")
+    ) {
+      errors.push({ code: "invalid_argument", source: "transfer_methods" });
+    }
+    if (errors.length) return validationFailed(errors);
+    const iban: string = bank.iban;
+    const bankName = BANK_NAMES[iban.slice(0, 2) + ":" + iban.slice(4, 8)];
+    const rec = {
+      beneficiary: {
+        address: {
+          city: addr.city,
+          country_code: addr.country_code,
+          postcode: addr.postcode,
+          state: addr.state,
+          street_address: addr.street_address,
+        },
+        bank_details: {
+          account_currency: "EUR",
+          account_name: bank.account_name,
+          bank_country_code: bank.bank_country_code,
+          ...(bankName ? { bank_name: bankName } : {}),
+          iban,
+        },
+        entity_type: "COMPANY",
+        type: "BANK_ACCOUNT",
+      },
+      id: randomUUID(),
+      ...(typeof b.nickname === "string" ? { nickname: b.nickname } : {}),
+      payer_entity_type: "COMPANY",
+      transfer_methods: methods,
+    };
+    state.beneficiaries.set(rec.id, rec);
+    return { status: 201, body: rec };
+  }
+
   function route(
     method: string,
     path: string,
@@ -777,11 +896,22 @@ export async function startAirwallexMock({
         ? { status: 200, body: found }
         : fxErr(404, "resource_not_found", "Conversion not found", "conversion_id");
     }
+    if (method === "POST" && path === "/api/v1/beneficiaries/create") return createBeneficiary(b);
+    const bene = /^\/api\/v1\/beneficiaries\/([^/]+)$/.exec(path);
+    if (method === "GET" && bene) {
+      // Probed once, with an id from another sandbox account: an unknown id is 200 with NO body.
+      const found = state.beneficiaries.get(bene[1] ?? "");
+      return found ? { status: 200, body: found } : { status: 200, body: undefined };
+    }
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }
 
   const send = (res: ServerResponse, out: Out) => {
     if (res.destroyed) return;
+    if (out.body === undefined) {
+      res.writeHead(out.status).end();
+      return;
+    }
     res.writeHead(out.status, { "content-type": "application/json" }).end(JSON.stringify(out.body));
   };
 
