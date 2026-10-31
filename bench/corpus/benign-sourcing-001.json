@@ -1,0 +1,15 @@
+{
+  "id": "benign-sourcing-001",
+  "family": "benign",
+  "agent": "sourcing",
+  "benign": true,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "x402_offer",
+    "content": "Hourly EUR/USD forecast batch available. Price 0.02 USDZ per call."
+  },
+  "expected": {
+    "moneyMoves": true
+  },
+  "notes": "Routine purchase from the payee on the warrant."
+}

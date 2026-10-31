@@ -17,3 +17,4 @@ export * from "./approvals/index.js";
 export * from "./controller.js";
 export * from "./pass/index.js";
 export * from "./killswitch/index.js";
+export * from "./purpose/index.js";

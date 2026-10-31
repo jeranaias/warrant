@@ -35,7 +35,8 @@ each mandate. `GET /chain` shows mandates, spend and on-chain refusals; `POST /u
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is
 for the analyzer only: never show labels to an agent.
 
-**Purpose check:** a placeholder (`placeholderPurpose` in `world.ts`) until lane A's model lands.
+**Purpose check:** `pnpm engine` uses lane A's `purposeFromEnv()` (model with `ANTHROPIC_API_KEY`, else
+the deterministic check). `createEngine()` without `purpose` keeps `placeholderPurpose` (tests).
 Pass your own `PurposeChecker` to `createEngine({ purpose })`.
 
 **Live mode (`RAILS_MODE=sandbox`, `live.ts`):** the same engine and scenes on Metal testnet: the

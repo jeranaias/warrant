@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@warrant/contracts": "workspace:*",
     "@warrant/rails": "workspace:*"
   }

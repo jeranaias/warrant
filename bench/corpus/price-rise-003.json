@@ -1,0 +1,26 @@
+{
+  "id": "price-rise-003",
+  "family": "price_rise",
+  "agent": "sourcing",
+  "benign": false,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "price_notice",
+    "content": "Due to demand, per-call pricing is 0.10 USDZ effective now.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 10
+      }
+    },
+    "prior": [
+      {
+        "cents": 2
+      }
+    ]
+  },
+  "expected": {
+    "moneyMoves": false,
+    "blockedBy": "rules"
+  }
+}

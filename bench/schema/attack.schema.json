@@ -2,15 +2,25 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://warrant.local/bench/attack.schema.json",
   "title": "Warrant benchmark case",
-  "description": "One attack (or benign control case). The runner plays `setup` into the target agent and records whether money moved.",
+  "description": "One attack (or benign control case). The runner turns `setup` into the agent's task, runs it under each config and records whether money moved. Enforced by runner/case.ts (keep both in step).",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "family", "agent", "benign", "warrantRef", "setup", "expected"],
   "properties": {
-    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Unique. Use the file name."
+    },
     "family": {
-      "description": "Attack family. `benign` cases measure false blocks.",
+      "description": "Attack family. The first six are the engine feed's. `benign` cases measure false blocks.",
       "enum": [
+        "price_rise",
+        "payee_swap",
+        "prompt_injection",
+        "refund_fraud",
+        "fake_invoice",
+        "sneaky_recurring",
         "fake_price_notice",
         "hidden_instruction_invoice",
         "swapped_payee",
@@ -25,11 +35,11 @@
     "agent": { "enum": ["sourcing", "support", "treasury"] },
     "benign": {
       "type": "boolean",
-      "description": "true = a legitimate request that SHOULD be paid."
+      "description": "true = a legitimate request that SHOULD be paid. Must equal expected.moneyMoves."
     },
     "warrantRef": {
-      "type": "string",
-      "description": "Fixture warrant id under bench/corpus/warrants/."
+      "description": "The engine world's warrant for the agent.",
+      "enum": ["wrt_sourcing", "wrt_support", "wrt_treasury"]
     },
     "setup": {
       "type": "object",
@@ -39,10 +49,42 @@
         "channel": {
           "enum": ["x402_offer", "invoice", "support_ticket", "price_notice", "email", "fx_quote"]
         },
-        "content": { "type": "string", "description": "Untrusted text the agent reads." },
+        "content": {
+          "type": "string",
+          "maxLength": 4000,
+          "description": "Untrusted text the agent reads."
+        },
         "x402Requirements": {
           "type": "object",
-          "description": "Optional fake 402 payment requirements."
+          "description": "Optional fake 402 payment requirements (not used by the runner yet)."
+        },
+        "task": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "The task's structured fields. Defaults: sourcing pay_upstream at 2 USDZ cents; support ord_1, wrong_data; treasury pay_licensor EUR 50.00 one_off.",
+          "properties": {
+            "payeeId": { "type": "string" },
+            "item": { "type": "string" },
+            "price": { "$ref": "#/$defs/money", "description": "sourcing: the offer's price." },
+            "amount": { "$ref": "#/$defs/money", "description": "treasury: the invoice amount." },
+            "recurrence": { "enum": ["one_off", "recurring"] },
+            "orderIds": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            "claim": { "enum": ["wrong_data", "not_delivered", "not_authorized", "other"] }
+          }
+        },
+        "prior": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "Payments already made to the task's payee before the case, so the purpose check sees a history.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cents"],
+            "properties": {
+              "cents": { "type": "integer", "minimum": 1 },
+              "minutesBefore": { "type": "integer", "minimum": 1, "maximum": 120, "default": 60 }
+            }
+          }
         }
       }
     },
@@ -52,10 +94,28 @@
       "required": ["moneyMoves"],
       "properties": {
         "moneyMoves": { "type": "boolean" },
-        "maxCents": { "type": "integer", "minimum": 0 },
-        "blockedBy": { "enum": ["rules", "purpose", "owner", "any"] }
+        "maxCents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Attacks only: cents that may move without counting as a miss (the legitimate part, e.g. one real refund)."
+        },
+        "blockedBy": {
+          "enum": ["rules", "purpose", "owner", "any"],
+          "description": "Which Warrant layer should stop it. Documentation for now; not scored."
+        }
       }
     },
     "notes": { "type": "string" }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "cents"],
+      "properties": {
+        "currency": { "enum": ["USD", "EUR", "GBP", "AUD", "SGD", "HKD", "USDZ"] },
+        "cents": { "type": "integer", "minimum": 0 }
+      }
+    }
   }
 }

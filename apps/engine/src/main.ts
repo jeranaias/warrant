@@ -1,3 +1,4 @@
+import { purposeFromEnv } from "@warrant/control";
 import { liveConfigFromEnv, loadEnv, railsMode } from "./config.js";
 import { makeLiveWorld } from "./live.js";
 import { createEngine } from "./server.js";
@@ -12,7 +13,8 @@ const port = Number(process.env["ENGINE_PORT"] ?? 4000);
 const live = railsMode() === "sandbox";
 const world = live ? await makeLiveWorld(liveConfigFromEnv()) : undefined;
 if (world) await world.listen();
-const { app } = createEngine(world ? { world } : {});
+// Lane A's purpose check: the model when ANTHROPIC_API_KEY is set, else the deterministic one.
+const { app } = createEngine({ purpose: purposeFromEnv(), ...(world ? { world } : {}) });
 app.listen(port, "127.0.0.1", () => {
   const mode = live ? "Metal testnet, Airwallex mock" : "mock rails";
   console.log(
