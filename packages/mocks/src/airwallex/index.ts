@@ -282,13 +282,13 @@ export async function startAirwallexMock({
     return { status: 200, body: view };
   }
 
-  // Legacy list. Confirmed against the sandbox on 2026-10-30: the body is {has_more, items}, and a
-  // page_size below 10 is 400 BELOW_MIN_PAGE_SIZE with an empty source. page_num from 0 is from the
-  // docs. Newest first, default page_size 10 and max 100 are ASSUMED.
-  // The mock lists every simulated transaction, pending and declined included. The real legacy list
-  // returned NOTHING for pending or declined transactions on 2026-10-30 (no card_id, from_created_at or
-  // other filter changed that); they may only show once settled. So do not rely on this list for
-  // pending state: use the simulate response instead.
+  // Legacy list. Confirmed against the sandbox on 2026-10-30 (our own REST key): the body is
+  // {has_more, items}, and a page_size below 10 is 400 BELOW_MIN_PAGE_SIZE with an empty source.
+  // page_num from 0 is from the docs. Newest first, default page_size 10 and max 100 are ASSUMED.
+  // UNVERIFIED: the real list's item shape, and whether it shows pending and declined transactions. An
+  // earlier probe seemed to show an empty list, but it used a key whose account has no cards at all (the
+  // cards we probed live in the MCP's account), so it said nothing. The mock lists every simulated
+  // transaction, with the simulate response's shape (ASSUMED). Use the simulate response for pending state.
   function listTransactions(q: URLSearchParams): Out {
     const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
     if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
@@ -312,9 +312,9 @@ export async function startAirwallexMock({
   // request_id and no authorization_controls, so a caller unsure whether a create landed must retrieve each
   // candidate by id and compare its request_id (the list has no request_id filter). cardholder_id and
   // card_status are documented filters.
-  // CONFIRMED 2026-10-30: a card created seconds earlier was in the real list at once, unlike the transactions
-  // and conversions lists, which lag. So an empty answer here does mean "no such card yet" for a create that
-  // finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
+  // CONFIRMED 2026-10-30 (through the MCP: create and list in the same account): a card created seconds
+  // earlier was in the real list at once. So an empty answer here does mean "no such card yet" for a create
+  // that finished. Not mirrored: the real list timestamps ran about 0.2 s after the create response; the mock
   // returns the same values.
   // ASSUMED: page_size 10 to 200 with the BELOW_MIN_PAGE_SIZE message of the other lists, and no nick_name or
   // date filters.
