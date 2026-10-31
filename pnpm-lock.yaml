@@ -63,6 +63,9 @@ importers:
 
   apps/engine:
     dependencies:
+      '@metalntwx/metal-pay':
+        specifier: ^0.3.3
+        version: 0.3.3(@x402/core@2.28.0)(@x402/evm@2.28.0(typescript@5.9.3))(@x402/fetch@2.28.0)(viem@2.57.10(typescript@5.9.3)(zod@4.6.7))
       '@warrant/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -75,6 +78,15 @@ importers:
       '@warrant/rails':
         specifier: workspace:*
         version: link:../../packages/rails
+      '@warrant/store':
+        specifier: workspace:*
+        version: link:../store
+      '@x402/core':
+        specifier: 2.28.0
+        version: 2.28.0
+      '@x402/express':
+        specifier: 2.28.0
+        version: 2.28.0(express@5.3.0)(typescript@5.9.3)
       express:
         specifier: ^5.1.0
         version: 5.3.0

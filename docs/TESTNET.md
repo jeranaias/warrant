@@ -22,6 +22,11 @@ agent). Created 2026-10-29 by the owner; mandates expire 2026-11-19.
 | treasury       | business  | 6    | 6      | earnings only | `0x03494d9106f39f4203f106576672ef262193772455be52064e4b6d7907f22eda` |
 | customer-agent | customer  | 0.05 | 2      | business only | `0x6908b0a2e62a939f6c16f3e899e4757d46033213fc9e57c50cb41c642c096374` |
 
+The sourcing mandate above was replaced by the live scene runs on 2026-10-31 (see "Live scene
+runs"). Current sourcing mandate: `sourcing-v5-1793415327805.json`, id
+`0xd1549f88af4f7222126e7c51c8edc9abb45ed692f152b1e1b278a9c4622b8735`, cap 0.03, budget 10, upstream
+only (day-one limits). `METAL_HOME/warrant-live/owner-state.json` always names the current one.
+
 ## Evidence (2026-10-29)
 
 | What                                                     | Result                                                                                   |
@@ -31,8 +36,71 @@ agent). Created 2026-10-29 by the owner; mandates expire 2026-11-19.
 | Sourcing pays upstream 4c (cap 3c)                       | **refused on chain**: `mandate_cap_exceeded`, nothing sent                               |
 | Sourcing pays upstream 3c (inclusive cap)                | paid: `0x68f0826c5e3637787a7bf1d1afe44031e6cb7bae1c5df02a2091e03ae2f97490`               |
 
-## Known quirk
+## Running live
 
-On Windows, `metal-agent` 0.3.3 prints a settled payment and then crashes on exit (`Assertion
+`RAILS_MODE=sandbox` runs the same engine and the same scene on testnet: the real `metal-agent`
+pays through `MetalAdapter`, the owner's mandate changes go through `CliMetalOwnerOps`, the
+upstream provider is a real x402 seller (`@metalntwx/metal-pay`) on `UPSTREAM_PORT` paid to its
+account above, and our store runs on `STORE_PORT` (signed order + warrant pass required, orders
+in the data dir). Airwallex stays on the in-memory rail: rails has no sandbox Airwallex adapter yet.
+
+```sh
+RAILS_MODE=sandbox pnpm scene     # the price-rise + limit-change story, on chain (about 2 minutes)
+pnpm reset:live                   # owner: sourcing back on day-one limits before the next run
+RAILS_MODE=sandbox pnpm engine    # the engine API on testnet (plus upstream seller and store)
+```
+
+What it needs:
+
+- `.env` with `METAL_HOME` and `METAL_RPC_URL` (from another checkout: `WARRANT_ENV_FILE=<path>`).
+- `METAL_HOME/warrant-public.env`: public addresses and mandate ids (`pnpm setup:testnet` writes
+  it). The engine reads `METAL_UPSTREAM_ADDRESS` from it.
+- The CLI at `METAL_HOME/cli` (`npm i @metalntwx/metal-agent@0.3.3` there), or `METAL_AGENT_BIN`.
+
+What it changes on chain: two 2-cent payments and one 4-cent payment from the business account to
+the upstream account, and one `mandate replace` of sourcing (3-cent cap -> 4-cent cap; the old
+credential is then refused as `mandate_revoked`). The refused attempts send nothing.
+`pnpm reset:live` is a second `mandate replace` back to 3 cents. Each replace writes a new
+credential file (`sourcing-v<N>-<time>.json`) into METAL_HOME and records it in
+`WARRANT_DATA_DIR/owner-state.json` (default `METAL_HOME/warrant-live`). Old credential files stay
+(history). At startup each warrant is signed from `mandate status`; the scene refuses to start
+unless sourcing is on its day-one 3-cent cap.
+
+After the kill switch (`POST /kill` in live mode revokes the sourcing and support mandates):
+
+1. Move the revoked credential files (`sourcing*`, `support*`) out of METAL_HOME into a dated
+   `revoked-YYYYMMDD/` folder, and move `warrant-live/owner-state.json` there too. Never delete.
+2. `SKIP_FUND=1 SKIP_CUSTOMER=1 pnpm setup:testnet`: reuses the account keys, creates and binds
+   fresh mandates, rewrites `warrant-public.env`. The payers keep their USDZ, so no faucet.
+3. Update the mandate table above from `warrant-public.env`.
+
+## Live scene runs (2026-10-31)
+
+`RAILS_MODE=sandbox pnpm scene`, twice, with `pnpm reset:live` after each:
+
+| Step                               | Run 1                                                                                   | Run 2                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| buy at 2 cents                     | paid `0x9c5fe578fd92d68e3b55362b04d73d9bd0daac22b5a19df8b4c7b74ef86ed2a8`               | paid `0x2bcfc2621bfd6d2a86dd05b2561465b3c117027cb55efd17ce8cf145a0ad2ae9`               |
+| buy at 2 cents                     | paid `0xf8f15c4c979d4e4c0815ed80a2ae7d3afec3f28ecd0d28ce87a450253fd518b7`               | paid `0x4a976215cc97f2733df758b95c31e562e9b2f71fb0f7addfdd663dbe2a5a369c`               |
+| price 4 cents: buy at 4            | refused by our rules (`per_payment_cap`), no chain call                                 | same                                                                                    |
+| agent claims 2 cents anyway        | refused at the rail: seller's 402 asks 4, approved 2; nothing signed                    | same                                                                                    |
+| limits only: pay at 4              | **refused on chain**: `mandate_cap_exceeded`, nothing sent                              | same                                                                                    |
+| owner approves 4-cent cap          | replaced: `0x15353bfe8f781331680bd1d45d1bc882cda08c6042b73148d261034430dfe097` (v2)     | replaced: `0xb3114a138a7de6f2a61bf825c8f68ecb2adfccfc57e93e8ac8f323b79e6b6524` (v4)     |
+| buy at 4 cents (owner tapped once) | paid `0x3979bf6f412a4b11a8b1e172514c8b2f1d155812ecaf4f60f0f22ff0027c0a3a`               | paid `0x81c287ef79635e4dd0314d447acbe7764d7dc9d6b1e58288caf6608e058be35d`               |
+| old credential tries to pay        | **refused on chain**: `mandate_revoked`                                                 | same                                                                                    |
+| `pnpm reset:live`                  | replaced: `0x377cdfe0d776665a239bac6a1382ce89c8201ecbbc46b835644782004cd0d7fc` (v3, 3c) | replaced: `0xd1549f88af4f7222126e7c51c8edc9abb45ed692f152b1e1b278a9c4622b8735` (v5, 3c) |
+
+## Windows quirks (metal-agent 0.3.3)
+
+- Run `node <cli>/dist/index.js`, not the `.cmd` shim: `execCliRunner` runs a `.js` bin under
+  node (the engine's default bin is the one in `METAL_HOME/cli`).
+- On Windows, `metal-agent` 0.3.3 prints a settled payment and then crashes on exit (`Assertion
 failed ... async.c`, exit 127). The adapter treats a 2xx status plus a settlement hash as paid
-regardless of the exit code (tested in `packages/rails/src/metal/metal.test.ts`).
+  regardless of the exit code (tested in `packages/rails/src/metal/metal.test.ts`); owner
+  operations are judged by their printed output and then checked with `mandate status`.
+- An empty `METAL_FACILITATOR_URL` breaks `mandate pull`; the engine skips blank `.env` values.
+
+## Faucet
+
+`metal-agent fund <address> --network testnet`: about one grant a minute and a few a day per IP;
+429s are common. Only the business and customer accounts need USDZ. The live scene needs none.

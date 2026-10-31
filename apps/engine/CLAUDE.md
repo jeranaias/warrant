@@ -1,7 +1,7 @@
 # apps/engine
 
 **Purpose:** a local server that gives the agents their work and runs what they propose through
-control, on mock rails. Lane A builds the agents against it; lane D's dashboard and the analyzer
+control, on mock rails (default) or on the real Metal testnet (`RAILS_MODE=sandbox`, below). Lane A builds the agents against it; lane D's dashboard and the analyzer
 read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 4000).
 
 **The loop:**
@@ -38,5 +38,15 @@ for the analyzer only: never show labels to an agent.
 **Purpose check:** a placeholder (`placeholderPurpose` in `world.ts`) until lane A's model lands.
 Pass your own `PurposeChecker` to `createEngine({ purpose })`.
 
-**Must never:** use a real key, account, credential or network. Everything here is in memory and
-made fresh at startup.
+**Live mode (`RAILS_MODE=sandbox`, `live.ts`):** the same engine and scenes on Metal testnet: the
+real `metal-agent` 0.3.3 pays, the upstream provider is a real x402 seller on `UPSTREAM_PORT`, our
+store runs on `STORE_PORT`, and an approved budget change runs `mandate replace` on chain.
+Warrants are signed from `mandate status` at startup. The current credential per agent is kept in
+`WARRANT_DATA_DIR/owner-state.json` (default `METAL_HOME/warrant-live`, outside the repo).
+Airwallex stays on the in-memory rail. `pnpm scene`, `pnpm reset:live`, `pnpm setup:testnet`:
+see docs/TESTNET.md "Running live". `config.ts` reads the env (`.env`, `WARRANT_ENV_FILE`,
+`METAL_HOME/warrant-public.env`).
+
+**Must never:** in mock mode, use a real key, account, credential or network (everything is in
+memory and made fresh at startup). In live mode: print, log or return a key, a credential's
+contents or the RPC URL; give an agent anything from METAL_HOME; touch mainnet or production.

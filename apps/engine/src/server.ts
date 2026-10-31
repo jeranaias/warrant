@@ -3,7 +3,6 @@ import type { Express, Request } from "express";
 import { AgentRole } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
-import { UPSTREAM_URL } from "@warrant/mocks/metal";
 import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
@@ -19,7 +18,8 @@ import type { World } from "./world.js";
  *   POST /proposals             -> PaymentProposal in, control's decision out
  *   GET  /events                -> everything that happened, for the analyzer and the dashboard
  *
- * Mock rails only: nothing here moves real money.
+ * Mock rails by default: nothing moves real money. With a sandbox world (`live.ts`,
+ * RAILS_MODE=sandbox) the same routes run on the real Metal testnet.
  */
 
 export interface EngineOptions {
@@ -27,6 +27,8 @@ export interface EngineOptions {
   /** Load this scenario at startup. */
   scenario?: ScenarioName | "none";
   clock?: () => Date;
+  /** The world to run in; default a fresh mock world. */
+  world?: World;
 }
 
 interface LoggedEvent {
@@ -43,7 +45,7 @@ export interface Engine {
 
 export function createEngine(opts: EngineOptions = {}): Engine {
   const clock = opts.clock ?? (() => new Date());
-  const world = makeWorld(clock());
+  const world = opts.world ?? makeWorld(clock());
   const feed = new TaskFeed();
   const log: LoggedEvent[] = [];
 
@@ -52,7 +54,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     getWarrant: (id) => world.warrants.get(id),
     rails: world.rails,
     purpose: opts.purpose ?? placeholderPurpose,
-    orders: () => world.orders,
+    orders: world.orders,
     credentialFor: (w) => world.credentials.get(w.agentRole),
     applyBudgetChange: world.applyBudgetChange,
     budgetCheck: world.budgetCheck,
@@ -93,7 +95,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
         totalBudget: w.totalBudget,
         spentCents: controller.ledger.spentCents(w.warrantId),
       })),
-      orders: [...world.orders.values()].map(({ orderId, resource, price, at }) => ({
+      orders: [...world.orders().values()].map(({ orderId, resource, price, at }) => ({
         orderId,
         resource,
         price,
@@ -181,13 +183,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     );
     const result = await controller.engageKillSwitch(
       { ownerId: OWNER_ID, reason, warrantIds: [...world.warrants.keys()] },
-      {
-        revokeMandates: () => {
-          const live = world.chain.mandateList().filter((m) => !m.revoked);
-          for (const m of live) world.chain.revokeMandate(m.credential);
-          return Promise.resolve(live.map((m) => m.credential));
-        },
-      },
+      { revokeMandates: world.revokeMandates },
     );
     for (const [id, w] of world.warrants) world.warrants.set(id, { ...w, status: "revoked" });
     res.json(result);
@@ -197,19 +193,25 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ engaged: controller.killSwitch.engaged, last: controller.killSwitch.last ?? null });
   });
 
-  // The mock Metal chain: each mandate's spend and limits, and every on-chain refusal.
+  // The mock Metal chain: each mandate's spend and limits, and every on-chain refusal. In sandbox
+  // mode the chain is the testnet explorer; this answers the price and our settled payments.
   app.get("/chain", (_req, res) => {
+    const { chain } = world;
+    if (!chain) {
+      res.json({ upstreamPriceCents: world.upstream.price(), settled: world.settled() });
+      return;
+    }
     res.json({
       upstreamPriceCents: world.upstream.price(),
-      mandates: world.chain.mandateList().map((m) => ({
+      mandates: chain.mandateList().map((m) => ({
         credential: m.credential,
         capCents: m.capCents,
         budgetCents: m.budgetCents,
         spentCents: m.spentCents,
         revoked: m.revoked,
       })),
-      refusals: world.chain.refusals,
-      payments: world.chain.txs.length,
+      refusals: chain.refusals,
+      payments: chain.txs.length,
     });
   });
 
@@ -227,9 +229,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   // Benchmark "limits only" mode: the sourcing agent pays upstream straight through its mandate,
   // around control. Only the chain's mandate can refuse it.
   app.post("/limits-only/pay", async (_req, res) => {
-    const run = world.chain.runner();
     const cred = world.credentials.get("sourcing") ?? "sourcing.json";
-    const r = await run(["pay", UPSTREAM_URL, "--mandate", cred], 60_000);
+    const r = await world.payAround(cred);
     res.json({ outcome: classifyPay(r) });
   });
 

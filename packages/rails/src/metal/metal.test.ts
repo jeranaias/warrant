@@ -3,6 +3,8 @@ import type { RailInstruction } from "../types.js";
 import { MetalAdapter } from "./adapter.js";
 import { classifyPay, classifyPull, parseAmountCents } from "./cli.js";
 import type { CliResult, CliRunner } from "./cli.js";
+import { parseMandateStatus } from "./owner.js";
+import { quoteCents, x402Quote } from "./quote.js";
 import { baseUnitsToCents, centsToBaseUnits, centsToUsdz, usdzToCents } from "./units.js";
 
 // Output shapes from docs.metalntwx.com (metal-agent 0.3.3) and the team's first testnet run.
@@ -275,5 +277,68 @@ describe("MetalAdapter", () => {
     expect((await a.execute(ins({ routingRef: "http://evil.example/x" }))).status).toBe("failed");
     expect((await a.execute(ins({ amount: { currency: "USD", cents: 2 } }))).status).toBe("failed");
     expect(f.calls).toHaveLength(0);
+  });
+});
+
+// `mandate status` as printed by metal-agent 0.3.3 on testnet (2026-10-30, sourcing mandate).
+const STATUS = `mandate 0x${"6".repeat(64)}
+description Warrant sourcing: upstream market data
+principal 0x50B476F235dD6021Bb32684eF6f0461bA8E00689
+mandate-key 0x01${"4".repeat(128)} (P-256)
+token 0x000000000000000000000000000000000000B5d5
+per-payment-cap 0.03 *USDZ
+budget 10 *USDZ until expiry
+starts 1793318400 (2026-10-30T00:00:00.000Z)
+expiry 1795136704 (2026-11-20T01:05:04.000Z)
+payee 0xB354A3b58D55f85ec6794ff427e3387d330393E2 Upstream data
+account-type MetalAccount
+bound yes
+revoked no
+spent 0.03 *USDZ of 10 *USDZ
+payments 1
+`;
+
+describe("parseMandateStatus", () => {
+  it("reads limits, spend, expiry and payees from real output", () => {
+    expect(parseMandateStatus(STATUS)).toEqual({
+      mandateId: "0x" + "6".repeat(64),
+      capCents: 3,
+      budgetCents: 1000,
+      spentCents: 3,
+      expiresAt: "2026-11-20T01:05:04.000Z",
+      payees: ["0xB354A3b58D55f85ec6794ff427e3387d330393E2"],
+      bound: true,
+      revoked: false,
+    });
+  });
+
+  it("sees a revoked mandate, and gives nothing for an error", () => {
+    expect(parseMandateStatus(STATUS.replace("revoked no", "revoked yes"))?.revoked).toBe(true);
+    expect(parseMandateStatus("")).toBeUndefined();
+  });
+});
+
+describe("x402Quote", () => {
+  const header = (accepts: unknown[]) =>
+    Buffer.from(JSON.stringify({ x402Version: 2, accepts })).toString("base64");
+  const testnet = { scheme: "exact", network: "eip155:63825", amount: "40000000000000000" };
+
+  it("reads the testnet offer's amount in cents from a 402", async () => {
+    expect(quoteCents(header([testnet]))).toBe(4);
+    const fetchFn = () =>
+      Promise.resolve(
+        new Response(null, { status: 402, headers: { "payment-required": header([testnet]) } }),
+      );
+    expect(await x402Quote(fetchFn)("http://127.0.0.1:4022/forecast/eurusd")).toBe(4);
+  });
+
+  it("is unknown (so nothing is signed) for anything else", async () => {
+    expect(quoteCents(header([{ ...testnet, network: "eip155:1" }]))).toBeUndefined();
+    expect(quoteCents(header([{ ...testnet, amount: "12345" }]))).toBeUndefined();
+    expect(quoteCents("not base64 json")).toBeUndefined();
+    const ok = () => Promise.resolve(new Response("free", { status: 200 }));
+    expect(await x402Quote(ok)("http://127.0.0.1:4022/x")).toBeUndefined();
+    const down = () => Promise.reject(new Error("ECONNREFUSED"));
+    expect(await x402Quote(down)("http://127.0.0.1:4022/x")).toBeUndefined();
   });
 });
