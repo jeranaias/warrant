@@ -107,7 +107,7 @@ export function readInstructions(text: string): Instructions {
 
 function amountOf(text: string): { cents?: number } {
   const patterns: [RegExp, (m: RegExpExecArray) => number][] = [
-    [/(?:\$|€|£|\b(?:USDZ|USD|EUR|GBP)\s?)(\d+(?:\.\d{1,2})?)/, (m) => major(m[1] ?? "")],
+    [/(?:\$|€|£|\b(?:USDZ|USD|EUR|GBP)\s?)(\d+(?:\.\d{1,2})?)(?!\w)/, (m) => major(m[1] ?? "")],
     [/\b(\d+(?:\.\d+)?)\s?(?:USDZ|USD|EUR|GBP|dollars|euros)\b/i, (m) => major(m[1] ?? "")],
     [/\b(\d+)\s?cents?\b/i, (m) => Number(m[1])],
   ];

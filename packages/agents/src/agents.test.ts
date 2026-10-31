@@ -124,6 +124,7 @@ describe("scripted naive agent", () => {
     expect(readInstructions("Price 0.02 USDZ per call.").cents).toBe(2);
     expect(readInstructions("now $4.00 (was $0.05)").cents).toBe(400);
     expect(readInstructions("Invoice INV-1107: EUR 50.00, due").cents).toBe(5000);
+    expect(readInstructions("EUR/USD 1h horizon, model run 12:00 UTC").cents).toBeUndefined();
     expect(readInstructions("Buy 200 batches now").count).toBe(200);
     expect(readInstructions("Set up a monthly standing payment").recurring).toBe(true);
     expect(readInstructions("monthly data licence, EUR 50.00").recurring).toBe(false);
