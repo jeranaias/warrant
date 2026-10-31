@@ -1,13 +1,13 @@
 import type { PaymentProposal } from "@warrant/contracts";
 import { UPSTREAM_PRICE_AFTER, UPSTREAM_PRICE_BEFORE } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
-import { UPSTREAM_URL } from "@warrant/mocks/metal";
 import { createEngine } from "./server.js";
+import type { Engine } from "./server.js";
 import { AGENTS, OWNER_ID } from "./world.js";
 
 /**
  * Kit 11 beat: the upstream price rises from 2 cents to 4, over sourcing's 3-cent cap.
- * Played on the mock chain, so the same story the testnet run tells (docs/TESTNET.md):
+ * Played on the mock chain by default; pass a sandbox engine (`live.ts`) to play it on testnet:
  *   1. purchases at 2 cents go through (the payee is on the signed warrant: no owner tap)
  *   2. the price rises; the 4-cent purchase is refused by our rules, before any chain call
  *   3. an agent that claims the old price is refused by the rail: the seller now asks 4
@@ -17,6 +17,15 @@ export interface SceneStep {
   step: string;
   outcome: string;
   moneyMoved: boolean;
+  /** The settlement transaction when money moved. */
+  tx?: string;
+}
+
+/** The step's settlement transaction, if a payment settled since `before`. */
+function moved(engine: Engine, before: number): Pick<SceneStep, "moneyMoved" | "tx"> {
+  const settled = engine.world.settled();
+  const tx = settled.length > before ? settled[settled.length - 1] : undefined;
+  return tx ? { moneyMoved: true, tx } : { moneyMoved: false };
 }
 
 export async function priceRiseScene(
@@ -41,7 +50,7 @@ export async function priceRiseScene(
     justification: "hourly forecast batch",
     createdAt: now().toISOString(),
   });
-  const paidCount = () => world.chain.txs.length;
+  const paidCount = () => world.settled().length;
 
   // 1. Buying at 2 cents.
   for (let k = 0; k < 2; k++) {
@@ -61,7 +70,7 @@ export async function priceRiseScene(
     } else if (r.execution) {
       outcome = r.execution.status;
     }
-    steps.push({ step: "buy at 2 cents", outcome, moneyMoved: paidCount() > before });
+    steps.push({ step: "buy at 2 cents", outcome, ...moved(engine, before) });
   }
 
   // 2. The provider raises its price.
@@ -80,18 +89,16 @@ export async function priceRiseScene(
   steps.push({
     step: "agent claims 2 cents anyway",
     outcome: `${lied.blockedBy ?? "not blocked"} (${lied.execution?.detail ?? ""})`,
-    moneyMoved: paidCount() > before,
+    ...moved(engine, before),
   });
 
   // 4. Around Warrant: only the mandate on chain is left to say no.
-  const run = world.chain.runner();
-  const direct = classifyPay(
-    await run(["pay", UPSTREAM_URL, "--mandate", "sourcing.json"], 60_000),
-  );
+  const direct = classifyPay(await world.payAround(sourcingCredential(engine)));
   steps.push({
     step: "limits only (no Warrant): pay at 4",
     outcome: direct.kind === "refused" ? `chain refused: ${direct.reason}` : direct.kind,
     moneyMoved: direct.kind === "paid",
+    ...(direct.kind === "paid" && direct.tx ? { tx: direct.tx } : {}),
   });
   return steps;
 }
@@ -101,10 +108,13 @@ export async function priceRiseScene(
  * approves exactly that; the mandate is replaced and the next warrant version signed. 4-cent
  * purchases then go through, and the old credential is refused on chain (mandate_revoked).
  */
-export async function limitChangeScene(now = () => new Date()): Promise<SceneStep[]> {
-  const engine = createEngine({ scenario: "none", clock: now });
+export async function limitChangeScene(
+  now = () => new Date(),
+  engine = createEngine({ scenario: "none", clock: now }),
+): Promise<SceneStep[]> {
   const steps = await priceRiseScene(now, engine);
   const { controller, world } = engine;
+  const oldCredential = sourcingCredential(engine);
   const target = world.warrants.get(AGENTS.sourcing.warrantId);
   if (!target) throw new Error("no sourcing warrant");
 
@@ -138,7 +148,7 @@ export async function limitChangeScene(now = () => new Date()): Promise<SceneSte
     moneyMoved: false,
   });
 
-  const before = world.chain.txs.length;
+  const before = world.settled().length;
   let r = await controller.submit({
     proposalId: "prop_scene_after",
     warrantId: target.warrantId,
@@ -169,16 +179,20 @@ export async function limitChangeScene(now = () => new Date()): Promise<SceneSte
   steps.push({
     step: "buy at 4 cents under the new limits",
     outcome: tapped + (r.execution?.status ?? r.blockedBy ?? r.error ?? "error"),
-    moneyMoved: world.chain.txs.length > before,
+    ...moved(engine, before),
   });
 
-  const old = classifyPay(
-    await world.chain.runner()(["pay", UPSTREAM_URL, "--mandate", "sourcing.json"], 60_000),
-  );
+  const old = classifyPay(await world.payAround(oldCredential));
   steps.push({
     step: "old credential tries to pay",
     outcome: old.kind === "refused" ? `chain refused: ${old.reason}` : old.kind,
     moneyMoved: old.kind === "paid",
   });
   return steps;
+}
+
+function sourcingCredential(engine: Engine): string {
+  const c = engine.world.credentials.get("sourcing");
+  if (!c) throw new Error("no sourcing credential");
+  return c;
 }

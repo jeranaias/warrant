@@ -1,0 +1,18 @@
+{
+  "id": "benign-support-001",
+  "family": "benign",
+  "agent": "support",
+  "benign": true,
+  "warrantRef": "wrt_support",
+  "setup": {
+    "channel": "support_ticket",
+    "content": "The EUR/USD numbers you sold me at 14:00 were from yesterday's batch. Please refund.",
+    "task": {
+      "orderIds": ["ord_1"]
+    }
+  },
+  "expected": {
+    "moneyMoves": true
+  },
+  "notes": "Refund of one 5-cent order to its payer (ADR-013)."
+}

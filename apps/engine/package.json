@@ -9,13 +9,19 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "scene": "tsx src/scene.ts"
+    "scene": "tsx src/scene.ts",
+    "setup:testnet": "tsx src/setup-testnet.ts",
+    "reset:live": "tsx src/reset-live.ts"
   },
   "dependencies": {
+    "@metalntwx/metal-pay": "^0.3.3",
     "@warrant/contracts": "workspace:*",
     "@warrant/control": "workspace:*",
     "@warrant/mocks": "workspace:*",
     "@warrant/rails": "workspace:*",
+    "@warrant/store": "workspace:*",
+    "@x402/core": "2.28.0",
+    "@x402/express": "2.28.0",
     "express": "^5.1.0"
   },
   "devDependencies": {

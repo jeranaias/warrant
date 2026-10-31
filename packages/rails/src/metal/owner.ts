@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { CliRunner } from "./cli.js";
-import { parseKv } from "./cli.js";
+import { parseAmountCents, parseKv } from "./cli.js";
 import { centsToUsdz } from "./units.js";
 
 /**
@@ -18,10 +18,25 @@ export interface MandateLimits {
   description?: string;
 }
 
+/** A mandate as the chain reports it (`mandate status`). */
+export interface MandateStatus {
+  mandateId: string;
+  capCents: number;
+  budgetCents: number;
+  spentCents: number;
+  /** ISO time the mandate stops paying. */
+  expiresAt: string;
+  payees: string[];
+  bound: boolean;
+  revoked: boolean;
+}
+
 export interface MetalOwnerOps {
   /** Create a credential for the new limits and replace the old mandate with it. */
   replace(oldCredential: string, newCredential: string, limits: MandateLimits): Promise<string>;
   revoke(credential: string): Promise<void>;
+  /** Read-only: what the chain says about this credential's mandate. */
+  status(credential: string): Promise<MandateStatus>;
 }
 
 export interface CliOwnerOpsOptions {
@@ -112,6 +127,25 @@ export class CliMetalOwnerOps implements MetalOwnerOps {
     }
   }
 
+  async status(credential: string): Promise<MandateStatus> {
+    const r = await this.o.run(
+      [
+        "mandate",
+        "status",
+        "--credential",
+        this.path(credential),
+        "--network",
+        "testnet",
+        "--rpc-url",
+        this.o.rpcUrl,
+      ],
+      this.timeout(),
+    );
+    const s = parseMandateStatus(r.stdout);
+    if (!s) throw new Error(`mandate status failed: ${scrub(r.stderr) || `exit ${r.code}`}`);
+    return s;
+  }
+
   private path(name: string): string {
     if (!CRED_NAME.test(name)) throw new Error("credential names are plain file names");
     return join(this.o.metalHome, name);
@@ -126,4 +160,35 @@ function scrub(s: string): string {
   return (s.split(/\r?\n/).find((l) => l.trim()) ?? "")
     .replace(/\S*[/\\]\S*/g, "<path>")
     .slice(0, 200);
+}
+
+/**
+ * `mandate status` output (0.3.3), e.g. `per-payment-cap 0.03 *USDZ`, `budget 10 *USDZ until
+ * expiry`, `expiry 1795136704 (2026-11-20T01:05:04.000Z)`, `spent 0.03 *USDZ of 10 *USDZ`, one
+ * `payee <address> <name>` line per payee, `bound yes`, `revoked no`.
+ */
+export function parseMandateStatus(stdout: string): MandateStatus | undefined {
+  const kv = parseKv(stdout);
+  const mandateId = kv.get("mandate");
+  const capCents = parseAmountCents(kv.get("per-payment-cap"));
+  const budgetCents = parseAmountCents(kv.get("budget"));
+  const spentCents = parseAmountCents(kv.get("spent")) ?? 0;
+  const expiry = /^(\d+)/.exec(kv.get("expiry") ?? "")?.[1];
+  if (!mandateId || capCents === undefined || budgetCents === undefined || !expiry) {
+    return undefined;
+  }
+  const payees = stdout
+    .split(/\r?\n/)
+    .map((l) => /^\s*payee\s+(0x[0-9a-fA-F]{40})\b/.exec(l)?.[1])
+    .filter((a): a is string => a !== undefined);
+  return {
+    mandateId,
+    capCents,
+    budgetCents,
+    spentCents,
+    expiresAt: new Date(Number(expiry) * 1000).toISOString(),
+    payees,
+    bound: kv.get("bound") === "yes",
+    revoked: kv.get("revoked") === "yes",
+  };
 }
