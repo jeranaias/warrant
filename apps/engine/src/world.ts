@@ -3,6 +3,7 @@ import type { KeyObject } from "node:crypto";
 import type {
   AgentRole,
   BudgetChangeProposal,
+  MandateRef,
   Money,
   PaymentSummary,
   PurposeVerdict,
@@ -12,17 +13,23 @@ import type {
 } from "@warrant/contracts";
 import { AGENT_BUDGETS, QUERY_PRICE, TOTAL_BUDGET, signWarrant } from "@warrant/control";
 import type { PurposeChecker } from "@warrant/control";
-import { MetalAdapter } from "@warrant/rails";
-import type { RailAdapter, RailInstruction, RailResult } from "@warrant/rails";
+import { MetalAdapter, classifyPay } from "@warrant/rails";
+import type {
+  CliResult,
+  CliRunner,
+  RailAdapter,
+  RailInstruction,
+  RailResult,
+} from "@warrant/rails";
 import type { Rail } from "@warrant/contracts";
 import { MockMetalChain, UPSTREAM_PAY_TO, UPSTREAM_URL, addUpstream } from "@warrant/mocks/metal";
-import type { Upstream } from "@warrant/mocks/metal";
 
 /**
  * The engine's pretend world: an owner, three signed warrants, two stored orders, a mock Metal
  * chain that enforces each agent's mandate (with the upstream provider selling on it) and an
- * Airwallex rail that always succeeds. Everything is in memory and made fresh at startup. Nothing here touches a real
- * key, account or network.
+ * Airwallex rail that always succeeds. Everything is in memory and made fresh at startup. Nothing
+ * here touches a real key, account or network. `live.ts` builds the same World on the real Metal
+ * testnet (RAILS_MODE=sandbox).
  */
 
 const eur = (cents: number): Money => ({ currency: "EUR", cents });
@@ -45,18 +52,52 @@ export const AGENTS: Record<AgentRole, AgentIdentity> = {
   treasury: { role: "treasury", agentId: "agt_treasury", warrantId: "wrt_treasury" },
 };
 
-function bodies(now: Date): WarrantBody[] {
-  const notBefore = new Date(now.getTime() - 60_000).toISOString();
-  const expiresAt = "2026-11-20T00:00:00Z";
-  const mandate = (cap: Money, budget: Money) => ({
-    network: "eip155:63825" as const,
-    mandateId: "mnd_demo",
-    principal: PRINCIPAL,
-    cap,
-    budget,
-    expiresAt,
+/** The two agents that pay on Metal, each through its own mandate. */
+export type MetalRole = "sourcing" | "support";
+export const METAL_ROLES: readonly MetalRole[] = ["sourcing", "support"];
+
+/** What the Metal warrants sit on: the mock's demo values, or the chain's in sandbox mode. */
+export interface MetalTerms {
+  /** The upstream provider's x402 URL (sourcing's one payee). */
+  upstreamUrl: string;
+  mandates: Record<MetalRole, { version: number; mandate: MandateRef }>;
+}
+
+const DEMO_EXPIRY = "2026-11-20T00:00:00Z";
+
+function demoTerms(): MetalTerms {
+  const on = (role: MetalRole) => ({
+    version: 1,
+    mandate: {
+      network: "eip155:63825" as const,
+      mandateId: "mnd_demo",
+      principal: PRINCIPAL,
+      cap: AGENT_BUDGETS[role].perPaymentCap,
+      budget: AGENT_BUDGETS[role].budget,
+      expiresAt: DEMO_EXPIRY,
+    },
   });
-  const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt };
+  return {
+    upstreamUrl: UPSTREAM_URL,
+    mandates: { sourcing: on("sourcing"), support: on("support") },
+  };
+}
+
+/** A Metal warrant's limits and expiry are its mandate's (ADR-009 #2). */
+function onMandate(t: MetalTerms["mandates"][MetalRole]) {
+  const { mandate } = t;
+  return {
+    version: t.version,
+    perPaymentCap: mandate.cap,
+    totalBudget: mandate.budget,
+    expiresAt: mandate.expiresAt,
+    mandate,
+  };
+}
+
+export function bodies(now: Date, terms: MetalTerms = demoTerms()): WarrantBody[] {
+  const notBefore = new Date(now.getTime() - 60_000).toISOString();
+  const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt: DEMO_EXPIRY };
   return [
     {
       ...common,
@@ -70,13 +111,11 @@ function bodies(now: Date): WarrantBody[] {
           payeeId: "pay_upstream",
           displayName: "Upstream data provider",
           rail: "metal_x402",
-          routingRef: UPSTREAM_URL,
+          routingRef: terms.upstreamUrl,
           currency: "USDZ",
         },
       ],
-      perPaymentCap: AGENT_BUDGETS.sourcing.perPaymentCap,
-      totalBudget: AGENT_BUDGETS.sourcing.budget,
-      mandate: mandate(AGENT_BUDGETS.sourcing.perPaymentCap, AGENT_BUDGETS.sourcing.budget),
+      ...onMandate(terms.mandates.sourcing),
     },
     {
       ...common,
@@ -86,9 +125,7 @@ function bodies(now: Date): WarrantBody[] {
       purpose: "Refund customers for orders we got wrong, never more than they paid.",
       allowedRails: ["metal_x402"],
       payees: [],
-      perPaymentCap: AGENT_BUDGETS.support.perPaymentCap,
-      totalBudget: AGENT_BUDGETS.support.budget,
-      mandate: mandate(AGENT_BUDGETS.support.perPaymentCap, AGENT_BUDGETS.support.budget),
+      ...onMandate(terms.mandates.support),
     },
     {
       // The engine's treasury pays the EUR licence fee only. Earnings sweeps come with lane B.
@@ -170,7 +207,16 @@ export const placeholderPurpose: PurposeChecker = {
   },
 };
 
+/** The upstream provider as the scenes drive it. */
+export interface UpstreamSeller {
+  url: string;
+  payTo: string;
+  price(): number;
+  setPrice(cents: number): void;
+}
+
 export interface World {
+  mode: "mock" | "sandbox";
   ownerPublicKey: KeyObject;
   /** Current mandate credential file per Metal agent; a limit change swaps it. */
   credentials: Map<AgentRole, string>;
@@ -179,10 +225,81 @@ export interface World {
   /** ADR-009 #1: USDZ budgets across agents stay within TOTAL_BUDGET. */
   budgetCheck: (warrant: Warrant, change: BudgetChangeProposal) => string[];
   warrants: Map<string, Warrant>;
-  orders: Map<string, SignedOrderRecord>;
-  chain: MockMetalChain;
-  upstream: Upstream;
+  /** Stored signed orders: three made-up ones in mock mode, our store's real ones in sandbox. */
+  orders: () => ReadonlyMap<string, SignedOrderRecord>;
+  /** Mock mode only: the in-memory chain behind `GET /chain`. */
+  chain?: MockMetalChain;
+  upstream: UpstreamSeller;
+  /**
+   * `metal-agent pay` to the upstream provider with this credential, around control (benchmark
+   * "limits only"): only the mandate on chain can refuse it.
+   */
+  payAround: (credential: string) => Promise<CliResult>;
+  /** Settlement transaction of every Metal payment since startup, oldest first. */
+  settled: () => readonly string[];
+  /** Owner side of the kill switch: revoke every live mandate; answers the credentials revoked. */
+  revokeMandates: () => Promise<string[]>;
   rails: { metal_x402: MetalAdapter; airwallex_transfer: AlwaysPaysRail };
+}
+
+/**
+ * The owner's side of a budget change, the same in both modes: `replaceMandate` swaps a Metal
+ * warrant's mandate, then the next warrant version is signed with the new limits.
+ */
+export function ownerSigner(
+  privateKey: KeyObject,
+  warrants: Map<string, Warrant>,
+  replaceMandate: (w: Warrant, cap: Money, budget: Money) => Promise<MandateRef>,
+): (warrant: Warrant, change: BudgetChangeProposal) => Promise<Warrant> {
+  return async (w, c) => {
+    const cap = c.newPerPaymentCap ?? w.perPaymentCap;
+    const mandate = w.mandate ? await replaceMandate(w, cap, c.newTotalBudget) : undefined;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { signature, status, ...body } = w;
+    const signed = signWarrant(
+      {
+        ...body,
+        version: w.version + 1,
+        perPaymentCap: cap,
+        totalBudget: c.newTotalBudget,
+        ...(mandate ? { mandate } : {}),
+      },
+      privateKey,
+      "owner-demo",
+    );
+    warrants.set(w.warrantId, signed);
+    return signed;
+  };
+}
+
+/** ADR-009 #1: USDZ budgets across agents stay within TOTAL_BUDGET. */
+export function totalBudgetCheck(
+  warrants: Map<string, Warrant>,
+): (warrant: Warrant, change: BudgetChangeProposal) => string[] {
+  return (w, c) => {
+    if (c.newTotalBudget.currency !== TOTAL_BUDGET.currency) return [];
+    const others = [...warrants.values()]
+      .filter(
+        (x) => x.warrantId !== w.warrantId && x.totalBudget.currency === TOTAL_BUDGET.currency,
+      )
+      .reduce((sum, x) => sum + x.totalBudget.cents, 0);
+    const total = others + c.newTotalBudget.cents;
+    return total > TOTAL_BUDGET.cents
+      ? [`all agents together would have ${total} cents, over the ${TOTAL_BUDGET.cents} total`]
+      : [];
+  };
+}
+
+/** Wraps a CLI runner to note the settlement transaction of every `pay` that settled. */
+export function recordingRunner(run: CliRunner, settled: string[]): CliRunner {
+  return async (args, timeoutMs) => {
+    const r = await run(args, timeoutMs);
+    if (args[0] === "pay") {
+      const o = classifyPay(r);
+      if (o.kind === "paid" && o.tx) settled.push(o.tx);
+    }
+    return r;
+  };
 }
 
 export function makeWorld(now = new Date()): World {
@@ -196,7 +313,7 @@ export function makeWorld(now = new Date()): World {
   const chain = new MockMetalChain();
   chain.fund(PRINCIPAL, 2000);
   const upstream = addUpstream(chain, 2);
-  const expires = new Date("2026-11-20T00:00:00Z");
+  const expires = new Date(DEMO_EXPIRY);
   chain.addMandate({
     credential: "sourcing.json",
     principal: PRINCIPAL,
@@ -218,63 +335,39 @@ export function makeWorld(now = new Date()): World {
     ["support", "support.json"],
   ]);
 
-  const applyBudgetChange = (w: Warrant, c: BudgetChangeProposal): Promise<Warrant> => {
-    const cap = c.newPerPaymentCap ?? w.perPaymentCap;
-    let mandate = w.mandate;
-    if (mandate) {
-      const old = credentials.get(w.agentRole);
-      if (!old) throw new Error(`no mandate credential for ${w.agentRole}`);
-      const next = `${w.agentRole}-v${w.version + 1}.json`;
-      const m = chain.replaceMandate(old, {
-        credential: next,
-        principal: PRINCIPAL,
-        capCents: cap.cents,
-        budgetCents: c.newTotalBudget.cents,
-        ...(chain.mandate(old).payees ? { payees: chain.mandate(old).payees } : {}),
-        expiresAt: expires,
-      });
-      credentials.set(w.agentRole, next);
-      mandate = { ...mandate, mandateId: m.mandateId, cap, budget: c.newTotalBudget };
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { signature, status, ...body } = w;
-    const signed = signWarrant(
-      {
-        ...body,
-        version: w.version + 1,
-        perPaymentCap: cap,
-        totalBudget: c.newTotalBudget,
-        ...(mandate ? { mandate } : {}),
-      },
-      privateKey,
-      "owner-demo",
-    );
-    warrants.set(w.warrantId, signed);
-    return Promise.resolve(signed);
-  };
-
-  const budgetCheck = (w: Warrant, c: BudgetChangeProposal): string[] => {
-    if (c.newTotalBudget.currency !== TOTAL_BUDGET.currency) return [];
-    const others = [...warrants.values()]
-      .filter(
-        (x) => x.warrantId !== w.warrantId && x.totalBudget.currency === TOTAL_BUDGET.currency,
-      )
-      .reduce((sum, x) => sum + x.totalBudget.cents, 0);
-    const total = others + c.newTotalBudget.cents;
-    return total > TOTAL_BUDGET.cents
-      ? [`all agents together would have ${total} cents, over the ${TOTAL_BUDGET.cents} total`]
-      : [];
-  };
+  const applyBudgetChange = ownerSigner(privateKey, warrants, (w, cap, budget) => {
+    const old = credentials.get(w.agentRole);
+    if (!old || !w.mandate) throw new Error(`no mandate credential for ${w.agentRole}`);
+    const next = `${w.agentRole}-v${w.version + 1}.json`;
+    const m = chain.replaceMandate(old, {
+      credential: next,
+      principal: PRINCIPAL,
+      capCents: cap.cents,
+      budgetCents: budget.cents,
+      ...(chain.mandate(old).payees ? { payees: chain.mandate(old).payees } : {}),
+      expiresAt: expires,
+    });
+    credentials.set(w.agentRole, next);
+    return Promise.resolve({ ...w.mandate, mandateId: m.mandateId, cap, budget });
+  });
 
   return {
+    mode: "mock",
     ownerPublicKey: publicKey,
     credentials,
     applyBudgetChange,
-    budgetCheck,
+    budgetCheck: totalBudgetCheck(warrants),
     warrants,
-    orders,
+    orders: () => orders,
     chain,
     upstream,
+    payAround: (cred) => chain.runner()(["pay", UPSTREAM_URL, "--mandate", cred], 60_000),
+    settled: () => chain.txs.map((t) => t.hash),
+    revokeMandates: () => {
+      const live = chain.mandateList().filter((m) => !m.revoked);
+      for (const m of live) chain.revokeMandate(m.credential);
+      return Promise.resolve(live.map((m) => m.credential));
+    },
     rails: {
       // The real adapter and its real output parsers, talking to the mock chain.
       metal_x402: new MetalAdapter({

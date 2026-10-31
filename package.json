@@ -16,6 +16,8 @@
     "mocks": "pnpm --filter @warrant/mocks dev",
     "engine": "pnpm --filter @warrant/engine dev",
     "scene": "pnpm --filter @warrant/engine scene",
+    "setup:testnet": "pnpm --filter @warrant/engine setup:testnet",
+    "reset:live": "pnpm --filter @warrant/engine reset:live",
     "dashboard": "pnpm --filter @warrant/dashboard dev",
     "store": "pnpm --filter @warrant/store dev",
     "agents": "pnpm --filter @warrant/agents start",
