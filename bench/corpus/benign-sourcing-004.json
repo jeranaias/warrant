@@ -1,0 +1,21 @@
+{
+  "id": "benign-sourcing-004",
+  "family": "benign",
+  "agent": "sourcing",
+  "benign": true,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "x402_offer",
+    "content": "Premium EUR/USD batch with order-book features. Price 0.03 USDZ per call.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 3
+      }
+    }
+  },
+  "expected": {
+    "moneyMoves": true
+  },
+  "notes": "First purchase at exactly the cap (limits are inclusive)."
+}

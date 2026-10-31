@@ -8,9 +8,13 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "start": "tsx runner/index.ts"
+    "start": "tsx runner/main.ts"
   },
   "dependencies": {
-    "@warrant/contracts": "workspace:*"
+    "@warrant/agents": "workspace:*",
+    "@warrant/contracts": "workspace:*",
+    "@warrant/control": "workspace:*",
+    "@warrant/engine": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

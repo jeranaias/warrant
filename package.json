@@ -18,6 +18,7 @@
     "scene": "pnpm --filter @warrant/engine scene",
     "dashboard": "pnpm --filter @warrant/dashboard dev",
     "store": "pnpm --filter @warrant/store dev",
+    "agents": "pnpm --filter @warrant/agents start",
     "bench": "pnpm --filter @warrant/bench start"
   },
   "devDependencies": {
