@@ -144,8 +144,8 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
         cents: r.amount.cents,
         at: new Date(r.reservedAt),
       })),
-      orders: world.orders,
-      refundedOrderIds: refunded(ledger, w.warrantId, world.orders),
+      orders: world.orders(),
+      refundedOrderIds: refunded(ledger, w.warrantId, world.orders()),
     };
     const rules = checkRules(w, p, ctx);
     if (!rules.pass) {
