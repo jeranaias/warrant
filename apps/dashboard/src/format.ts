@@ -14,7 +14,7 @@ export function money(m: Money | null | undefined): string {
   return m.currency === "USDZ" ? `${v} USDZ` : `${m.currency} ${v}`;
 }
 
-export function cents(n: number | null | undefined, currency = "USDZ"): string {
+export function cents(n: number | null | undefined, currency: Money["currency"] = "USDZ"): string {
   return n === null || n === undefined ? "-" : money({ currency, cents: n });
 }
 
