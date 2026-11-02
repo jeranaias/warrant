@@ -1220,6 +1220,22 @@ select {
   color: var(--text);
 }
 
+/* A ring's name, right-aligned to where its arc starts at 12 o'clock. */
+.sc-ring {
+  margin: 0 0 0 -10px;
+}
+
+.sc-ring .sc-name {
+  font: 600 0.6rem var(--num);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tint, var(--muted));
+}
+
+.sc-ring.is-on .sc-name {
+  color: var(--text);
+}
+
 .sc-sub {
   font: 500 0.66rem var(--num);
   color: var(--muted);
@@ -1466,8 +1482,20 @@ kbd {
 }
 
 .agent-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 0.92rem;
+}
+
+/* Same colour as the agent's ring in the scene (tints.ts). */
+.agent-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tint, var(--seal));
+  box-shadow: 0 0 8px var(--tint, transparent);
 }
 
 .agent-left {
@@ -1485,7 +1513,7 @@ kbd {
 .agent-bar > span {
   display: block;
   height: 100%;
-  background: var(--seal);
+  background: var(--tint, var(--seal));
   transition: width 0.6s ease;
 }
 

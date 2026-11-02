@@ -1,10 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
 import { canDraw3d } from "../can3d.js";
 import { agentName, cents, money, time, whyOf } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
+import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
 import { ApprovalCard, keyOf } from "./Approvals.js";
@@ -317,11 +318,15 @@ function AgentList({
             <li key={w.warrantId}>
               <button
                 className={`agent-row ${tone}`}
+                style={{ "--tint": tintOf(i) } as CSSProperties}
                 aria-pressed={selected === w.warrantId}
                 onClick={() => onSelect(w.warrantId)}
               >
                 <span className="agent-top">
-                  <span className="agent-name">{agentName(w.agentRole)}</span>
+                  <span className="agent-name">
+                    <span className="agent-dot" aria-hidden="true" />
+                    {agentName(w.agentRole)}
+                  </span>
                   <kbd>{i + 1}</kbd>
                 </span>
                 <span className="agent-left mono">
