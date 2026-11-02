@@ -1,4 +1,5 @@
 import { startAirwallexMock } from "@warrant/mocks/airwallex";
+import type { AirwallexMock } from "@warrant/mocks/airwallex";
 import {
   AirwallexClient,
   AirwallexTransfers,
@@ -38,6 +39,8 @@ export interface AirwallexWorld {
   client: AirwallexClient;
   /** Sandbox: the USD Global Account earnings are deposited into. The mock needs none. */
   globalAccountId?: string;
+  /** Mock only: the mock itself, for fault injection in tests. */
+  mock?: AirwallexMock;
   close: () => Promise<void>;
 }
 
@@ -45,17 +48,26 @@ export interface AirwallexWorld {
  * A mock world whose `airwallex_transfer` rail is the real Airwallex adapter talking to the
  * Airwallex mock: the licensor is a real EUR beneficiary there, and the wallet starts with USD.
  */
-export async function mockAirwallexWorld(now = new Date()): Promise<AirwallexWorld> {
+export async function mockAirwallexWorld(
+  now = new Date(),
+  /** The client's per-call timeout; tests shorten it to see a timeout fault quickly. */
+  opts: { timeoutMs?: number } = {},
+): Promise<AirwallexWorld> {
   const awx = await startAirwallexMock({
     balances: { USD: OPENING_USD },
     rates: { EURUSD },
   });
   // The mock accepts any client id and key; nothing here is a real credential.
-  const client = new AirwallexClient({ baseUrl: awx.url, clientId: "mock", apiKey: "mock" });
+  const client = new AirwallexClient({
+    baseUrl: awx.url,
+    clientId: "mock",
+    apiKey: "mock",
+    ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+  });
   const licensorRef = await createEurBeneficiary(client, LICENSOR);
   const transfers = new AirwallexTransfers(client, { fundingCurrency: "USD" });
   const world = makeWorld(now, { airwallex: { transfers, licensorRef } });
-  return { world, client, close: () => awx.close() };
+  return { world, client, mock: awx, close: () => awx.close() };
 }
 
 /**

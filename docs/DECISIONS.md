@@ -338,3 +338,26 @@ Decision:
    purchase, and the same purchase sent straight to the card is declined by the card's own limit
    (`LIMIT_EXCEEDED`); after STOP the card declines as `CARD_INACTIVE`. In the sandbox, STOP leaves
    the owner's card INACTIVE until it is unfrozen.
+
+## ADR-019: A payment in doubt is settled by a status check before the next decision
+
+Date: 2026-11-02 Status: proposed
+
+Context: a rail call can time out after the money moved (the Airwallex mock's `timeout-after` fault
+does exactly that, and the sandbox can too). The ledger already writes `unconfirmed` and keeps the
+reservation held, and `reconcile()` existed, but nothing ran it outside the earnings scene, and a
+settled payment left no trace in the event log (#21).
+Decision:
+
+1. A payment in doubt is never resent and never treated as failed: it stays `unconfirmed`, its
+   amount still counts against the budget, and only the rail's `getStatus(idempotencyKey)` settles
+   it to confirmed or released. A repeat of its idempotency key is refused by `duplicate_guard`.
+2. Before deciding a new payment or an owner's approval, control runs `reconcile()` if anything is
+   unconfirmed (at most every 2 s), so budgets count what the rail says. No timers: nothing runs
+   when nobody is paying, and nothing leaks when a hosted session is dropped.
+3. Each settled payment is logged as an `execution` event with the detail `status check`, so the
+   activity log shows "Money moved" or "failed" for it like any other payment.
+4. One reconcile runs at a time; a second caller gets the same result, and a payment settled while
+   the rail was being asked is skipped.
+   Consequences: a rail that stays `unknown` keeps that amount held until it answers. A slow
+   `getStatus` delays the next decision while something is in doubt, at most once every 2 s.
