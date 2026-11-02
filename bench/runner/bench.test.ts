@@ -1,8 +1,12 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { ScriptedBrain } from "@warrant/agents";
 import { deterministicPurpose } from "@warrant/control";
-import { loadCorpus } from "./case.js";
+import { FAMILIES, loadCorpus } from "./case.js";
+import type { BenchCase } from "./case.js";
 import { runBench } from "./run.js";
 import type { CaseResult } from "./run.js";
 import { summarize, table } from "./score.js";
@@ -21,7 +25,7 @@ beforeAll(async () => {
   results = await runBench(corpus, { brain: new ScriptedBrain(), purpose: deterministicPurpose });
   scores = Object.fromEntries(summarize(results).map((s) => [s.mode, s]));
   console.log(table(Object.values(scores)));
-}, 120_000);
+}, 300_000);
 
 const r = (id: string, mode: string) => results.find((x) => x.id === id && x.mode === mode);
 
@@ -38,6 +42,55 @@ describe("bench corpus", () => {
       "benign",
     ]) {
       expect(families, f).toContain(f);
+    }
+  });
+
+  it("meets SCORING.md's targets: 150+ attacks, 30+ benign, every schema family evenly", () => {
+    const main = corpus.filter((c) => !c.heldout);
+    expect(main.filter((c) => !c.benign).length).toBeGreaterThanOrEqual(150);
+    expect(main.filter((c) => c.benign).length).toBeGreaterThanOrEqual(30);
+    const perFamily = FAMILIES.filter((f) => f !== "benign").map(
+      (f) => main.filter((c) => c.family === f).length,
+    );
+    expect(Math.min(...perFamily)).toBeGreaterThanOrEqual(10);
+    expect(Math.max(...perFamily) - Math.min(...perFamily)).toBeLessThanOrEqual(2);
+  });
+
+  it("has a held-out set covering every attack family, scored apart", () => {
+    const held = corpus.filter((c) => c.heldout);
+    const families = held.map((c) => c.family);
+    for (const f of FAMILIES) expect(families, f).toContain(f);
+    expect(held.every((c) => c.file?.startsWith("heldout/"))).toBe(true);
+  });
+
+  it("the JSON schema lists the same families and channels as the runner", () => {
+    const schema = JSON.parse(
+      readFileSync(fileURLToPath(new URL("../schema/attack.schema.json", import.meta.url)), "utf8"),
+    ) as {
+      properties: {
+        family: { enum: string[] };
+        setup: { properties: { channel: { enum: string[] } } };
+      };
+    };
+    expect(schema.properties.family.enum).toEqual([...FAMILIES]);
+    expect(new Set(corpus.map((c) => c.setup.channel))).toEqual(
+      new Set(schema.properties.setup.properties.channel.enum),
+    );
+  });
+
+  it("refuses a corpus with a bad case, naming the file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bench-corpus-"));
+    try {
+      const src = new URL("../corpus/benign-sourcing-001.json", import.meta.url);
+      const good = JSON.parse(readFileSync(fileURLToPath(src), "utf8")) as BenchCase;
+      writeFileSync(join(dir, "good.json"), JSON.stringify(good));
+      writeFileSync(
+        join(dir, "bad.json"),
+        JSON.stringify({ ...good, id: "bad", benign: false, family: "price_rise" }),
+      );
+      expect(() => loadCorpus(dir)).toThrow(/bad\.json: benign must match moneyMoves/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
