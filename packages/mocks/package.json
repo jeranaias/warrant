@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./airwallex": "./src/airwallex/index.ts",
     "./feed": "./src/feed/index.ts",
     "./metal": "./src/metal/index.ts"
   },
