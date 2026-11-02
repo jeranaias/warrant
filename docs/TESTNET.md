@@ -42,7 +42,8 @@ only (day-one limits). `METAL_HOME/warrant-live/owner-state.json` always names t
 pays through `MetalAdapter`, the owner's mandate changes go through `CliMetalOwnerOps`, the
 upstream provider is a real x402 seller (`@metalntwx/metal-pay`) on `UPSTREAM_PORT` paid to its
 account above, and our store runs on `STORE_PORT` (signed order + warrant pass required, orders
-in the data dir). Airwallex stays on the in-memory rail: rails has no sandbox Airwallex adapter yet.
+in the data dir). Airwallex stays on the in-memory rail in this command; the Airwallex beat runs on
+the real sandbox with `pnpm scene:earnings --sandbox` (see "Airwallex sandbox" below).
 
 ```sh
 RAILS_MODE=sandbox pnpm scene     # the price-rise + limit-change story, on chain (about 2 minutes)
@@ -104,3 +105,19 @@ failed ... async.c`, exit 127). The adapter treats a 2xx status plus a settlemen
 
 `metal-agent fund <address> --network testnet`: about one grant a minute and a few a day per IP;
 429s are common. Only the business and customer accounts need USDZ. The live scene needs none.
+
+## Airwallex sandbox
+
+`pnpm scene:earnings --sandbox` runs the earnings beat on the real Airwallex sandbox with the keys
+in `.env` (`AIRWALLEX_BASE_URL`, `AIRWALLEX_CLIENT_ID`, `AIRWALLEX_API_KEY`). Metal stays on the
+mock chain in this command. Each run makes new sandbox objects: a deposit, a conversion, a transfer.
+
+| Step                                | Result (first live run, 2026-11-02)                        |
+| ----------------------------------- | ---------------------------------------------------------- |
+| Deposit into the USD Global Account | settled, reference = the (mock) Metal tx                   |
+| USD to EUR conversion               | created, fee amount only                                   |
+| EUR 50.00 licence fee, SWIFT        | transfer `5ea7d69d-e8f4-4919-aa0c-19a9af9758d1`, SCHEDULED |
+| Sandbox moves it along              | PAID; control's ledger confirmed it                        |
+
+EUR `LOCAL` transfers are refused on this account with `fee_unknown`, so the licensor is paid by
+SWIFT (ADR-017).
