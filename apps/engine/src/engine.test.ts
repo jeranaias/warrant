@@ -201,6 +201,31 @@ describe("engine: tasks in, decisions out", () => {
   });
 });
 
+describe("the owner's key (phone page sign-in)", () => {
+  it("approving and the emergency stop need the owner's key; reading stays open", async () => {
+    const { app } = createEngine({ scenario: "none", clock: () => NOW, ownerToken: "owner-key-1" });
+    const s = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => s.once("listening", () => ok()));
+    const a = s.address();
+    const at = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
+    const kill = (auth?: string) =>
+      fetch(`${at}/kill`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(auth ? { authorization: auth } : {}) },
+        body: JSON.stringify({ reason: "test" }),
+      });
+    try {
+      expect((await fetch(`${at}/approvals`)).status).toBe(200);
+      expect((await kill()).status).toBe(401);
+      expect((await kill("Bearer wrong")).status).toBe(401);
+      expect((await fetch(`${at}/approvals/prop_x`, { method: "POST" })).status).toBe(401);
+      expect((await kill("Bearer owner-key-1")).status).toBe(200);
+    } finally {
+      await new Promise<void>((ok) => s.close(() => ok()));
+    }
+  });
+});
+
 describe("disputes (ADR-012): the store answers from its records", () => {
   type File = {
     findings: { orderId: string; decision: { reason: string; refund: { cents: number } } }[];

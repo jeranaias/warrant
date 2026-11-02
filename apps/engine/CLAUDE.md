@@ -23,6 +23,11 @@ read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 400
 The hash is required (ADR-007): an answer is bound to exactly what the owner saw, so a missing hash
 is a 400 and a stale or different one is refused.
 
+**Owner's key:** `pnpm engine` makes a fresh owner key each start (or uses `OWNER_TOKEN`) and
+prints the owner link, `<dashboard>/#/m?owner=<key>`. Answering approvals and `POST /kill` need
+`Authorization: Bearer <key>` (401 otherwise); every read stays open. The dashboard moves the key
+from the link into the tab's session storage. `createEngine()` without `ownerToken` (tests) is open.
+
 **Owner controls:** `POST /kill` is the emergency stop (everything refused at once, approvals
 dropped, mock mandates revoked; the answer says how long it took). `POST /budget-changes` takes
 treasury's `BudgetChangeProposal`; it always waits in `/approvals`, and on approval the mandate is

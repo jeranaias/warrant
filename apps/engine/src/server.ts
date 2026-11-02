@@ -1,5 +1,6 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
-import type { Express, Request } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { AgentRole, DisputeCase } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
@@ -30,6 +31,11 @@ export interface EngineOptions {
   clock?: () => Date;
   /** The world to run in; default a fresh mock world. */
   world?: World;
+  /**
+   * The owner's key. When set, the owner's actions (answering approvals, the emergency stop) need
+   * `Authorization: Bearer <key>`; reading stays open. `pnpm engine` always sets one.
+   */
+  ownerToken?: string;
 }
 
 interface LoggedEvent {
@@ -69,6 +75,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "100kb" }));
+  const owner = ownerOnly(opts.ownerToken);
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, purposeModel: controller.purposeModel, queued: feed.pending().length });
@@ -148,8 +155,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ pending: controller.approvals.list() });
   });
 
-  app.post("/approvals/:proposalId", async (req, res) => {
-    const proposalId = req.params["proposalId"] ?? "";
+  app.post("/approvals/:proposalId", owner, async (req, res) => {
+    const proposalId = String(req.params["proposalId"] ?? "");
     const body = req.body as { decision?: string; shownHash?: unknown } | undefined;
     const decision = body?.decision;
     const pending = controller.approvals.get(proposalId);
@@ -185,7 +192,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   });
 
   // The owner's emergency stop. Everything stops at once; the timing is part of the answer.
-  app.post("/kill", async (req, res) => {
+  app.post("/kill", owner, async (req, res) => {
     const reason = String(
       (req.body as { reason?: unknown } | undefined)?.reason ?? "owner pressed stop",
     );
@@ -271,6 +278,17 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   });
 
   return { app, controller, world };
+}
+
+/** Only the owner's key passes. Compared as hashes, in constant time. */
+function ownerOnly(token: string | undefined) {
+  const want = token ? createHash("sha256").update(token).digest() : undefined;
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!want) return next();
+    const got = /^Bearer (.+)$/.exec(req.get("authorization") ?? "")?.[1] ?? "";
+    if (timingSafeEqual(createHash("sha256").update(got).digest(), want)) return next();
+    res.status(401).json({ error: "owner sign-in needed: open the owner link the engine printed" });
+  };
 }
 
 /** What a customer sends: the orders and the claim. The store fills in the rest. */
