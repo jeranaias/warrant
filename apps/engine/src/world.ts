@@ -158,6 +158,7 @@ export function bodies(
           rail: "airwallex_transfer",
           routingRef: licensorRef,
           currency: "EUR",
+          billingPeriod: "month",
         },
       ],
       perPaymentCap: eur(5000),

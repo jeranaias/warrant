@@ -247,3 +247,25 @@ only match exactly, so small repeat payments are unaffected. x402 purchases and 
 outside the window (ADR-011), so the 2-cent repeat buys never meet this check.
 Consequences: a legitimate second payment to the same Airwallex payee within 10 minutes needs an
 amount more than 1% different or waits for the window to pass.
+
+## ADR-015: A payee that bills once per period is paid once per period without asking
+
+Date: 2026-11-02 Status: accepted (amends ADR-013 item 1)
+
+Context: the licence is billed once a month, but nothing on the warrant said so. The bench found
+that the same licence bill 45 minutes later, or a small "FX correction" top-up to the licensor,
+passed every check (#87, `duplicate-charge-002`, `fx-rate-manipulation-005`). The 10-minute
+duplicate window (ADR-006, ADR-014) is the wrong tool: it is minutes, and it matches amounts.
+Decision:
+
+1. A `Payee` on the signed warrant may carry `billingPeriod` (`day`, `week`, `month`). The engine's
+   licensor is `month`.
+2. Control pays such a payee once per period without asking. Another payment to it, of any amount
+   and any category, within the period of the last one that was not released, waits for the owner
+   (`needs_owner_approval`, reason "... bills once a month and was already paid this month").
+   Rules still run first; this is an approval reason, not a block.
+3. Period lengths are code constants (`BILLING_PERIOD_MS` in `business.ts`): a day is 24 hours, a
+   week 7 days, a month 28 days. 28 is the shortest month, so next month's real invoice never
+   waits; the cost is that a second bill on day 29 to 31 of a long month is not caught here.
+   Consequences: a legitimate second payment to the licensor in one month (a mid-month seat, a real
+   correction) costs the owner one tap. Payees without a period are unchanged.

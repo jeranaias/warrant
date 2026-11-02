@@ -1,4 +1,4 @@
-import type { AgentRole, Money } from "@warrant/contracts";
+import type { AgentRole, BillingPeriod, Money } from "@warrant/contracts";
 
 /**
  * Kit 11 numbers (ADR-009). The brief says prices, budgets and the licence fee stay in code:
@@ -32,6 +32,19 @@ export const REFUNDS_WITHOUT_OWNER_PER_DAY = 2;
 
 /** Monthly licence fee, invoiced in euros. Our choice: the brief gives no amount. */
 export const LICENCE_FEE: Money = { currency: "EUR", cents: 5000 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * ADR-015: a second payment to a payee within this long of the last one waits for the owner,
+ * when the warrant gives the payee a billing period. A month is 28 days, the shortest month, so
+ * next month's real invoice never waits.
+ */
+export const BILLING_PERIOD_MS: Readonly<Record<BillingPeriod, number>> = {
+  day: DAY_MS,
+  week: 7 * DAY_MS,
+  month: 28 * DAY_MS,
+};
 
 /** Sum of the per-agent budgets. Must equal TOTAL_BUDGET (tested). */
 export function sumAgentBudgets(budgets = AGENT_BUDGETS): number {
