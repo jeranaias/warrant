@@ -78,7 +78,13 @@ export interface PendingApproval {
 }
 
 export interface SubmitResult {
-  decision?: { outcome: "execute" | "needs_owner_approval" | "blocked" };
+  decision?: {
+    outcome: "execute" | "needs_owner_approval" | "blocked";
+    /** Every rule control checked; the failed ones say why in `detail`. */
+    rules?: { checks: { rule: string; pass: boolean; detail: string }[] };
+    /** The purpose check's verdict, null when the rules already blocked. */
+    purpose?: { verdict: string; explanation: string } | null;
+  };
   blockedBy?: "malformed" | "rules" | "purpose" | "owner" | "rail";
   error?: string;
 }
