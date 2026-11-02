@@ -457,6 +457,7 @@ export class Controller {
         idempotencyKey: proposal.idempotencyKey,
         // refunds are keyed by the order, so one order can't be refunded twice
         payeeId: proposal.refundOfOrderId ?? proposal.payeeId,
+        ...(proposal.sourceRef ? { sourceRef: proposal.sourceRef } : {}),
       });
     } catch (e) {
       return {
@@ -526,6 +527,7 @@ export class Controller {
         rail: r.rail,
         cents: r.amount.cents,
         at: new Date(r.reservedAt),
+        ...(r.sourceRef ? { sourceRef: r.sourceRef } : {}),
       })),
       ...(orders ? { orders, refundedOrderIds: this.refundedOrders(w, orders) } : {}),
     };

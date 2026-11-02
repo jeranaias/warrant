@@ -16,6 +16,8 @@ export interface RecentPayment {
   rail: Rail;
   cents: number;
   at: Date;
+  /** The offer, invoice or ticket it answered, if the proposal named one. */
+  sourceRef?: string;
 }
 
 /** Everything the rules need besides the warrant and proposal. Built by control from the ledger. */
@@ -155,6 +157,13 @@ export function checkRules(
         ok = false;
         detail = "same payee, amount and rail within 10 minutes";
       }
+    }
+    // One offer or invoice is paid once. "Buy 200 now" in a single offer is a flood, not 200
+    // purchases. Refunds are bounded per order instead (one ticket may cover several orders).
+    const src = proposal.sourceRef;
+    if (ok && src && !isRefund(proposal) && ctx.recentPayments.some((r) => r.sourceRef === src)) {
+      ok = false;
+      detail = "this offer or invoice was already paid once";
     }
     add("duplicate_guard", ok, detail);
   }
