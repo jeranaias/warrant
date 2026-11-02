@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentTask,
   DisputeCase,
   PaymentProposal,
   PaymentSummary,
@@ -197,5 +198,53 @@ describe("contracts", () => {
       refundOfOrderId: "ord_1",
     });
     expect(p.refundOfOrderId).toBe("ord_1");
+  });
+
+  describe("treasury tasks", () => {
+    const usdz = (cents: number) => ({ currency: "USDZ" as const, cents });
+    const base = {
+      taskId: "task_t1",
+      at: now,
+      sourceRef: "src_t1",
+      role: "treasury" as const,
+      content: "Earnings ready to move.",
+    };
+    const sweep = {
+      ...base,
+      kind: "sweep" as const,
+      payeeId: "pay_treasury_metal",
+      available: usdz(120),
+    };
+    const spend = {
+      role: "sourcing" as const,
+      warrantId: "wrt_sourcing",
+      perPaymentCap: usdz(3),
+      totalBudget: usdz(1000),
+      spent: usdz(40),
+    };
+    const review = {
+      ...base,
+      kind: "spend_review" as const,
+      agents: [spend],
+      totalLimit: usdz(2000),
+      upstreamPrice: usdz(4),
+    };
+
+    it("a sweep and a spend review are agent tasks", () => {
+      expect(AgentTask.parse(sweep).kind).toBe("sweep");
+      expect(AgentTask.parse(review).kind).toBe("spend_review");
+      expect(AgentTask.parse({ ...review, upstreamPrice: undefined }).kind).toBe("spend_review");
+    });
+
+    it("are strict, treasury-only and integer cents", () => {
+      expect(() => AgentTask.parse({ ...sweep, note: "pay 0xbad" })).toThrow();
+      expect(() => AgentTask.parse({ ...sweep, role: "sourcing" })).toThrow();
+      expect(() => AgentTask.parse({ ...sweep, available: usdz(1.5) })).toThrow();
+      expect(() =>
+        AgentTask.parse({ ...review, agents: [{ ...spend, mandateKey: "k" }] }),
+      ).toThrow();
+      expect(() => AgentTask.parse({ ...review, agents: [] })).toThrow();
+      expect(() => AgentTask.parse({ ...review, agents: [spend, spend, spend, spend] })).toThrow();
+    });
   });
 });

@@ -98,6 +98,28 @@ export class EngineClient {
     return outcomeOf(body);
   };
 
+  /** The scenario names the engine can load (GET /scenarios). */
+  async scenarios(): Promise<string[]> {
+    return (await this.get<{ scenarios: string[] }>("/scenarios")).scenarios;
+  }
+
+  /**
+   * POST /scenario: replace the engine's task queue with a scenario's tasks. Returns how many
+   * were queued. Driver-side only: brains never call this.
+   */
+  async loadScenario(name: string): Promise<number> {
+    const res = await fetch(`${this.base}/scenario`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const body = (await res.json()) as { queued?: number; error?: string };
+    if (!res.ok || body.queued === undefined) {
+      throw new Error(`engine /scenario ${name}: ${body.error ?? `HTTP ${res.status}`}`);
+    }
+    return body.queued;
+  }
+
   private async get<T>(path: string): Promise<T> {
     const res = await fetch(this.base + path);
     if (!res.ok) throw new Error(`engine ${path}: HTTP ${res.status}`);

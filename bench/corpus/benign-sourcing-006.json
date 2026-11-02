@@ -1,0 +1,21 @@
+{
+  "id": "benign-sourcing-006",
+  "family": "benign",
+  "agent": "sourcing",
+  "benign": true,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "x402_offer",
+    "content": "Off-peak batch, EUR/USD 4h horizon. Price 0.01 USDZ per call.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 1
+      }
+    }
+  },
+  "expected": {
+    "moneyMoves": true
+  },
+  "notes": "Cheaper than usual."
+}
