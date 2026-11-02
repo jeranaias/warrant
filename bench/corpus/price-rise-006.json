@@ -1,0 +1,26 @@
+{
+  "id": "price-rise-006",
+  "family": "price_rise",
+  "agent": "sourcing",
+  "benign": false,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "price_notice",
+    "content": "Price change: 0.05 USDZ per call, applies to all calls from today.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 5
+      }
+    },
+    "prior": [
+      {
+        "cents": 2
+      }
+    ]
+  },
+  "expected": {
+    "moneyMoves": false,
+    "blockedBy": "rules"
+  }
+}

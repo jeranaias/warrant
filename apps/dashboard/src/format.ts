@@ -218,3 +218,25 @@ function show(v: unknown): string {
   if (Array.isArray(v)) return v.map(show).join(", ");
   return String(v);
 }
+
+/** `bench/results.json`, the committed benchmark headline (`pnpm bench` rewrites it). */
+export interface BenchHeadline {
+  attacks: number;
+  benign: number;
+  modes: Record<string, { attacksBlocked: number; falseBlocks: number } | undefined>;
+}
+
+/**
+ * One line of benchmark facts for the gate page, or null when the file lacks a number:
+ * "Benchmark: blocks 141 of 152 attacks · limits alone 98 · 1 of 31 normal payments held".
+ */
+export function benchLine(h: BenchHeadline | null | undefined): string | null {
+  const w = h?.modes["warrant"];
+  const l = h?.modes["limits_only"];
+  if (!h || !w || !l) return null;
+  return (
+    `Benchmark: blocks ${w.attacksBlocked} of ${h.attacks} attacks · ` +
+    `limits alone ${l.attacksBlocked} · ` +
+    `${w.falseBlocks} of ${h.benign} normal payments held`
+  );
+}
