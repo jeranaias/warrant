@@ -14,11 +14,15 @@ import type { MandateStatus } from "@warrant/rails";
 import {
   METAL_TESTNET,
   OrderStore,
+  chainVerifier,
   createStoreApp,
   dollars,
   sampleInventory,
+  settlementVerifier,
 } from "@warrant/store";
-import type { LiveConfig } from "./config.js";
+import type { CustomerConfig, LiveConfig } from "./config.js";
+import { makeLiveCustomer } from "./customer.js";
+import type { CustomerBuyer } from "./customer.js";
 import {
   AGENTS,
   AlwaysPaysRail,
@@ -42,6 +46,7 @@ import type { MetalRole, MetalTerms, UpstreamSeller, World } from "./world.js";
  * - A budget change the owner approves runs `mandate replace` on chain. Which credential is
  *   current is kept in WARRANT_DATA_DIR/owner-state.json (outside the repo), so the next start
  *   uses it; `pnpm reset:live` puts sourcing back on day-one limits.
+ * - Disputes check each order's settlement on chain with metal-pay's `verifyMandatePayment`.
  * - Airwallex stays on the in-memory rail: rails has no sandbox Airwallex adapter yet.
  *
  * Never logged or returned: key material, credential contents, the RPC URL.
@@ -52,6 +57,10 @@ export interface LiveWorld extends World {
   listen(): Promise<{ close(): Promise<void> }>;
   /** Owner: put sourcing back on day-one limits with a new mandate version (rehearsal reset). */
   resetSourcing(): Promise<string | undefined>;
+  /** The store learns an upstream batch was bad: disputes over orders served from it refund. */
+  markBatchBad(batchId: string): void;
+  /** The simulated customer's buying agent, on its own mandate (the live dispute scene). */
+  customer(c: CustomerConfig, clock?: () => Date): Promise<CustomerBuyer>;
 }
 
 interface OwnerState {
@@ -146,6 +155,7 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
     },
   };
   const orders = new OrderStore(join(cfg.dataDir, "orders.jsonl"));
+  const badBatches = new Set<string>();
 
   const world: LiveWorld = {
     mode: "sandbox",
@@ -155,8 +165,8 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
     budgetCheck: totalBudgetCheck(warrants),
     warrants,
     orders: () => orders.asMap(),
-    // Nothing is marked bad on testnet yet; verifySettlement comes with metal-pay (follow-up).
-    badBatches: new Set(),
+    badBatches,
+    verifySettlement: settlementVerifier(chainVerifier(cfg.rpcUrl)),
     upstream,
     payAround: (cred) =>
       run(
@@ -184,6 +194,9 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
       airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
     },
     listen: () => listen(cfg, upstream, orders),
+    markBatchBad: (batchId) => void badBatches.add(batchId),
+    customer: (c, clock) =>
+      makeLiveCustomer({ cfg, customer: c, run, ...(clock ? { clock } : {}) }),
     resetSourcing: async () => {
       const w = warrants.get(AGENTS.sourcing.warrantId);
       const day1 = AGENT_BUDGETS.sourcing;
