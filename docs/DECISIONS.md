@@ -283,3 +283,29 @@ refund for any other claim waits for the owner, whatever its amount. The other A
 (25 cents, two a day per customer) still apply on top.
 Consequences: an `other` dispute costs the owner one tap per refund. The purpose checker still
 does not see the claim (no `PaymentSummary` change).
+
+## ADR-017: The sandbox pays the EUR licence by SWIFT
+
+Date: 2026-11-02 Status: accepted
+
+Context: the first live run of the earnings beat on the Airwallex sandbox (`pnpm scene:earnings
+--sandbox`) found two gaps the mock hid. The simulated deposit needs a `global_account_id`: the
+deposit lands in a Global Account, not a bare currency. A EUR `LOCAL` transfer is refused with
+`fee_unknown` ("a problem with your transfer fee configuration"), with the fee paid by the payer or
+by the beneficiary. A USD `LOCAL` (ACH) transfer and a EUR `SWIFT` transfer both go through on the
+same account, so the account's fee setup covers SWIFT for EUR but not SEPA.
+Decision:
+
+1. `depositEarnings` takes an optional `globalAccountId`. The sandbox world finds the account's
+   active USD Global Account (`globalAccountFor`). The mock still takes a bare currency.
+2. `AirwallexTransfers` takes `transferMethod` (`LOCAL` by default, or `SWIFT` with
+   `swift_charge_option: SHARED`). `createEurBeneficiary` takes an optional BIC; with one, the
+   beneficiary is a SWIFT beneficiary. The sandbox world pays "Data Licensor GmbH (SWIFT)", a
+   German IBAN with BIC COBADEFFXXX, found by nickname after the first run.
+3. In the sandbox, treasury converts the whole fee from USD (`alwaysConvert`), even though the
+   sandbox wallet already holds euros. Treasury pays EUR bills out of USD earnings, and the demo
+   shows the conversion.
+   Consequences: the sandbox run is deposit, conversion and a SWIFT transfer, then the sandbox
+   moves it to PAID and control's ledger confirms it. If Airwallex enables EUR LOCAL fees on the
+   account, switch `transferMethod` back to `LOCAL`; nothing else changes. Metal stays on the mock
+   chain in this scene; `RAILS_MODE=sandbox pnpm scene` covers Metal live.
