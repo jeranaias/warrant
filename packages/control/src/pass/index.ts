@@ -2,6 +2,7 @@ import { createHash, createPublicKey, randomUUID, sign, verify } from "node:cryp
 import type { KeyObject } from "node:crypto";
 import { WarrantGrantBody, WarrantPass, WarrantPassBody } from "@warrant/contracts";
 import type {
+  Money,
   PaymentProposal,
   SignedOrderRecord,
   SpendCategory,
@@ -225,6 +226,30 @@ export function verifyPass(p: WarrantPass | undefined, e: SaleExpectation): Pass
   return { ok: problems.length === 0, problems, owner: keyFingerprint(grant.ownerKey) };
 }
 
+/**
+ * One seller-side pass check, for the event log and the dashboard. Public facts only: the grant
+ * is what the buyer showed the seller; the owner's key appears as its fingerprint.
+ */
+export interface PassCheckedEvent {
+  type: "pass_checked";
+  ok: boolean;
+  problems: string[];
+  /** The URL the buyer asked for and the price it was checked against. */
+  url: string;
+  amountCents: number;
+  /** From the buyer's grant, when the pass was readable. */
+  buyer?: {
+    payer: string;
+    ownerId: string;
+    /** Fingerprint of the owner key that signed the grant. */
+    ownerKey: string;
+    warrantId: string;
+    /** The Metal mandate the grant says the payer pays under, if it names one. */
+    mandateId?: string;
+    perPaymentCap: Money;
+  };
+}
+
 export interface PassCheckerOptions {
   /** The seller's own address. */
   payTo: string;
@@ -232,6 +257,8 @@ export interface PassCheckerOptions {
   category: SpendCategory;
   clock?: () => Date;
   maxAgeMs?: number;
+  /** Told about every check, passed or refused (the store's line in the event log). */
+  onCheck?: (e: PassCheckedEvent) => void;
 }
 
 /**
@@ -253,7 +280,7 @@ export class PassChecker {
     const now = this.clock();
     this.forgetOld(now);
     const p = decodePass(header);
-    const r = verifyPass(p, {
+    let r = verifyPass(p, {
       payTo: this.opts.payTo,
       url,
       amountCents,
@@ -263,8 +290,9 @@ export class PassChecker {
       seen: this.seen,
       ...(this.opts.maxAgeMs !== undefined ? { maxAgeMs: this.opts.maxAgeMs } : {}),
     });
-    if (header && !p) return { ok: false, problems: ["warrant pass unreadable"] };
+    if (header && !p) r = { ok: false, problems: ["warrant pass unreadable"] };
     if (r.ok && p) this.seen.set(p.pass.nonce, Date.parse(p.pass.at));
+    this.opts.onCheck?.(passCheckedEvent(r, url, amountCents, p));
     return r;
   }
 
@@ -285,6 +313,34 @@ export class PassChecker {
     const cutoff = now.getTime() - (this.opts.maxAgeMs ?? DEFAULT_MAX_AGE_MS) - SKEW_MS;
     for (const [nonce, at] of this.seen) if (at < cutoff) this.seen.delete(nonce);
   }
+}
+
+function passCheckedEvent(
+  r: PassCheck,
+  url: string,
+  amountCents: number,
+  p: WarrantPass | undefined,
+): PassCheckedEvent {
+  const g = p?.grant;
+  return {
+    type: "pass_checked",
+    ok: r.ok,
+    problems: r.problems,
+    url,
+    amountCents,
+    ...(g
+      ? {
+          buyer: {
+            payer: g.payer,
+            ownerId: g.ownerId,
+            ownerKey: keyFingerprint(g.ownerKey),
+            warrantId: g.warrantId,
+            ...(g.mandateId ? { mandateId: g.mandateId } : {}),
+            perPaymentCap: g.perPaymentCap,
+          },
+        }
+      : {}),
+  };
 }
 
 // ---- dispute evidence ----

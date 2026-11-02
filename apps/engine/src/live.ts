@@ -9,6 +9,7 @@ import { METAL_NETWORKS, registerMetalScheme } from "@metalntwx/metal-pay";
 import { requireSignedOffer } from "@metalntwx/metal-pay/mandates";
 import type { AgentRole, MandateRef, Warrant } from "@warrant/contracts";
 import { AGENT_BUDGETS, PassChecker, UPSTREAM_PRICE_BEFORE, signWarrant } from "@warrant/control";
+import type { ControlEvent } from "@warrant/control";
 import { CliMetalOwnerOps, MetalAdapter, execCliRunner, x402Quote } from "@warrant/rails";
 import type { MandateStatus } from "@warrant/rails";
 import {
@@ -156,6 +157,8 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
   };
   const orders = new OrderStore(join(cfg.dataDir, "orders.jsonl"));
   const badBatches = new Set<string>();
+  const listeners: ((e: ControlEvent) => void)[] = [];
+  const told = (e: ControlEvent) => listeners.forEach((f) => f(e));
 
   const world: LiveWorld = {
     mode: "sandbox",
@@ -193,7 +196,8 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
       }),
       airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
     },
-    listen: () => listen(cfg, upstream, orders),
+    watch: (f) => void listeners.push(f),
+    listen: () => listen(cfg, upstream, orders, told),
     markBatchBad: (batchId) => void badBatches.add(batchId),
     customer: (c, clock) =>
       makeLiveCustomer({ cfg, customer: c, run, ...(clock ? { clock } : {}) }),
@@ -246,6 +250,7 @@ async function listen(
   cfg: LiveConfig,
   upstream: UpstreamSeller,
   orders: OrderStore,
+  onEvent: (e: ControlEvent) => void,
 ): Promise<{ close(): Promise<void> }> {
   const facilitator = () =>
     new HTTPFacilitatorClient({
@@ -283,7 +288,7 @@ async function listen(
       registerMetalScheme(new x402ResourceServer(facilitator()), { networks: ["testnet"] }),
       { rpcUrl: cfg.rpcUrl },
     ),
-    passes: new PassChecker({ payTo: cfg.business, category: "data_purchase" }),
+    passes: new PassChecker({ payTo: cfg.business, category: "data_purchase", onCheck: onEvent }),
     onError: (msg) => console.error(`[store] ${msg}`),
   });
 

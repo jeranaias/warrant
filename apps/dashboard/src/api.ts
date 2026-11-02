@@ -122,7 +122,44 @@ export type ControlEvent =
       warrantId: string;
       fromVersion: number;
       toVersion: number;
-    };
+    }
+  | PassCheckedEvent
+  | DisputeDecidedEvent;
+
+/** Our store checked a buyer's warrant pass before serving (control's PassCheckedEvent). */
+export interface PassCheckedEvent {
+  type: "pass_checked";
+  ok: boolean;
+  problems: string[];
+  url: string;
+  amountCents: number;
+  buyer?: {
+    payer: string;
+    ownerId: string;
+    /** Fingerprint of the owner key that signed the buyer's grant. */
+    ownerKey: string;
+    warrantId: string;
+    mandateId?: string;
+    perPaymentCap: Money;
+  };
+}
+
+/** The store decided a dispute from its records (control's DisputeDecidedEvent). */
+export interface DisputeDecidedEvent {
+  type: "dispute_decided";
+  disputeId: string;
+  claim: string;
+  customer: string;
+  refund: Money;
+  orders: {
+    orderId: string;
+    reason: string;
+    refundCents: number;
+    verified: boolean;
+    txHash?: string;
+    mandateId?: string;
+  }[];
+}
 
 export interface LoggedEvent {
   seq: number;

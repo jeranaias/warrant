@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { DisputeCase, SignedOrderRecord } from "@warrant/contracts";
-import { decideDispute } from "./disputes/index.js";
+import { decideDispute, disputeDecidedEvent } from "./disputes/index.js";
 import type { DisputeInputs } from "./disputes/index.js";
 import { encodePass, issueGrant, issuePass, keyB64 } from "./pass/index.js";
 
@@ -135,5 +135,48 @@ describe("disputes: the store decides from its records", () => {
     ]);
     const forged = f.findings[2]?.evidence.filter((e) => !e.ok).map((e) => e.what);
     expect(forged).toEqual(["the owner's delegated key signed this purchase"]);
+  });
+});
+
+describe("dispute_decided: the decision as one event line", () => {
+  it("per order: refund or kept, the reason code, the settlement tx when verified", async () => {
+    const f = await run("wrong_data", ["ord_bad", "ord_good", "ord_404"]);
+    const e = disputeDecidedEvent(
+      {
+        disputeId: "dsp_1",
+        customer: CUSTOMER,
+        orderIds: ["ord_bad", "ord_good", "ord_404"],
+        claim: "wrong_data",
+        ticketRef: "tkt_1",
+        openedAt: NOW.toISOString(),
+      },
+      f,
+      orders,
+    );
+    const tx = "0x" + "d".repeat(64);
+    expect(e).toEqual({
+      type: "dispute_decided",
+      disputeId: "dsp_1",
+      claim: "wrong_data",
+      customer: CUSTOMER,
+      refund: usdz(5),
+      orders: [
+        {
+          orderId: "ord_bad",
+          reason: "data_was_wrong",
+          refundCents: 5,
+          verified: true,
+          txHash: tx,
+        },
+        {
+          orderId: "ord_good",
+          reason: "data_was_correct",
+          refundCents: 0,
+          verified: true,
+          txHash: tx,
+        },
+        { orderId: "ord_404", reason: "order_not_found", refundCents: 0, verified: false },
+      ],
+    });
   });
 });

@@ -22,7 +22,7 @@ import {
   keyB64,
   signWarrant,
 } from "@warrant/control";
-import type { PurposeChecker } from "@warrant/control";
+import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { MetalAdapter, classifyPay, classifyPull } from "@warrant/rails";
 import type {
   CardControls,
@@ -351,6 +351,11 @@ export interface World {
    * Sandbox: metal-pay's `verifyMandatePayment` over the order's tx and signed order.
    */
   verifySettlement?: (order: SignedOrderRecord) => Promise<{ ok: boolean; detail: string }>;
+  /**
+   * Sandbox: subscribe to our store's events (each warrant pass check, `pass_checked`). The mock
+   * world runs no store.
+   */
+  watch?: (listener: (e: ControlEvent) => void) => void;
   /** Mock mode only: the in-memory chain behind `GET /chain`. */
   chain?: MockMetalChain;
   upstream: UpstreamSeller;
