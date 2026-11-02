@@ -91,6 +91,23 @@ After the kill switch (`POST /kill` in live mode revokes the sourcing and suppor
 | old credential tries to pay        | **refused on chain**: `mandate_revoked`                                                 | same                                                                                    |
 | `pnpm reset:live`                  | replaced: `0x377cdfe0d776665a239bac6a1382ce89c8201ecbbc46b835644782004cd0d7fc` (v3, 3c) | replaced: `0xd1549f88af4f7222126e7c51c8edc9abb45ed692f152b1e1b278a9c4622b8735` (v5, 3c) |
 
+## Live dispute run (TODO: owner)
+
+`RAILS_MODE=sandbox pnpm scene:dispute` (#106). Fill in from the printed output; each hash is on
+the explorer at `https://testnet.metalntwx.com/tx/<hash>`. No `pnpm reset:live` needed after it.
+
+| Step                                                  | Result                                                     |
+| ----------------------------------------------------- | ---------------------------------------------------------- |
+| customer's agent buys `fx-eurusd` (order + pass)      | TODO: paid `0x...`, order `ord_...`                        |
+| customer's agent buys `btc-usd` (order + pass)        | TODO: paid `0x...`, order `ord_...`                        |
+| store checks the pass before serving (dashboard line) | TODO: owner key, mandate `0x...`, cap 0.05                 |
+| store: the `fx-eurusd` batch was stale                | no chain call                                              |
+| dispute "data was wrong" on both orders               | TODO: both verified on chain (`verifyMandatePayment`)      |
+| support refunds the `fx-eurusd` order (mandate pull)  | TODO: refunded `0x...` (support mandate)                   |
+| customer asks again, adds `ord_404`                   | TODO: `already_refunded`, `order_not_found`; no chain call |
+| support tries the same refund again                   | TODO: refused by our rules (`refund_matches_order`)        |
+| "my agent never agreed" on the `btc-usd` order        | TODO: `owner_authorized`, N of N checks hold               |
+
 ## Windows quirks (metal-agent 0.3.3)
 
 - Run `node <cli>/dist/index.js`, not the `.cmd` shim: `execCliRunner` runs a `.js` bin under
