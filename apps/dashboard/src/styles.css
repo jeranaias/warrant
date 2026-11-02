@@ -1233,6 +1233,16 @@ kbd {
   text-overflow: ellipsis;
 }
 
+.hud-bench {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .hud-bottom .btn.kill {
   background: var(--solid);
   padding: 9px 20px;

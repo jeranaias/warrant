@@ -18,6 +18,7 @@
     "scene": "pnpm --filter @warrant/engine scene",
     "scene:earnings": "pnpm --filter @warrant/engine scene:earnings",
     "scene:dispute": "pnpm --filter @warrant/engine scene:dispute",
+    "scene:card": "pnpm --filter @warrant/engine scene:card",
     "setup:testnet": "pnpm --filter @warrant/engine setup:testnet",
     "reset:live": "pnpm --filter @warrant/engine reset:live",
     "dashboard": "pnpm --filter @warrant/dashboard dev",

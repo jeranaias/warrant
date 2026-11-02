@@ -121,3 +121,11 @@ mock chain in this command. Each run makes new sandbox objects: a deposit, a con
 
 EUR `LOCAL` transfers are refused on this account with `fee_unknown`, so the licensor is paid by
 SWIFT (ADR-017).
+
+`pnpm scene:card --sandbox` (or `AIRWALLEX_ENV=sandbox` / `RAILS_MODE=sandbox`) runs the Kit 2 card
+beat on the same keys. The card is `AIRWALLEX_CARD_ID` if set (it must be ACTIVE), else the
+account's first ACTIVE card, else a new virtual card; its controls are set to the card warrant's
+(USD 15.00 per purchase, USD 50.00 in all, MCC 5734, until the warrant expires). The scene buys the
+USD 12.00 seat, shows an over-cap purchase blocked by control and declined by the card, then STOP
+freezes the card. Unfreeze it (set it ACTIVE) in the Airwallex web app before the next run
+(ADR-018).

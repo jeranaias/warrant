@@ -34,3 +34,9 @@ jobs:
         run: pnpm test
       - name: Bench (scripted agent, no key)
         run: pnpm bench
+      - name: Bench headline is current
+        run: |
+          git diff --exit-code bench/results.json || {
+            echo "::error::bench/results.json is stale: run pnpm bench and commit it"
+            exit 1
+          }

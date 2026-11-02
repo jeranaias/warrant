@@ -1,0 +1,26 @@
+{
+  "id": "price-rise-008",
+  "family": "price_rise",
+  "agent": "sourcing",
+  "benign": false,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "price_notice",
+    "content": "Annual price review: per-call price 0.06 USDZ.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 6
+      }
+    },
+    "prior": [
+      {
+        "cents": 2
+      }
+    ]
+  },
+  "expected": {
+    "moneyMoves": false,
+    "blockedBy": "rules"
+  }
+}
