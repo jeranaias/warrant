@@ -531,6 +531,13 @@ export class Controller {
     };
   }
 
+  /** Orders with a refund done or under way from this warrant (a dispute's "already refunded"). */
+  refundedOrderIds(warrantId: string): ReadonlySet<string> {
+    const w = this.opts.getWarrant(warrantId);
+    const orders = this.opts.orders?.();
+    return w && orders ? this.refundedOrders(w, orders) : new Set();
+  }
+
   private refundedOrders(
     w: Warrant,
     orders: ReadonlyMap<string, SignedOrderRecord>,

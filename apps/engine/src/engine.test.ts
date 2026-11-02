@@ -188,3 +188,34 @@ describe("engine: tasks in, decisions out", () => {
     expect((await get<{ engaged: boolean }>("/kill")).engaged).toBe(true);
   });
 });
+
+describe("disputes (ADR-012): the store answers from its records", () => {
+  type File = {
+    findings: { orderId: string; decision: { reason: string; refund: { cents: number } } }[];
+  };
+
+  it("lists the stored orders with the customer's pass", async () => {
+    const { orders } = await get<{ orders: { orderId: string; buyerPass?: string }[] }>("/orders");
+    expect(orders.map((o) => o.orderId)).toEqual(["ord_1", "ord_2", "ord_3"]);
+    expect(orders.every((o) => typeof o.buyerPass === "string")).toBe(true);
+  });
+
+  it("decides per order: a signed pass stands, an unknown order gets nothing", async () => {
+    const r = await post<File>("/disputes", {
+      orderIds: ["ord_3", "ord_404"],
+      claim: "not_authorized",
+    });
+    expect(r.status).toBe(200);
+    expect(
+      r.body.findings.map((f) => [f.orderId, f.decision.reason, f.decision.refund.cents]),
+    ).toEqual([
+      ["ord_3", "owner_authorized", 0],
+      ["ord_404", "order_not_found", 0],
+    ]);
+  });
+
+  it("refuses a malformed dispute", async () => {
+    expect((await post("/disputes", { orderIds: [], claim: "wrong_data" })).status).toBe(400);
+    expect((await post("/disputes", { orderIds: ["ord_1"], claim: "refund me" })).status).toBe(400);
+  });
+});
