@@ -2,13 +2,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { AgentRole, DisputeCase } from "@warrant/contracts";
+import type { AgentTask } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
 import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
 import { answerDispute } from "./disputes.js";
-import { AGENTS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
+import { AGENTS, CUSTOMER_ADDRESS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
 import type { World } from "./world.js";
 
 /**
@@ -48,6 +49,11 @@ export interface Engine {
   app: Express;
   controller: Controller;
   world: World;
+  /**
+   * Disputes the store has on file, by `ticketRef`. A refund may only cover the orders of the
+   * dispute its `sourceRef` names, whatever the ticket text adds.
+   */
+  disputes: Map<string, DisputeCase>;
 }
 
 export function createEngine(opts: EngineOptions = {}): Engine {
@@ -55,6 +61,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   const world = opts.world ?? makeWorld(clock());
   const feed = new TaskFeed();
   const log: LoggedEvent[] = [];
+  const disputes = new Map<string, DisputeCase>();
 
   const controller = new Controller({
     ownerPublicKey: world.ownerPublicKey,
@@ -62,6 +69,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     rails: world.rails,
     purpose: opts.purpose ?? placeholderPurpose,
     orders: world.orders,
+    disputes: () => disputes,
     credentialFor: (w) => world.credentials.get(w.agentRole),
     applyBudgetChange: world.applyBudgetChange,
     budgetCheck: world.budgetCheck,
@@ -135,7 +143,9 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     const limit = Math.min(Math.max(Number(req.query["limit"] ?? 10) || 10, 1), 100);
-    res.json({ tasks: feed.take(role, limit).map((it) => it.task) });
+    const tasks = feed.take(role, limit).map((it) => it.task);
+    for (const t of tasks) fileDispute(disputes, t);
+    res.json({ tasks });
   });
 
   // The agent's answer. Same entry point real agents use: control's submit path.
@@ -257,7 +267,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   // A customer disputes orders. The store answers from its records alone (ADR-012): one decision
   // per order, with the evidence behind it. Refunds then go through POST /proposals as usual.
-  let disputes = 0;
+  let disputesOpened = 0;
   app.post("/disputes", async (req, res) => {
     const body = DisputeRequest.safeParse(req.body);
     if (!body.success) {
@@ -265,8 +275,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     const file = await answerDispute(
-      { world, controller },
-      { disputeId: `dsp_${++disputes}`, ...body.data },
+      { world, controller, disputes },
+      { disputeId: `dsp_${++disputesOpened}`, ...body.data },
       clock(),
     );
     res.json(file);
@@ -277,7 +287,20 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ labels: feed.labels() });
   });
 
-  return { app, controller, world };
+  return { app, controller, world, disputes };
+}
+
+/** A dispute task handed to support is a dispute on file: its ticket is the task's sourceRef. */
+export function fileDispute(disputes: Map<string, DisputeCase>, t: AgentTask): void {
+  if (t.kind !== "dispute") return;
+  disputes.set(t.sourceRef, {
+    disputeId: t.disputeId,
+    customer: CUSTOMER_ADDRESS,
+    orderIds: t.orderIds,
+    claim: t.claim,
+    ticketRef: t.sourceRef,
+    openedAt: t.at,
+  });
 }
 
 /** Only the owner's key passes. Compared as hashes, in constant time. */

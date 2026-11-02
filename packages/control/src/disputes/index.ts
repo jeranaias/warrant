@@ -40,6 +40,8 @@ export interface OrderFinding {
 
 export interface DisputeFile {
   disputeId: string;
+  /** The ticket the dispute came in on: a refund names it as its `sourceRef`. */
+  ticketRef: string;
   findings: OrderFinding[];
   /** Total the evidence says to refund. */
   refund: Money;
@@ -55,7 +57,12 @@ export async function decideDispute(inp: DisputeInputs): Promise<DisputeFile> {
     findings.push(await decideOrder(inp, orderId, orders.get(orderId)));
   }
   const cents = findings.reduce((n, f) => n + f.decision.refund.cents, 0);
-  return { disputeId: dispute.disputeId, findings, refund: { currency: "USDZ", cents } };
+  return {
+    disputeId: dispute.disputeId,
+    ticketRef: dispute.ticketRef,
+    findings,
+    refund: { currency: "USDZ", cents },
+  };
 }
 
 async function decideOrder(

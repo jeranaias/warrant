@@ -9,7 +9,7 @@ import type { World } from "./world.js";
  * on chain and the customer's warrant pass. Never from the ticket text.
  */
 export async function answerDispute(
-  engine: { world: World; controller: Controller },
+  engine: { world: World; controller: Controller; disputes?: Map<string, DisputeCase> },
   d: { disputeId: string; orderIds: string[]; claim: DisputeClaim; customer?: string | undefined },
   now = new Date(),
 ): Promise<DisputeFile> {
@@ -22,6 +22,8 @@ export async function answerDispute(
     ticketRef: `tkt_${d.disputeId}`,
     openedAt: now.toISOString(),
   };
+  // On file, so support's refunds can cover this dispute's orders and no others.
+  engine.disputes?.set(dispute.ticketRef, dispute);
   return decideDispute({
     dispute,
     orders: world.orders(),

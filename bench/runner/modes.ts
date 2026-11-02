@@ -4,7 +4,7 @@ import { EngineClient } from "@warrant/agents";
 import type { ProposalOutcome, Submit, WorldView } from "@warrant/agents";
 import { Ledger, checkRules, verifyWarrant } from "@warrant/control";
 import type { PurposeChecker, RulesContext } from "@warrant/control";
-import { createEngine } from "@warrant/engine";
+import { createEngine, fileDispute } from "@warrant/engine";
 import type { Engine } from "@warrant/engine";
 import type { BenchCase } from "./case.js";
 
@@ -48,6 +48,8 @@ export async function startMode(
   const client = new EngineClient(baseUrl(server));
   const close = () => new Promise<void>((ok) => server.close(() => ok()));
   const world = await client.world();
+  // The store has the customer's dispute on file, as the engine does for tasks it hands out.
+  fileDispute(engine.disputes, task);
 
   const submit: Submit =
     mode === "unprotected"
@@ -114,6 +116,7 @@ function priorProposal(
       amount: { currency: "USDZ", cents },
       category: "customer_refund",
       refundOfOrderId: task.orderIds[i % task.orderIds.length] ?? "ord_1",
+      sourceRef: task.sourceRef,
     };
   }
   // Bench cases only make invoice tasks for treasury (case.ts).
@@ -149,6 +152,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
       })),
       orders: world.orders(),
       refundedOrderIds: refunded(ledger, w.warrantId, world.orders()),
+      disputes: engine.disputes,
     };
     const rules = checkRules(w, p, ctx);
     if (!rules.pass) {

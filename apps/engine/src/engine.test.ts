@@ -27,6 +27,7 @@ const post = async <T>(path: string, body: unknown) => {
   return { status: r.status, body: (await r.json()) as T };
 };
 
+type Check = { rule: string; pass: boolean; detail: string };
 type Result = {
   decision?: { outcome: string; proposalId: string };
   blockedBy?: string;
@@ -147,7 +148,25 @@ describe("engine: tasks in, decisions out", () => {
     await post("/scenario", { name: "all" });
     const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=support");
     const real = tasks.find((t) => t.kind === "dispute" && t.orderIds[0] === "ord_1") as AgentTask;
-    const refund = (orderId: string) => ({ ...proposalFor(real), refundOfOrderId: orderId });
+    // The task's dispute is about ord_1 only: another order is refused whatever the ticket says.
+    const other = await post<Result & { decision?: { rules: { checks: Check[] } } }>("/proposals", {
+      ...proposalFor(real),
+      refundOfOrderId: "ord_2",
+    });
+    expect(other.body.blockedBy).toBe("rules");
+    expect(other.body.decision?.rules.checks.find((c) => !c.pass)?.detail).toBe(
+      "ord_2 is not in the dispute",
+    );
+    // A dispute over all three orders, opened with the store.
+    const file = await post<{ ticketRef: string }>("/disputes", {
+      orderIds: ["ord_1", "ord_2", "ord_3", "ord_404"],
+      claim: "wrong_data",
+    });
+    const refund = (orderId: string) => ({
+      ...proposalFor(real),
+      sourceRef: file.body.ticketRef,
+      refundOfOrderId: orderId,
+    });
     for (const id of ["ord_1", "ord_2"]) {
       const r = await post<Result>("/proposals", refund(id));
       expect(r.body.execution?.status, id).toBe("succeeded");
