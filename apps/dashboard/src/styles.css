@@ -547,38 +547,6 @@ select {
   color: var(--text);
 }
 
-/* phone page: only what needs a thumb */
-.phone {
-  max-width: 440px;
-  margin: 0 auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.phone-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.phone .approval-foot .btn {
-  flex: 1;
-  padding: 14px;
-  font-size: 1rem;
-}
-
-.phone .approval-foot .mono {
-  flex-basis: 100%;
-  text-align: center;
-  order: 3;
-}
-
-.phone .kv {
-  font-size: 0.82rem;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
@@ -589,521 +557,13 @@ select {
   white-space: nowrap;
 }
 
-/* the flow map: the picture the dashboard is built around (components/FlowMap.tsx) */
-.flow {
-  margin-bottom: 20px;
-  padding-bottom: 8px;
-  overflow: hidden;
-}
-
-.flow svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  min-height: 220px;
-}
-
-.flow-legend {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--num);
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-
-.flow-legend i {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-left: 8px;
-}
-
-.fm-grid {
-  fill: var(--line);
-}
-
-.fm-glow-in {
-  stop-color: var(--seal);
-  stop-opacity: 0.16;
-}
-
-.fm-glow-out {
-  stop-color: var(--seal);
-  stop-opacity: 0;
-}
-
-.fm-lane {
-  fill: none;
-  stroke: var(--line);
-  stroke-linecap: round;
-}
-
-.fm-lane-live {
-  fill: none;
-  stroke: var(--seal);
-  stroke-opacity: 0.55;
-  stroke-width: 1.5;
-  stroke-dasharray: 2 10;
-  animation: fm-flow 1.1s linear infinite;
-}
-
-.fm-track {
-  fill: var(--panel);
-  stroke: var(--sunk);
-  stroke-width: 4;
-}
-
-.fm-payee {
-  stroke: var(--line);
-  stroke-width: 2;
-}
-
-.fm-name {
-  fill: var(--text);
-  font: 600 15px var(--ui);
-}
-
-.fm-sub {
-  fill: var(--muted);
-  font: 500 12px var(--num);
-}
-
-.fm-tiny {
-  fill: var(--muted);
-  font: 500 10.5px var(--num);
-}
-
-.fm-pct {
-  fill: var(--text);
-  font: 600 10px var(--num);
-}
-
-.fm-red {
-  fill: var(--stop);
-}
-
-.fm-halo {
-  fill: none;
-  stroke: var(--seal);
-  stroke-opacity: 0.18;
-  stroke-width: 1;
-  stroke-dasharray: 1 5;
-}
-
-.fm-ring {
-  transform-origin: 500px 170px;
-  animation: fm-spin 80s linear infinite;
-}
-
-.fm-ticks {
-  fill: none;
-  stroke: var(--seal);
-  stroke-width: 6;
-  stroke-dasharray: 0.25 0.75;
-  stroke-opacity: 0.7;
-}
-
-.fm-core {
-  fill: var(--panel);
-  stroke: var(--seal);
-  stroke-width: 2.5;
-}
-
-.fm-core-in {
-  fill: none;
-  stroke: var(--seal);
-  stroke-opacity: 0.4;
-  stroke-width: 1;
-}
-
-.fm-count {
-  fill: var(--text);
-  font: 600 30px var(--num);
-  letter-spacing: -0.03em;
-}
-
-.fm-stop-word {
-  fill: var(--stop);
-  font: 700 17px var(--num);
-  letter-spacing: 0.14em;
-}
-
-.is-stopped .fm-core,
-.is-stopped .fm-core-in,
-.is-stopped .fm-halo {
-  stroke: var(--stop);
-}
-
-.is-stopped .fm-ticks {
-  stroke: var(--stop);
-}
-
-.is-stopped .fm-ring {
-  animation: none;
-}
-
-.fm-waiting {
-  fill: var(--wait);
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: fm-breathe 1.6s ease-in-out infinite;
-}
-
-.fm-burst {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: fm-burst 0.9s ease-out forwards;
-}
-
-.fm-x {
-  animation: fm-fade 0.9s ease-in forwards;
-}
-
-@keyframes fm-flow {
-  to {
-    stroke-dashoffset: -12;
-  }
-}
-
-@keyframes fm-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes fm-breathe {
-  50% {
-    transform: scale(1.5);
-    opacity: 0.55;
-  }
-}
-
-@keyframes fm-burst {
-  from {
-    transform: scale(0.5);
-    opacity: 1;
-  }
-  to {
-    transform: scale(2.6);
-    opacity: 0;
-  }
-}
-
-@keyframes fm-fade {
-  70% {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fm-lane-live,
-  .fm-ring,
-  .fm-waiting {
-    animation: none;
-  }
-}
-
-/* the 3D map (components/Globe.tsx). Always dark, whatever the page theme. */
-.cmd {
-  --c-bg: #05080c;
-  --c-text: #dfe8f1;
-  --c-muted: #7b8a99;
-  --c-line: rgba(143, 179, 220, 0.35);
-  --c-ok: #6fc3a0;
-  --c-stop: #ff7a70;
-  --c-wait: #e2ad5b;
-  position: relative;
-  height: clamp(360px, 58vh, 620px);
-  margin-bottom: 20px;
-  border-radius: var(--radius);
-  overflow: hidden;
-  color: var(--c-text);
-  background: radial-gradient(ellipse at 50% 55%, #0d1a28 0%, var(--c-bg) 62%), var(--c-bg);
-  border: 1px solid #1a2532;
-  font-family: var(--num);
-  isolation: isolate;
-}
-
-.cmd::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(255, 255, 255, 0.018) 0 1px,
-    transparent 1px 3px
-  );
-  z-index: 2;
-}
-
-.cmd-stage {
-  position: absolute;
-  inset: 0;
-  cursor: grab;
-}
-
-.cmd-stage:active {
-  cursor: grabbing;
-}
-
-.cmd-stage canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.cmd-labels {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 3;
-}
-
-.gl-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  margin: 10px 0 0 12px;
-  padding: 3px 7px;
-  border: 1px solid var(--c-line);
-  border-left: 2px solid var(--c-text);
-  background: rgba(5, 8, 12, 0.72);
-  color: var(--c-text);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: opacity 0.25s;
-  backdrop-filter: blur(2px);
-}
-
-.gl-label:hover {
-  border-color: var(--c-text);
-}
-
-.gl-payee {
-  border-left-color: var(--c-ok);
-}
-
-.gl-name {
-  font: 600 0.74rem var(--ui);
-  letter-spacing: 0.02em;
-}
-
-.gl-sub {
-  font-size: 0.66rem;
-  color: var(--c-muted);
-}
-
-.cmd-hud {
-  position: absolute;
-  z-index: 4;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.cmd-stats {
-  top: 18px;
-  left: 22px;
-  display: flex;
-  gap: 26px;
-}
-
-.cmd-stats > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.cmd-k {
-  color: var(--c-muted);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
-}
-
-.cmd-v {
-  font-size: 1.9rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-}
-
-.cmd-v.ok,
-.cmd-fate.paid {
-  color: var(--c-ok);
-}
-
-.cmd-v.stop,
-.cmd-fate.blocked {
-  color: var(--c-stop);
-}
-
-.cmd-v.wait,
-.cmd-fate.asked {
-  color: var(--c-wait);
-}
-
-.cmd-state {
-  top: 20px;
-  right: 22px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.cmd-clock {
-  color: var(--c-muted);
-  font-weight: 400;
-  margin-left: 10px;
-}
-
-.cmd-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--c-ok);
-  box-shadow: 0 0 10px var(--c-ok);
-  animation: fm-breathe 2s ease-in-out infinite;
-}
-
-.cmd-dot.stop {
-  background: var(--c-stop);
-  box-shadow: 0 0 12px var(--c-stop);
-}
-
-.is-stopped .cmd-state {
-  color: var(--c-stop);
-}
-
-.cmd-ticker {
-  left: 22px;
-  bottom: 18px;
-  right: 220px;
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-.cmd-fate {
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-}
-
-.cmd-legend {
-  right: 22px;
-  bottom: 18px;
-  display: flex;
-  gap: 14px;
-  color: var(--c-muted);
-}
-
-.cmd-legend i {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 5px;
-}
-
-.cmd-legend i.ok {
-  background: var(--c-ok);
-}
-
-.cmd-legend i.stop {
-  background: var(--c-stop);
-}
-
-.cmd-legend i.wait {
-  background: var(--c-wait);
-}
-
-.cmd-corner {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border-color: var(--c-line);
-  border-style: solid;
-  border-width: 0;
-  z-index: 4;
-  pointer-events: none;
-}
-
-.cmd-corner.tl {
-  top: 8px;
-  left: 8px;
-  border-top-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.cmd-corner.tr {
-  top: 8px;
-  right: 8px;
-  border-top-width: 1.5px;
-  border-right-width: 1.5px;
-}
-
-.cmd-corner.bl {
-  bottom: 8px;
-  left: 8px;
-  border-bottom-width: 1.5px;
-  border-left-width: 1.5px;
-}
-
-.cmd-corner.br {
-  bottom: 8px;
-  right: 8px;
-  border-bottom-width: 1.5px;
-  border-right-width: 1.5px;
-}
-
-.is-stopped .cmd-corner {
-  border-color: var(--c-stop);
-}
-
-@media (max-width: 640px) {
-  .cmd-stats {
-    gap: 16px;
-  }
-  .cmd-v {
-    font-size: 1.4rem;
-  }
-  .cmd-clock,
-  .cmd-legend {
-    display: none;
-  }
-  .cmd-ticker {
-    right: 22px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .cmd-dot {
-    animation: none;
-  }
-}
-
 /*
  * The command page (components/CommandPage.tsx): the scene is the page, instruments sit on its
  * edges. One deliberate dark look whatever the system theme; every panel inside picks up these
  * tokens. Text always sits on solid panels, never on see-through glass.
  */
-.cmdpage {
+.cmdpage,
+.ph {
   --bg: #070b10;
   --panel: #0c131a;
   --sunk: #151f29;
@@ -1138,107 +598,265 @@ select {
   box-shadow: inset 0 0 180px rgba(255, 122, 112, 0.14);
 }
 
-.scene-layer,
-.scene-stage,
-.scene-labels,
-.scene-still {
+/* The rings (components/Rings.tsx): centred in the space between the side panels. */
+.rings-wrap {
+  position: absolute;
+  inset: 64px 24px 72px 300px;
+  display: grid;
+  transition: right 0.35s ease;
+}
+
+.rings-wrap.sheet-open {
+  right: 420px;
+}
+
+.rings {
   position: absolute;
   inset: 0;
-}
-
-.scene-stage canvas {
-  display: block;
   width: 100%;
   height: 100%;
-  touch-action: none;
+  overflow: visible;
+  font-family: var(--num);
 }
 
-.scene-labels {
-  pointer-events: none;
-  overflow: hidden;
+.rg-floor {
+  fill: rgba(159, 180, 200, 0.035);
+  transition: fill 0.5s;
 }
 
-/* The moment before the scene loads: the rings, still. */
-.scene-still {
-  background:
-    radial-gradient(circle at 50% 52%, rgba(159, 180, 200, 0.5) 0 2.2%, transparent 2.4%),
-    radial-gradient(
-      circle at 50% 52%,
-      transparent 0 11%,
-      rgba(159, 180, 200, 0.18) 11.1% 11.3%,
-      transparent 11.4%
-    ),
-    radial-gradient(
-      circle at 50% 52%,
-      transparent 0 16%,
-      rgba(159, 180, 200, 0.14) 16.1% 16.3%,
-      transparent 16.4%
-    ),
-    radial-gradient(
-      circle at 50% 52%,
-      transparent 0 21%,
-      rgba(159, 180, 200, 0.1) 21.1% 21.3%,
-      transparent 21.4%
-    );
+.rg-bound {
+  fill: none;
+  stroke: rgba(159, 180, 200, 0.55);
+  stroke-width: 1.5;
+  transition:
+    stroke 0.4s,
+    stroke-width 0.4s;
 }
 
-.scene-flat {
-  position: absolute;
-  inset: 90px 410px 90px 300px;
-  display: grid;
-  align-content: center;
+.rg-ticks {
+  fill: none;
+  stroke: rgba(159, 180, 200, 0.22);
+  stroke-width: 6;
+  stroke-dasharray: 0.08 0.92;
+  stroke-dashoffset: 0.04;
+  transform: rotate(-90deg);
 }
 
-.sc-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  margin: 10px 0 0 12px;
-  display: flex;
-  flex-direction: column;
-  white-space: nowrap;
-  font: 600 0.74rem var(--ui);
-  color: var(--text);
-  text-shadow:
-    0 1px 10px var(--bg),
-    0 0 2px var(--bg);
+.rg-ticks.major {
+  stroke-width: 10;
+  stroke-dasharray: 0.03 0.97;
+  stroke-dashoffset: 0.015;
+  stroke: rgba(159, 180, 200, 0.35);
+}
+
+.rg-link {
+  stroke: rgba(159, 180, 200, 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+
+.rg-port {
+  fill: var(--bg);
+  stroke: rgba(159, 180, 200, 0.6);
+  stroke-width: 1.5;
+}
+
+.rg-node {
+  fill: var(--panel);
+  stroke: rgba(159, 180, 200, 0.45);
+  stroke-width: 2;
+}
+
+.rg-gate.paid .rg-node {
+  stroke: var(--text);
+}
+
+.rg-gate text {
+  font-family: var(--ui);
+}
+
+.rg-name {
+  fill: var(--text);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.rg-sub {
+  fill: var(--muted);
+  font-family: var(--num);
+  font-size: 14px;
+}
+
+.rg-ring {
   transition: opacity 0.3s;
 }
 
-.sc-label.is-dim {
-  opacity: 0.35;
+.rg-ring.dim {
+  opacity: 0.3;
 }
 
-.sc-agent .sc-name {
-  font: 600 0.62rem var(--num);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
+.rg-track {
+  fill: none;
+  stroke: currentColor;
+  opacity: 0.13;
 }
 
-.sc-agent.is-on .sc-name {
-  color: var(--text);
+.rg-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 45%, transparent));
+  transition:
+    stroke-dasharray 0.9s cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 0.4s;
 }
 
-/* A ring's name, right-aligned to where its arc starts at 12 o'clock. */
-.sc-ring {
-  margin: 0 0 0 -10px;
+.rg-ring.on .rg-arc {
+  filter: drop-shadow(0 0 10px currentColor);
 }
 
-.sc-ring .sc-name {
-  font: 600 0.6rem var(--num);
+.rg-label {
+  fill: currentColor;
+  font-size: 12.5px;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--tint, var(--muted));
+  pointer-events: none;
 }
 
-.sc-ring.is-on .sc-name {
-  color: var(--text);
+.rg-label.on-arc {
+  fill: var(--bg);
 }
 
-.sc-sub {
-  font: 500 0.66rem var(--num);
-  color: var(--muted);
+.rg-hit {
+  fill: none;
+  stroke: transparent;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.rg-ring:hover .rg-track {
+  opacity: 0.22;
+}
+
+.rg-centre {
+  fill: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.rg-centre-k {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rg-wait {
+  fill: var(--wait);
+}
+
+.rg-wait-glow {
+  opacity: 0.25;
+}
+
+.moving .rg-wait-glow {
+  animation: rg-breathe 1.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.rg-wait text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rg-trail path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.rg-trail circle {
+  fill: currentColor;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+.rg-trail.landed path,
+.rg-trail.landed > circle:not(.rg-land) {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.rg-land {
+  fill: none !important;
+  stroke: currentColor;
+  stroke-width: 2;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rg-land 0.9s ease-out forwards;
+}
+
+.rg-trail.blocked .rg-land {
+  stroke-width: 3;
+}
+
+/* stopped: the rings go grey, the warrant circle turns red and closes */
+.rings.is-stopped .rg-ring {
+  color: #6b5656 !important;
+}
+
+.rings.is-stopped .rg-bound {
+  stroke: var(--stop);
+  stroke-width: 4;
+}
+
+.rings.is-stopped .rg-floor {
+  fill: rgba(255, 122, 112, 0.08);
+}
+
+.rings.is-stopped .rg-ticks {
+  stroke: rgba(255, 122, 112, 0.4);
+}
+
+/* the phone's small copy: rings and circle only */
+.rings.compact {
+  position: static;
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.rings.compact .rg-label {
+  font-size: 10px;
+}
+
+@keyframes rg-breathe {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.1;
+  }
+}
+
+@keyframes rg-land {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moving .rg-wait-glow,
+  .rg-land {
+    animation: none;
+  }
 }
 
 .hud {
@@ -1736,12 +1354,12 @@ kbd {
     min-height: 100%;
     overflow: visible;
   }
-  .scene-layer {
+  .rings-wrap,
+  .rings-wrap.sheet-open {
     position: relative;
+    inset: auto;
     height: 52vh;
-  }
-  .scene-flat {
-    position: static;
+    padding: 64px 16px 0;
   }
   .hud {
     position: relative;
@@ -1757,4 +1375,235 @@ kbd {
     width: 100%;
     max-height: none;
   }
+}
+
+/* The phone page (components/Phone.tsx): one column, STOP pinned within thumb reach. Same dark
+   tokens as the command page. */
+.ph {
+  position: relative;
+  inset: auto;
+  overflow: visible;
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px calc(96px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: radial-gradient(ellipse 90% 40% at 50% 18%, #0f1a25 0%, var(--bg) 75%);
+}
+
+.ph.is-stopped {
+  box-shadow: inset 0 0 120px rgba(255, 122, 112, 0.14);
+}
+
+.ph-top {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  background: var(--solid);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+
+.ph-name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.ph-desk {
+  font: 500 0.74rem var(--num);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.ph-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.ph-counts {
+  justify-content: space-around;
+}
+
+.ph-counts > div {
+  text-align: center;
+}
+
+.ph-agents {
+  list-style: none;
+  margin: 0;
+  padding: 4px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--solid);
+}
+
+.ph-agents li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  font-size: 0.86rem;
+}
+
+.ph-agents li + li {
+  border-top: 1px solid var(--line);
+}
+
+.ph-agent {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-pct,
+.ph-n {
+  font-size: 0.74rem;
+  min-width: 3ch;
+  text-align: right;
+}
+
+.ph-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.ph-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--wait);
+  background: var(--solid);
+  box-shadow: 0 0 0 3px var(--wait-bg);
+}
+
+.ph-wait > .sheet-k {
+  color: var(--wait);
+}
+
+.ph-wait .approval {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.ph-wait .ask-amount {
+  font-size: 1.9rem;
+}
+
+.ph-wait .kv {
+  font-size: 0.8rem;
+}
+
+.ph-wait .approval-foot {
+  flex-wrap: wrap;
+}
+
+.ph-wait .approval-foot .spacer {
+  display: none;
+}
+
+.ph-wait .approval-foot .btn {
+  flex: 1;
+  min-height: 52px;
+  font-size: 1rem;
+}
+
+.ph-wait .approval-foot .mono {
+  flex-basis: 100%;
+  order: 3;
+  text-align: center;
+}
+
+.ph-queue {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.ph-queue button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ph-q-n {
+  margin-left: auto;
+  color: var(--wait);
+}
+
+.ph-q-who {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-queue .small {
+  padding-top: 8px;
+}
+
+.ph-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ph-stop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--solid);
+  border-top: 1px solid var(--line);
+}
+
+.ph-stop > * {
+  display: flex;
+  max-width: 448px;
+  margin: 0 auto;
+}
+
+.ph-stop .btn.kill.big {
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+}
+
+.ph-stop .stop-confirm.big {
+  display: flex;
+  gap: 10px;
+}
+
+.ph-stop .stop-confirm.big .btn {
+  flex: 1;
+  min-height: 56px;
 }

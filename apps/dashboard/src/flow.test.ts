@@ -1,6 +1,6 @@
 import { describe as group, expect, it } from "vitest";
 import type { LoggedEvent, WarrantRow } from "./api.js";
-import { OTHER, leftFraction, passesOf, payeeNodes, spread, tally } from "./flow.js";
+import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "./flow.js";
 
 const usd = (cents: number) => ({ currency: "USDZ" as const, cents });
 const warrant = (warrantId: string, payees: string[]): WarrantRow => ({
@@ -59,11 +59,6 @@ group("flow map data", () => {
     expect(t.total).toEqual({ paid: 1, blocked: 2, asked: 1 });
     expect(t.lanes.get("w2")).toEqual({ paid: 0, blocked: 1, asked: 1 });
     expect(t.paidTo.get("pay_a")).toEqual(usd(5));
-  });
-
-  it("spreads nodes evenly around the middle", () => {
-    expect(spread(1, 340, 100)).toEqual([170]);
-    expect(spread(3, 340, 100)).toEqual([70, 170, 270]);
   });
 
   it("budget left is a share from 0 to 1, never outside it", () => {

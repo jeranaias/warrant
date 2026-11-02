@@ -1,8 +1,8 @@
 import type { LoggedEvent, Money, WarrantRow } from "./api.js";
 
 /**
- * The flow map's data (components/FlowMap.tsx): every payment an agent asks for, and what the
- * warrant did with it. Pure, so format.test.ts can pin it.
+ * The rings' data (components/Rings.tsx): every payment an agent asks for, and what the
+ * warrant did with it. Pure, so flow.test.ts can pin it.
  */
 
 /** What happened at the seal: money moved, control said no, or it is waiting for the owner. */
@@ -74,13 +74,6 @@ export function tally(passes: Pass[]) {
     }
   }
   return { total, lanes, paidTo };
-}
-
-/** Spread n nodes evenly around the middle of a column `height` tall. */
-export function spread(n: number, height: number, maxGap: number): number[] {
-  if (n <= 1) return [height / 2];
-  const gap = Math.min(maxGap, (height - 60) / (n - 1));
-  return Array.from({ length: n }, (_, i) => height / 2 + (i - (n - 1) / 2) * gap);
 }
 
 /** Share of a budget still unspent, 0..1, for the agent rings. */

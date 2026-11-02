@@ -8,7 +8,7 @@ const BURST = 12;
 
 /**
  * Calls `onNew` with the payments that arrived since the last call (the last few on first
- * load), once `ready`. The globe and the flow map both animate from this.
+ * load), once `ready`. The rings (Rings.tsx) animate from this.
  */
 export function usePassStream(passes: Pass[], ready: boolean, onNew: (fresh: Pass[]) => void) {
   const lastSeq = useRef<number | null>(null);

@@ -1,7 +1,6 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
-import { canDraw3d } from "../can3d.js";
 import { agentName, cents, money, time, whyOf } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
@@ -10,7 +9,7 @@ import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
 import { ApprovalCard, keyOf } from "./Approvals.js";
 import { Chain } from "./Chain.js";
-import { FlowMap } from "./FlowMap.js";
+import { Rings } from "./Rings.js";
 import { Scene } from "./Scene.js";
 import { StopButton } from "./StopButton.js";
 
@@ -23,10 +22,8 @@ import { StopButton } from "./StopButton.js";
  *            else the STOP receipt
  *   bottom   drawers (activity, mandates, scenarios), the latest payment, STOP (S, Enter)
  *
- * Without WebGL the flat flow map stands where the scene would be.
+ * The rings (Rings.tsx) sit in the space between the side panels.
  */
-const SceneCanvas = lazy(() => import("./SceneCanvas.js"));
-const has3d = typeof document !== "undefined" && canDraw3d();
 
 type Engine = ReturnType<typeof useEngine>;
 type Drawer = "activity" | "mandates" | "scenarios";
@@ -113,33 +110,21 @@ export function CommandPage({
 
   return (
     <div className={`cmdpage${stopped ? " is-stopped" : ""}`}>
-      <div className="scene-layer">
-        {has3d ? (
-          <Suspense fallback={<div className="scene-still" />}>
-            <SceneCanvas
-              warrants={warrants}
-              payees={payees}
-              paidTo={paidTo}
-              passes={passes}
-              approvals={engine.approvals}
-              stopped={stopped}
-              motion={motion}
-              selected={selected}
-              sheetOpen={!!(engine.approvals.length || selected || (stopped && engine.kill?.last))}
-              onSelect={setSelected}
-            />
-          </Suspense>
-        ) : (
-          engine.world && (
-            <div className="scene-flat">
-              <FlowMap
-                warrants={warrants}
-                events={engine.events}
-                approvals={engine.approvals}
-                stopped={stopped}
-              />
-            </div>
-          )
+      <div
+        className={`rings-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) ? " sheet-open" : ""}`}
+      >
+        {engine.world && (
+          <Rings
+            warrants={warrants}
+            payees={payees}
+            paidTo={paidTo}
+            passes={passes}
+            approvals={engine.approvals}
+            stopped={stopped}
+            motion={motion}
+            selected={selected}
+            onSelect={(id) => setSelected(id === null || id === selected ? null : id)}
+          />
         )}
       </div>
 
