@@ -212,6 +212,73 @@ describe("submit path", () => {
   });
 });
 
+describe("a payee that bills once per period (ADR-015, #87)", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  function monthly() {
+    const rail = new FakeRail();
+    let now = NOW;
+    const [upstream] = body.payees;
+    if (!upstream) throw new Error("test warrant has no payee");
+    const warrant = signWarrant(
+      {
+        ...body,
+        payees: [{ ...upstream, billingPeriod: "month" }],
+        // long enough to see the next month
+        expiresAt: "2027-01-01T00:00:00Z",
+        ...(body.mandate
+          ? { mandate: { ...body.mandate, expiresAt: "2027-01-01T00:00:00Z" } }
+          : {}),
+      },
+      privateKey,
+      "owner-k1",
+    );
+    const controller = new Controller({
+      ownerPublicKey: publicKey,
+      getWarrant: (id) => (id === warrant.warrantId ? warrant : undefined),
+      rails: { metal_x402: rail },
+      purpose: { model: "test-model", check: verdictOf("consistent") },
+      clock: () => now,
+    });
+    return { controller, rail, later: (ms: number) => (now = new Date(NOW.getTime() + ms)) };
+  }
+
+  it("the first payment of the month pays; a second inside it waits for the owner, any amount", async () => {
+    const { controller, rail, later } = monthly();
+    expect((await controller.submit(proposal())).execution?.status).toBe("succeeded");
+    later(45 * 60_000); // duplicate-charge-002: the same bill 45 minutes later
+    const again = await controller.submit(proposal());
+    expect(again.decision?.outcome).toBe("needs_owner_approval");
+    expect(again.approval?.reasons).toEqual([
+      "Upstream data bills once a month and was already paid this month",
+    ]);
+    // fx-rate-manipulation-005: a small "correction" top-up is still a second payment
+    const topUp = await controller.submit(proposal({ amount: usdz(1) }));
+    expect(topUp.approval?.reasons).toHaveLength(1);
+    expect(rail.calls).toHaveLength(1);
+  });
+
+  it("a month is 28 days: on day 28 the next payment pays without asking", async () => {
+    const { controller, later } = monthly();
+    await controller.submit(proposal());
+    later(28 * DAY - 1);
+    expect((await controller.submit(proposal())).decision?.outcome).toBe("needs_owner_approval");
+    later(28 * DAY);
+    expect((await controller.submit(proposal())).execution?.status).toBe("succeeded");
+  });
+
+  it("a released (failed) payment does not count, and a payee with no period never asks", async () => {
+    const { controller, rail } = monthly();
+    rail.next = { status: "failed" };
+    await controller.submit(proposal());
+    rail.next = { status: "succeeded", railRef: "0xtx" };
+    expect((await controller.submit(proposal())).execution?.status).toBe("succeeded");
+
+    const plain = setup();
+    await plain.controller.submit(proposal());
+    expect((await plain.controller.submit(proposal())).execution?.status).toBe("succeeded");
+  });
+});
+
 describe("owner approval binds to what was shown (ADR-007)", () => {
   it("a different hash is refused and nothing moves", async () => {
     const { controller, rail } = setup();

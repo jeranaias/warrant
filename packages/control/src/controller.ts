@@ -2,6 +2,7 @@ import type { KeyObject } from "node:crypto";
 import { BudgetChangeProposal, PaymentProposal, PurposeVerdict } from "@warrant/contracts";
 import type {
   ControlDecision,
+  DisputeCase,
   Money,
   PaymentSummary,
   Rail,
@@ -12,7 +13,12 @@ import type {
 import type { RailAdapter, RailStatus } from "@warrant/rails";
 import { ApprovalBook } from "./approvals/index.js";
 import type { ApprovalView, PendingApproval } from "./approvals/index.js";
-import { REFUND_WITHOUT_OWNER_MAX, REFUNDS_WITHOUT_OWNER_PER_DAY } from "./business.js";
+import {
+  BILLING_PERIOD_MS,
+  REFUNDABLE_CLAIMS,
+  REFUND_WITHOUT_OWNER_MAX,
+  REFUNDS_WITHOUT_OWNER_PER_DAY,
+} from "./business.js";
 import { verifyWarrant } from "./crypto.js";
 import { Ledger } from "./ledger/index.js";
 import type { Reservation } from "./ledger/index.js";
@@ -97,6 +103,11 @@ export interface ControllerOptions {
   ledger?: Ledger;
   /** Stored signed orders by orderId (refunds go to an order's payer, capped at its price). */
   orders?: () => ReadonlyMap<string, SignedOrderRecord>;
+  /**
+   * Stored disputes by `ticketRef`. When set, a refund must name its dispute's ticket as its
+   * `sourceRef` and may only cover that dispute's orders (rule `refund_matches_order`).
+   */
+  disputes?: () => ReadonlyMap<string, DisputeCase>;
   /** metal_x402: the mandate credential file name inside METAL_HOME for this warrant. */
   credentialFor?: (warrant: Warrant) => string | undefined;
   /**
@@ -411,6 +422,7 @@ export class Controller {
     // Refunds the rules accepted (real order, its payer, at most its price, once) ask only when
     // they look unusual.
     if (isRefund(p)) reasons.push(...this.unusualRefund(p, w));
+    else reasons.push(...this.againThisPeriod(p, w));
     if (p.recurrence === "recurring") reasons.push("recurring payment");
     if (
       (p.rail === "airwallex_transfer" || p.rail === "airwallex_fx") &&
@@ -516,6 +528,7 @@ export class Controller {
 
   private rulesContext(w: Warrant, now: Date): RulesContext {
     const orders = this.opts.orders?.();
+    const disputes = this.opts.disputes?.();
     return {
       now,
       signatureValid: verifyWarrant(w, this.opts.ownerPublicKey),
@@ -530,6 +543,7 @@ export class Controller {
         ...(r.sourceRef ? { sourceRef: r.sourceRef } : {}),
       })),
       ...(orders ? { orders, refundedOrderIds: this.refundedOrders(w, orders) } : {}),
+      ...(disputes ? { disputes } : {}),
     };
   }
 
@@ -621,6 +635,11 @@ export class Controller {
   /** ADR-013: why a refund needs the owner, or [] when it may go through on its own. */
   private unusualRefund(p: PaymentProposal, w: Warrant): string[] {
     const why: string[] = [];
+    // ADR-016: the claim on the stored dispute, never the ticket text, says what kind of refund it is.
+    const claim = p.sourceRef ? this.opts.disputes?.().get(p.sourceRef)?.claim : undefined;
+    if (claim && !REFUNDABLE_CLAIMS.includes(claim)) {
+      why.push(`dispute claim "${claim}" is not one we refund without the owner`);
+    }
     if (p.amount.cents > REFUND_WITHOUT_OWNER_MAX.cents) {
       why.push(`refund over ${REFUND_WITHOUT_OWNER_MAX.cents} cents`);
     }
@@ -641,6 +660,25 @@ export class Controller {
       }
     }
     return why;
+  }
+
+  /**
+   * ADR-015: a payee the warrant says bills once per period (the licence: a month) is paid once
+   * per period without asking. Another payment inside it, of any amount, waits for the owner.
+   */
+  private againThisPeriod(p: PaymentProposal, w: Warrant): string[] {
+    const payee = w.payees.find((x) => x.payeeId === p.payeeId && x.rail === p.rail);
+    const period = payee?.billingPeriod;
+    if (!payee || !period) return [];
+    const since = this.clock().getTime() - BILLING_PERIOD_MS[period];
+    const paid = this.ledger
+      .activeReservations(w.warrantId)
+      .some(
+        (r) => r.payeeId === p.payeeId && r.rail === p.rail && Date.parse(r.reservedAt) > since,
+      );
+    return paid
+      ? [`${payee.displayName} bills once a ${period} and was already paid this ${period}`]
+      : [];
   }
 
   private emit(e: ControlEvent): void {

@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentTask, PaymentProposal } from "@warrant/contracts";
-import { createEngine } from "./server.js";
+import { createEngine, fileDispute } from "./server.js";
 import { AGENTS } from "./world.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
@@ -27,6 +27,7 @@ const post = async <T>(path: string, body: unknown) => {
   return { status: r.status, body: (await r.json()) as T };
 };
 
+type Check = { rule: string; pass: boolean; detail: string };
 type Result = {
   decision?: { outcome: string; proposalId: string };
   blockedBy?: string;
@@ -147,7 +148,25 @@ describe("engine: tasks in, decisions out", () => {
     await post("/scenario", { name: "all" });
     const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=support");
     const real = tasks.find((t) => t.kind === "dispute" && t.orderIds[0] === "ord_1") as AgentTask;
-    const refund = (orderId: string) => ({ ...proposalFor(real), refundOfOrderId: orderId });
+    // The task's dispute is about ord_1 only: another order is refused whatever the ticket says.
+    const other = await post<Result & { decision?: { rules: { checks: Check[] } } }>("/proposals", {
+      ...proposalFor(real),
+      refundOfOrderId: "ord_2",
+    });
+    expect(other.body.blockedBy).toBe("rules");
+    expect(other.body.decision?.rules.checks.find((c) => !c.pass)?.detail).toBe(
+      "ord_2 is not in the dispute",
+    );
+    // A dispute over all three orders, opened with the store.
+    const file = await post<{ ticketRef: string }>("/disputes", {
+      orderIds: ["ord_1", "ord_2", "ord_3", "ord_404"],
+      claim: "wrong_data",
+    });
+    const refund = (orderId: string) => ({
+      ...proposalFor(real),
+      sourceRef: file.body.ticketRef,
+      refundOfOrderId: orderId,
+    });
     for (const id of ["ord_1", "ord_2"]) {
       const r = await post<Result>("/proposals", refund(id));
       expect(r.body.execution?.status, id).toBe("succeeded");
@@ -250,6 +269,30 @@ describe("disputes (ADR-012): the store answers from its records", () => {
       ["ord_3", "owner_authorized", 0],
       ["ord_404", "order_not_found", 0],
     ]);
+  });
+
+  it("a refund for an 'other' claim waits for the owner; a data claim pays (ADR-016, #85)", async () => {
+    const engine = createEngine({ scenario: "none", clock: () => NOW });
+    const t = (claim: "other" | "wrong_data", orderId: string): AgentTask => ({
+      kind: "dispute",
+      role: "support",
+      taskId: `task_${claim}`,
+      at: NOW.toISOString(),
+      sourceRef: `src_${claim}`,
+      disputeId: `dsp_${claim}`,
+      orderIds: [orderId],
+      claim,
+      content: "untrusted ticket text",
+    });
+    fileDispute(engine.disputes, t("other", "ord_1"));
+    fileDispute(engine.disputes, t("wrong_data", "ord_2"));
+    const other = await engine.controller.submit(proposalFor(t("other", "ord_1")));
+    expect(other.decision?.outcome).toBe("needs_owner_approval");
+    expect(other.approval?.reasons).toEqual([
+      'dispute claim "other" is not one we refund without the owner',
+    ]);
+    const wrong = await engine.controller.submit(proposalFor(t("wrong_data", "ord_2")));
+    expect(wrong.execution?.status).toBe("succeeded");
   });
 
   it("refuses a malformed dispute", async () => {

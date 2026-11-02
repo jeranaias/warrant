@@ -109,6 +109,16 @@ export interface AirwallexTransfersOptions {
   fundingCurrency: Money["currency"];
   /** Transfer `reason` (one of Airwallex's codes). */
   reason?: string;
+  /**
+   * Convert the whole payout from the funding currency even when the wallet already holds enough
+   * of the payout currency: treasury pays EUR bills out of USD earnings, not out of other euros.
+   */
+  alwaysConvert?: boolean;
+  /**
+   * How payouts travel. LOCAL by default. The hackathon sandbox account has no fee set up for EUR
+   * LOCAL (`fee_unknown`), so the sandbox scene pays the licensor by SWIFT (ADR-017).
+   */
+  transferMethod?: "LOCAL" | "SWIFT";
 }
 
 /** Transfer status -> control's view. PAID is done; SCHEDULED, PROCESSING and SENT are on the way. */
@@ -135,7 +145,9 @@ export class AirwallexTransfers implements RailAdapter {
   async execute(i: RailInstruction): Promise<RailResult> {
     const ccy = i.amount.currency;
     try {
-      const gap = await this.shortfall(ccy, i.amount.cents);
+      const gap = this.opts.alwaysConvert
+        ? i.amount.cents
+        : await this.shortfall(ccy, i.amount.cents);
       if (gap > 0 && ccy !== this.opts.fundingCurrency) {
         const fx = await this.client.call("POST", "/api/v1/fx/conversions/create", {
           request_id: `${i.idempotencyKey}-fx`.slice(0, 64),
@@ -156,7 +168,8 @@ export class AirwallexTransfers implements RailAdapter {
         transfer_amount: major(i.amount.cents),
         transfer_currency: ccy,
         source_currency: ccy,
-        transfer_method: "LOCAL",
+        transfer_method: this.opts.transferMethod ?? "LOCAL",
+        ...(this.opts.transferMethod === "SWIFT" ? { swift_charge_option: "SHARED" } : {}),
         reason: this.opts.reason ?? "business_expenses",
         reference: `warrant ${i.reservationId}`.slice(0, 140),
       });
@@ -198,17 +211,42 @@ export class AirwallexTransfers implements RailAdapter {
  */
 export async function depositEarnings(
   client: AirwallexClient,
-  d: { amount: Money; metalTx: string },
+  d: { amount: Money; metalTx: string; globalAccountId?: string },
 ): Promise<{ depositId: string; amount: Money }> {
+  // The sandbox deposits into a Global Account (its currency is the account's); the mock takes a
+  // bare currency.
   const r = await client.call("POST", "/api/v1/simulation/deposit/create", {
     amount: Number(major(d.amount.cents)),
-    currency: d.amount.currency,
+    ...(d.globalAccountId
+      ? {
+          global_account_id: d.globalAccountId,
+          payer_name: "Warrant treasury",
+          payer_country: "US",
+        }
+      : { currency: d.amount.currency }),
     reference: d.metalTx.slice(0, 140),
   });
-  if (r.status !== 201 || typeof r.body?.deposit_id !== "string") {
+  const id = r.body?.deposit_id ?? r.body?.id;
+  if (r.status !== 201 || typeof id !== "string") {
     throw new Error(`deposit refused: ${codeOf(r.body)}`);
   }
-  return { depositId: r.body.deposit_id, amount: d.amount };
+  return { depositId: id, amount: d.amount };
+}
+
+/** The first active Global Account that takes deposits in `currency` (sandbox). */
+export async function globalAccountFor(
+  client: AirwallexClient,
+  currency: string,
+): Promise<string | undefined> {
+  const r = await client.call("GET", "/api/v1/global_accounts");
+  const items: Json[] = Array.isArray(r.body?.items) ? r.body.items : [];
+  const hit = items.find(
+    (a) =>
+      a.status === "ACTIVE" &&
+      Array.isArray(a.supported_features) &&
+      a.supported_features.some((f: Json) => f.currency === currency && f.type === "DEPOSIT"),
+  );
+  return typeof hit?.id === "string" ? hit.id : undefined;
 }
 
 /** A EUR SEPA beneficiary for a payee (set up once, by the owner, before any warrant names it). */
@@ -217,7 +255,9 @@ export async function createEurBeneficiary(
   b: {
     name: string;
     iban: string;
-    address: { street: string; city: string; state: string; postcode: string; country: string };
+    /** With a BIC the beneficiary takes SWIFT payouts instead of LOCAL. */
+    swiftCode?: string;
+    address: { street: string; city: string; state?: string; postcode: string; country: string };
   },
 ): Promise<string> {
   const r = await client.call("POST", "/api/v1/beneficiaries/create", {
@@ -230,16 +270,17 @@ export async function createEurBeneficiary(
         account_name: b.name,
         bank_country_code: b.iban.slice(0, 2),
         iban: b.iban,
+        ...(b.swiftCode ? { swift_code: b.swiftCode } : {}),
       },
       address: {
         street_address: b.address.street,
         city: b.address.city,
-        state: b.address.state,
+        ...(b.address.state ? { state: b.address.state } : {}),
         postcode: b.address.postcode,
         country_code: b.address.country,
       },
     },
-    transfer_methods: ["LOCAL"],
+    transfer_methods: [b.swiftCode ? "SWIFT" : "LOCAL"],
     nickname: b.name,
   });
   if (r.status !== 201 || typeof r.body?.id !== "string") {

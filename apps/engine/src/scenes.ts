@@ -226,7 +226,7 @@ export async function disputeScene(
   steps.push({ step: "customer: the data was wrong", outcome: said(first), moneyMoved: false });
 
   let n = 0;
-  const refund = (orderId: string, cents: number): PaymentProposal => ({
+  const refund = (file: DisputeFile, orderId: string, cents: number): PaymentProposal => ({
     proposalId: `prop_refund_${++n}`,
     warrantId: AGENTS.support.warrantId,
     agentId: AGENTS.support.agentId,
@@ -237,6 +237,7 @@ export async function disputeScene(
     category: "customer_refund",
     recurrence: "one_off",
     refundOfOrderId: orderId,
+    sourceRef: file.ticketRef,
     idempotencyKey: `scene-dispute-refund-${n}`,
     justification: "the store's dispute file says refund",
     createdAt: now().toISOString(),
@@ -244,7 +245,7 @@ export async function disputeScene(
 
   for (const f of first.findings.filter((x) => x.decision.refund.cents > 0)) {
     const before = world.settled().length;
-    const r = await controller.submit(refund(f.orderId, f.decision.refund.cents));
+    const r = await controller.submit(refund(first, f.orderId, f.decision.refund.cents));
     steps.push({
       step: `support refunds ${f.orderId} (mandate pull)`,
       outcome: r.execution?.status ?? r.blockedBy ?? (r.approval ? "waiting for the owner" : "?"),
@@ -264,7 +265,7 @@ export async function disputeScene(
   });
 
   const before = world.settled().length;
-  const twice = await controller.submit(refund("ord_1", 5));
+  const twice = await controller.submit(refund(again, "ord_1", 5));
   const failedRules = twice.decision?.rules.checks.filter((c) => !c.pass).map((c) => c.rule);
   steps.push({
     step: "support tries to refund ord_1 again",

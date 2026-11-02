@@ -1,6 +1,6 @@
 import { describe as group, expect, it } from "vitest";
 import type { LoggedEvent } from "./api.js";
-import { describe, money, percentUsed, viewRows } from "./format.js";
+import { approveLabel, describe, money, percentUsed, viewRows, whyOf } from "./format.js";
 
 const at = "2026-10-30T12:00:00.000Z";
 
@@ -108,5 +108,37 @@ group("viewRows", () => {
     expect(rows.find((r) => r.key === "amount")?.value).toBe("2.50 USDZ");
     expect(rows.find((r) => r.key === "payee.refundOfOrderId")?.value).toBe("-");
     expect(rows.find((r) => r.key === "extra")?.label).toBe("extra");
+  });
+});
+
+group("reasons and the approve button", () => {
+  it("a rules block shows the failed rule's own words, never the agent's", () => {
+    const e = {
+      type: "proposal" as const,
+      proposal: {
+        agentRole: "sourcing",
+        payeeId: "pay_upstream",
+        amount: { currency: "USDZ" as const, cents: 4 },
+      },
+      result: {
+        blockedBy: "rules" as const,
+        decision: {
+          outcome: "blocked" as const,
+          rules: {
+            checks: [
+              { rule: "payee_allowlist", pass: true, detail: "on the warrant" },
+              { rule: "per_payment_cap", pass: false, detail: "4 cents is over the 3-cent cap" },
+            ],
+          },
+          purpose: null,
+        },
+      },
+    } as unknown as Parameters<typeof whyOf>[0];
+    expect(whyOf(e)).toBe("4 cents is over the 3-cent cap");
+  });
+
+  it("the approve button repeats the amount", () => {
+    expect(approveLabel({ amount: { currency: "EUR", cents: 5000 } })).toBe("Approve EUR 50.00");
+    expect(approveLabel({ kind: "budget_change" })).toBe("Approve");
   });
 });

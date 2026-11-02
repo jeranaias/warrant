@@ -48,8 +48,10 @@ transfer; PAID is confirmed on `controller.reconcile()`). `mockAirwallexWorld()`
 `POST /disputes {"orderIds":["ord_1","ord_2"],"claim":"wrong_data"}` (claims: `wrong_data`,
 `not_delivered`, `not_authorized`, `other`) answers with one decision per order and the evidence
 behind it: the settlement on chain, the signed order, the customer's pass, the data batch. It
-moves no money; support then refunds through `POST /proposals` (`refundOfOrderId`), paid by
-`mandate pull`. `pnpm scene:dispute` plays the dispute beat start to finish (mock chain).
+moves no money; support then refunds through `POST /proposals` (`refundOfOrderId`, with the
+answer's `ticketRef` as `sourceRef`), paid by `mandate pull`. The store keeps every dispute on file
+(those opened here and every dispute task `GET /tasks` hands out, whose ticket is the task's
+`sourceRef`); a refund may only cover the orders of the dispute its `sourceRef` names (#84). `pnpm scene:dispute` plays the dispute beat start to finish (mock chain).
 
 **Scenarios:** `POST /scenario {"name":"normal|price_rise|dispute|attacks|all"}` replaces the queue
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is

@@ -230,3 +230,82 @@ Decision:
    Consequences: the normal demo run needs the owner only for the budget change and anything
    unusual. A later "always allow this" choice on the approval screen would turn a repeated
    approval into a new signed warrant version; it is not built yet.
+
+## ADR-014: The duplicate window matches amounts within 1%
+
+Date: 2026-11-02 Status: accepted (amends ADR-006)
+
+Context: the bench found that EUR 49.99 eight minutes after EUR 50.00, same payee and rail,
+passed the duplicate guard because it compared exact amounts (#86, `duplicate-charge-005`). A
+re-issued invoice one cent off is the cheapest way round an exact match.
+Decision: inside the 10-minute window, two payments to the same payee on the same rail are
+duplicates when the amounts are within 1% of the larger one, inclusive
+(`DUPLICATE_TOLERANCE_BPS` = 100 in `packages/control/rules`, integer math). A percentage, not a
+fixed number of cents: a fixed few cents would make every small payment a "duplicate" of any other
+and still let a large one through by moving it a few cents more. At 1%, amounts under 100 cents
+only match exactly, so small repeat payments are unaffected. x402 purchases and refunds stay
+outside the window (ADR-011), so the 2-cent repeat buys never meet this check.
+Consequences: a legitimate second payment to the same Airwallex payee within 10 minutes needs an
+amount more than 1% different or waits for the window to pass.
+
+## ADR-015: A payee that bills once per period is paid once per period without asking
+
+Date: 2026-11-02 Status: accepted (amends ADR-013 item 1)
+
+Context: the licence is billed once a month, but nothing on the warrant said so. The bench found
+that the same licence bill 45 minutes later, or a small "FX correction" top-up to the licensor,
+passed every check (#87, `duplicate-charge-002`, `fx-rate-manipulation-005`). The 10-minute
+duplicate window (ADR-006, ADR-014) is the wrong tool: it is minutes, and it matches amounts.
+Decision:
+
+1. A `Payee` on the signed warrant may carry `billingPeriod` (`day`, `week`, `month`). The engine's
+   licensor is `month`.
+2. Control pays such a payee once per period without asking. Another payment to it, of any amount
+   and any category, within the period of the last one that was not released, waits for the owner
+   (`needs_owner_approval`, reason "... bills once a month and was already paid this month").
+   Rules still run first; this is an approval reason, not a block.
+3. Period lengths are code constants (`BILLING_PERIOD_MS` in `business.ts`): a day is 24 hours, a
+   week 7 days, a month 28 days. 28 is the shortest month, so next month's real invoice never
+   waits; the cost is that a second bill on day 29 to 31 of a long month is not caught here.
+   Consequences: a legitimate second payment to the licensor in one month (a mid-month seat, a real
+   correction) costs the owner one tap. Payees without a period are unchanged.
+
+## ADR-016: Refunds for a dispute claim outside the refundable set wait for the owner
+
+Date: 2026-11-02 Status: accepted (amends ADR-013 item 2)
+
+Context: refunds for a `claim: other` dispute (owner impersonation, a sympathy story) went through
+on their own, because control never saw the claim (#85, `urgent-refund-social-002`, `-003`).
+Decision: control reads the claim from the stored dispute the refund's `sourceRef` names (#84),
+never from the ticket text. `REFUNDABLE_CLAIMS` in `business.ts` is `wrong_data`,
+`not_delivered` and `not_authorized`: the claims the store has evidence rules for (ADR-012). A
+refund for any other claim waits for the owner, whatever its amount. The other ADR-013 limits
+(25 cents, two a day per customer) still apply on top.
+Consequences: an `other` dispute costs the owner one tap per refund. The purpose checker still
+does not see the claim (no `PaymentSummary` change).
+
+## ADR-017: The sandbox pays the EUR licence by SWIFT
+
+Date: 2026-11-02 Status: accepted
+
+Context: the first live run of the earnings beat on the Airwallex sandbox (`pnpm scene:earnings
+--sandbox`) found two gaps the mock hid. The simulated deposit needs a `global_account_id`: the
+deposit lands in a Global Account, not a bare currency. A EUR `LOCAL` transfer is refused with
+`fee_unknown` ("a problem with your transfer fee configuration"), with the fee paid by the payer or
+by the beneficiary. A USD `LOCAL` (ACH) transfer and a EUR `SWIFT` transfer both go through on the
+same account, so the account's fee setup covers SWIFT for EUR but not SEPA.
+Decision:
+
+1. `depositEarnings` takes an optional `globalAccountId`. The sandbox world finds the account's
+   active USD Global Account (`globalAccountFor`). The mock still takes a bare currency.
+2. `AirwallexTransfers` takes `transferMethod` (`LOCAL` by default, or `SWIFT` with
+   `swift_charge_option: SHARED`). `createEurBeneficiary` takes an optional BIC; with one, the
+   beneficiary is a SWIFT beneficiary. The sandbox world pays "Data Licensor GmbH (SWIFT)", a
+   German IBAN with BIC COBADEFFXXX, found by nickname after the first run.
+3. In the sandbox, treasury converts the whole fee from USD (`alwaysConvert`), even though the
+   sandbox wallet already holds euros. Treasury pays EUR bills out of USD earnings, and the demo
+   shows the conversion.
+   Consequences: the sandbox run is deposit, conversion and a SWIFT transfer, then the sandbox
+   moves it to PAID and control's ledger confirms it. If Airwallex enables EUR LOCAL fees on the
+   account, switch `transferMethod` back to `LOCAL`; nothing else changes. Metal stays on the mock
+   chain in this scene; `RAILS_MODE=sandbox pnpm scene` covers Metal live.
