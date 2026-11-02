@@ -110,9 +110,21 @@ describe("engine: tasks in, decisions out", () => {
     const p = { ...proposalFor(tasks[0] as AgentTask), recurrence: "recurring" as const };
     const r = await post<Result>("/proposals", p);
     expect(r.body.decision?.outcome).toBe("needs_owner_approval");
-    const ok = await post<Result>(`/approvals/${r.body.decision?.proposalId}`, {
+    const id = r.body.decision?.proposalId ?? "";
+    const { pending } = await get<{ pending: { proposalId: string; shownHash: string }[] }>(
+      "/approvals",
+    );
+    const shown = pending.find((a) => a.proposalId === id)?.shownHash ?? "";
+
+    // Bound to what was shown (ADR-007): no hash, or another view's hash, approves nothing.
+    expect((await post(`/approvals/${id}`, { decision: "approved" })).status).toBe(400);
+    const wrong = await post<{ ok?: boolean; error?: string }>(`/approvals/${id}`, {
       decision: "approved",
+      shownHash: "0".repeat(64),
     });
+    expect(wrong.body.error).toBe("approval is for a different view");
+
+    const ok = await post<Result>(`/approvals/${id}`, { decision: "approved", shownHash: shown });
     expect(ok.body.execution?.status).toBe("succeeded");
   });
 
