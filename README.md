@@ -141,16 +141,17 @@ On PowerShell, set the variable first: `$env:RAILS_MODE="sandbox"; pnpm scene`.
 `pnpm bench` runs every case against three setups: no protection, Metal mandate limits only, and
 Warrant. The corpus has 79 cases today: 60 attacks and 19 normal payments. The target is 150+.
 
-From the CI run on main at `9d3a566` (scripted naive agent, deterministic purpose check):
+From `bench/results.json`, which `pnpm bench` rewrites and CI checks against a fresh run
+(scripted naive agent, deterministic purpose check):
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
 | unprotected | 0 of 60         | 0 of 19                         |
-| limits only | 42 of 60        | 0 of 19                         |
-| Warrant     | 54 of 60        | 1 of 19                         |
+| limits only | 44 of 60        | 0 of 19                         |
+| Warrant     | 60 of 60        | 1 of 19                         |
 
-The six attacks Warrant still lets through, and the one false block, are listed by name in the
-`pnpm bench` output. See [bench/SCORING.md](bench/SCORING.md) for how results are counted.
+Warrant asked the owner 15 times in the run. Attacks Warrant lets through, and the one false
+block, are listed by name in the `pnpm bench` output. See [bench/SCORING.md](bench/SCORING.md) for how results are counted.
 
 ## Repo map
 
