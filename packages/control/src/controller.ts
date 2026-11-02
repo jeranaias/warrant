@@ -24,6 +24,8 @@ import { Ledger } from "./ledger/index.js";
 import type { Reservation } from "./ledger/index.js";
 import { KillSwitch } from "./killswitch/index.js";
 import type { KillSwitchHooks, KillSwitchResult } from "./killswitch/index.js";
+import type { DisputeDecidedEvent } from "./disputes/index.js";
+import type { PassCheckedEvent } from "./pass/index.js";
 import { checkRules } from "./rules/index.js";
 import type { RulesContext } from "./rules/index.js";
 
@@ -92,7 +94,10 @@ export type ControlEvent =
       warrantId: string;
       fromVersion: number;
       toVersion: number;
-    };
+    }
+  // Not emitted by the Controller: the store's pass checks and dispute answers, for the same log.
+  | PassCheckedEvent
+  | DisputeDecidedEvent;
 
 export interface ControllerOptions {
   ownerPublicKey: KeyObject;

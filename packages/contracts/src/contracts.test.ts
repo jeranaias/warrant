@@ -104,6 +104,18 @@ describe("contracts", () => {
     ).toThrow();
   });
 
+  it("a card payee may carry a four-digit merchant category code, and nothing else", () => {
+    const [payee] = warrant.payees;
+    const seat = { ...warrant, payees: [{ ...payee, merchantCategoryCode: "5734" }] };
+    expect(Warrant.parse(seat).payees[0]?.merchantCategoryCode).toBe("5734");
+    expect(Warrant.parse(warrant).payees[0]?.merchantCategoryCode).toBeUndefined();
+    for (const bad of ["573", "57345", "57a4", 5734]) {
+      expect(() =>
+        Warrant.parse({ ...warrant, payees: [{ ...payee, merchantCategoryCode: bad }] }),
+      ).toThrow();
+    }
+  });
+
   it("a metal warrant can name its mandate, but never a key or path", () => {
     const mandate = {
       network: "eip155:63825",
@@ -172,6 +184,9 @@ describe("contracts", () => {
     };
     expect(WarrantPass.parse({ grant, pass, sig: "AAAA" }).pass.nonce).toBe("n1");
     expect(() => WarrantGrant.parse({ ...grant, totalBudget: usd(5000) })).toThrow();
+    const onMandate = { ...grant, mandateId: "0x" + "ab".repeat(32) };
+    expect(WarrantGrant.parse(onMandate).mandateId).toBe(onMandate.mandateId);
+    expect(() => WarrantGrant.parse({ ...grant, mandateId: "" })).toThrow();
     expect(() =>
       WarrantPass.parse({ grant, pass: { ...pass, payTo: "me" }, sig: "AAAA" }),
     ).toThrow();

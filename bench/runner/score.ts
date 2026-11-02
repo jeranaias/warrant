@@ -87,6 +87,42 @@ export function summarize(results: readonly CaseResult[]): ModeScore[] {
   });
 }
 
+/**
+ * The few numbers the dashboard and README show, written to `bench/results.json` (committed). No
+ * timestamp, so a rerun on an unchanged corpus and control layer rewrites the same file.
+ */
+export interface Headline {
+  agent: string;
+  purpose: string;
+  attacks: number;
+  benign: number;
+  heldout: number;
+  modes: Record<ModeName, { attacksBlocked: number; falseBlocks: number; ownerTaps: number }>;
+}
+
+export function headline(
+  scores: readonly ModeScore[],
+  o: { agent: string; purpose: string; heldout: number },
+): Headline {
+  const first = scores[0];
+  const modes = {} as Headline["modes"];
+  for (const s of scores) {
+    modes[s.mode] = {
+      attacksBlocked: s.attacks - s.misses,
+      falseBlocks: s.falseBlocks,
+      ownerTaps: s.ownerTaps,
+    };
+  }
+  return {
+    agent: o.agent,
+    purpose: o.purpose,
+    attacks: first?.attacks ?? 0,
+    benign: first?.benign ?? 0,
+    heldout: o.heldout,
+    modes,
+  };
+}
+
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const lost = (m: Record<string, number>) =>
   Object.keys(m).length === 0

@@ -5,9 +5,15 @@ import type { AgentRole, Money, PaymentProposal } from "@warrant/contracts";
  * to the engine over HTTP: it never imports engine, control, rails or agent code.
  *
  * Every path goes through `/api`, which the Vite dev server forwards to the engine
- * (see vite.config.ts). Change BASE if the engine is ever served from somewhere else.
+ * (see vite.config.ts). A build can point elsewhere with VITE_API_BASE.
  */
-const BASE = "/api";
+const BASE = (import.meta.env["VITE_API_BASE"] as string | undefined) || "/api";
+
+/**
+ * Built for the hosted demo (`vite build --mode hosted`, issue #89): one mock engine per visitor,
+ * served by apps/engine/src/hosted.ts on the same origin.
+ */
+export const HOSTED = import.meta.env.MODE === "hosted";
 
 /**
  * The owner's key from the owner link (`#/m?owner=<key>` or `#/?owner=<key>`). It is moved out of
@@ -97,7 +103,7 @@ export interface Execution {
 }
 
 export interface KillResult {
-  event: { reason: string; at: string; revokedWarrantIds: string[] };
+  event: { reason: string; at: string; revokedWarrantIds: string[]; frozenCardIds?: string[] };
   revokedMandates: string[];
   problems: string[];
   durationMs: number;
@@ -116,7 +122,44 @@ export type ControlEvent =
       warrantId: string;
       fromVersion: number;
       toVersion: number;
-    };
+    }
+  | PassCheckedEvent
+  | DisputeDecidedEvent;
+
+/** Our store checked a buyer's warrant pass before serving (control's PassCheckedEvent). */
+export interface PassCheckedEvent {
+  type: "pass_checked";
+  ok: boolean;
+  problems: string[];
+  url: string;
+  amountCents: number;
+  buyer?: {
+    payer: string;
+    ownerId: string;
+    /** Fingerprint of the owner key that signed the buyer's grant. */
+    ownerKey: string;
+    warrantId: string;
+    mandateId?: string;
+    perPaymentCap: Money;
+  };
+}
+
+/** The store decided a dispute from its records (control's DisputeDecidedEvent). */
+export interface DisputeDecidedEvent {
+  type: "dispute_decided";
+  disputeId: string;
+  claim: string;
+  customer: string;
+  refund: Money;
+  orders: {
+    orderId: string;
+    reason: string;
+    refundCents: number;
+    verified: boolean;
+    txHash?: string;
+    mandateId?: string;
+  }[];
+}
 
 export interface LoggedEvent {
   seq: number;
@@ -193,4 +236,6 @@ export const api = {
     justification: string;
     createdAt: string;
   }) => call<{ ok: boolean; error?: string }>("POST", "/budget-changes", body),
+  /** Hosted demo only: a fresh engine for this visitor. */
+  reset: () => call<{ ok: boolean }>("POST", "/reset"),
 };

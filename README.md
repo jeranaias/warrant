@@ -115,18 +115,18 @@ requests flowing to Paid, Held for you or Blocked with reasons.
 
 ## What is real and what is mocked
 
-| Part                                      | Local demo (`RAILS_MODE=mock`, default)    | Live run (`RAILS_MODE=sandbox`)                                         |
-| ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
-| Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI               |
-| Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports       |
-| Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                            |
-| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | Mock chain only for now                                                 |
-| Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | Still the in-memory rail. No code path calls the Airwallex sandbox yet. |
-| Airwallex virtual card and freeze (Kit 2) | Mock endpoints exist; no adapter yet (#19) | Not built yet (#19)                                                     |
-| Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                    |
+| Part                                      | Local demo (`RAILS_MODE=mock`, default)    | Live run (`RAILS_MODE=sandbox`)                                                    |
+| ----------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI                          |
+| Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports                  |
+| Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                                       |
+| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | Mock chain only for now                                                            |
+| Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | **Airwallex sandbox** with `pnpm scene:earnings --sandbox` (EUR by SWIFT, ADR-017) |
+| Airwallex virtual card and freeze (Kit 2) | Mock endpoints exist; no adapter yet (#19) | Not built yet (#19)                                                                |
+| Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                               |
 
-The Airwallex adapter (`packages/rails/src/airwallex`) is written against the sandbox API shapes
-and tested against the mock. The live price-rise run and its transaction hashes are recorded in
+The Airwallex adapter (`packages/rails/src/airwallex`) runs against the mock by default and against
+the real Airwallex sandbox with `pnpm scene:earnings --sandbox` (keys from `.env`). The live price-rise run and its transaction hashes are recorded in
 [docs/TESTNET.md](docs/TESTNET.md). To run it:
 
 ```sh
@@ -139,18 +139,21 @@ On PowerShell, set the variable first: `$env:RAILS_MODE="sandbox"; pnpm scene`.
 ## Benchmark
 
 `pnpm bench` runs every case against three setups: no protection, Metal mandate limits only, and
-Warrant. The corpus has 79 cases today: 60 attacks and 19 normal payments. The target is 150+.
+Warrant. The corpus has 185 cases: 154 attacks across 14 families and 31 normal payments, plus a held-out
+set of 34 written by someone who did not build control.
 
-From the CI run on main at `9d3a566` (scripted naive agent, deterministic purpose check):
+From `bench/results.json`, which `pnpm bench` rewrites and CI checks against a fresh run
+(scripted naive agent, deterministic purpose check):
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
-| unprotected | 0 of 60         | 0 of 19                         |
-| limits only | 42 of 60        | 0 of 19                         |
-| Warrant     | 54 of 60        | 1 of 19                         |
+| unprotected | 0 of 154        | 0 of 31                         |
+| limits only | 107 of 154      | 0 of 31                         |
+| Warrant     | 149 of 154      | 1 of 31                         |
 
-The six attacks Warrant still lets through, and the one false block, are listed by name in the
-`pnpm bench` output. See [bench/SCORING.md](bench/SCORING.md) for how results are counted.
+On the held-out set Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6 normal payments.
+Warrant asked the owner 35 times in the run. Attacks Warrant lets through, and the one false
+block, are listed by name in the `pnpm bench` output. See [bench/SCORING.md](bench/SCORING.md) for how results are counted.
 
 ## Repo map
 

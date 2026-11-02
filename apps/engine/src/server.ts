@@ -5,7 +5,7 @@ import { AgentRole, DisputeCase } from "@warrant/contracts";
 import type { AgentTask } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
-import type { ControlEvent, PurposeChecker } from "@warrant/control";
+import type { ControlEvent, KillSwitchHooks, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
 import { answerDispute } from "./disputes.js";
@@ -54,6 +54,16 @@ export interface Engine {
    * dispute its `sourceRef` names, whatever the ticket text adds.
    */
   disputes: Map<string, DisputeCase>;
+  /** Adds an event to GET /events (the store's pass checks and dispute answers). */
+  record: (event: ControlEvent) => void;
+}
+
+/** What the emergency stop does outside control: revoke mandates, and freeze cards if any. */
+export function killHooks(world: World): KillSwitchHooks {
+  return {
+    revokeMandates: world.revokeMandates,
+    ...(world.freezeCards ? { freezeCards: world.freezeCards } : {}),
+  };
 }
 
 export function createEngine(opts: EngineOptions = {}): Engine {
@@ -62,6 +72,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   const feed = new TaskFeed();
   const log: LoggedEvent[] = [];
   const disputes = new Map<string, DisputeCase>();
+  const record = (event: ControlEvent) =>
+    void log.push({ seq: log.length + 1, at: clock().toISOString(), event });
 
   const controller = new Controller({
     ownerPublicKey: world.ownerPublicKey,
@@ -74,8 +86,10 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     applyBudgetChange: world.applyBudgetChange,
     budgetCheck: world.budgetCheck,
     clock,
-    onEvent: (event) => log.push({ seq: log.length + 1, at: clock().toISOString(), event }),
+    onEvent: record,
   });
+  // Sandbox: our store's warrant pass checks, as they happen.
+  world.watch?.(record);
 
   const initial = opts.scenario ?? "all";
   if (initial !== "none") feed.load(scenario(initial, clock()));
@@ -208,7 +222,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     );
     const result = await controller.engageKillSwitch(
       { ownerId: OWNER_ID, reason, warrantIds: [...world.warrants.keys()] },
-      { revokeMandates: world.revokeMandates },
+      killHooks(world),
     );
     for (const [id, w] of world.warrants) world.warrants.set(id, { ...w, status: "revoked" });
     res.json(result);
@@ -275,7 +289,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     const file = await answerDispute(
-      { world, controller, disputes },
+      { world, controller, disputes, record },
       { disputeId: `dsp_${++disputesOpened}`, ...body.data },
       clock(),
     );
@@ -287,7 +301,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ labels: feed.labels() });
   });
 
-  return { app, controller, world, disputes };
+  return { app, controller, world, disputes, record };
 }
 
 /** A dispute task handed to support is a dispute on file: its ticket is the task's sourceRef. */

@@ -137,4 +137,29 @@ group("gate reasons and owner outcomes", () => {
     ]);
     expect(paidByCurrency(passes)).toEqual([usd(5)]);
   });
+
+  it("a purchase the card itself declined reads as the card's refusal", () => {
+    const passes = passesOf(
+      [
+        event(1, {
+          type: "proposal",
+          proposal: {
+            proposalId: "c1",
+            warrantId: "w1",
+            payeeId: "pay_a",
+            amount: usd(5),
+            rail: "airwallex_card",
+          },
+          result: { decision: { outcome: "execute" } },
+        }),
+        event(2, {
+          type: "execution",
+          proposalId: "c1",
+          execution: { status: "failed", detail: "declined by card: LIMIT_EXCEEDED" },
+        }),
+      ],
+      warrants,
+    );
+    expect(passes.map((p) => [p.fate, p.reason])).toEqual([["blocked", "declined by the card"]]);
+  });
 });

@@ -105,3 +105,41 @@ export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveCon
     dataDir: env["WARRANT_DATA_DIR"] ?? join(home, "warrant-live"),
   };
 }
+
+/** The simulated customer on testnet (the live dispute scene's buyer). */
+export interface CustomerConfig {
+  /** The customer's smart account (`pnpm setup:testnet` writes it to warrant-public.env). */
+  address: string;
+  /** The customer agent's mandate credential file inside METAL_HOME. */
+  credential: string;
+}
+
+/**
+ * What the live dispute scene needs on top of `liveConfigFromEnv`. Checks the files exist (never
+ * reads them) so a missing setup fails here, with the step to take, not halfway through a run.
+ */
+export function customerConfigFromEnv(
+  cfg: LiveConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): CustomerConfig {
+  const see = 'see "Running live" in docs/TESTNET.md';
+  if (!existsSync(cfg.home)) throw new Error(`METAL_HOME does not exist; ${see}`);
+  if (!existsSync(join(cfg.home, cfg.ownerKey))) {
+    throw new Error(`METAL_HOME has no ${cfg.ownerKey} (the business owner key); ${see}`);
+  }
+  const address = env["METAL_CUSTOMER_ADDRESS"];
+  if (!address) {
+    throw new Error(
+      `METAL_CUSTOMER_ADDRESS is required for the live dispute scene: pnpm setup:testnet writes it ` +
+        `to METAL_HOME/warrant-public.env; ${see}`,
+    );
+  }
+  const credential = env["METAL_CUSTOMER_CREDENTIAL"] ?? "customer-agent.json";
+  if (!/^[A-Za-z0-9._-]+\.json$/.test(credential)) {
+    throw new Error("METAL_CUSTOMER_CREDENTIAL must be a plain file name inside METAL_HOME");
+  }
+  if (!existsSync(join(cfg.home, credential))) {
+    throw new Error(`the customer's mandate credential ${credential} is not in METAL_HOME; ${see}`);
+  }
+  return { address, credential };
+}

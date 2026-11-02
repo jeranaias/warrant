@@ -12,6 +12,12 @@ Warrant
 The owner signs a warrant for each AI agent, and every payment the agent asks for is checked
 against it before any money moves.
 
+## Demo link
+
+https://warrant-demo-bt31.onrender.com (access code in the form's private notes field, not here).
+Each visitor gets their own demo engine on mock rails, reset with one button. It runs on a free
+host, so the first visit after a quiet spell can take up to a minute to wake.
+
 ## Description (~200 words)
 
 Warrant lets a business run AI agents that spend money without handing them the keys. The owner
@@ -74,7 +80,7 @@ that the agent was acting for a real person who agreed to it.
 - TODO: confirm the warrant pass on testnet (store and upstream checking passes in
   `RAILS_MODE=sandbox`) and record the evidence in `docs/TESTNET.md`.
 
-**Airwallex (sandbox API shapes; runs against our mock today)**
+**Airwallex (runs on the real sandbox: `pnpm scene:earnings --sandbox`)**
 
 - Adapter calls: `POST /api/v1/authentication/login`, `GET /api/v1/balances/current`,
   `POST /api/v1/fx/conversions/create`, `POST /api/v1/beneficiaries/create`,
@@ -83,22 +89,24 @@ that the agent was acting for a real person who agreed to it.
   the reference), and the sandbox transfer simulation.
 - Every write carries a `request_id` from control's idempotency key. A timeout is looked up by
   that id, never resent.
-- TODO: no code path calls the real Airwallex sandbox yet. Either run the earnings and licence fee
-  scene against the sandbox before we submit, or describe it as "built against the sandbox API,
-  demoed on a mock".
+- Live on the sandbox (2026-11-02): earnings deposited into our USD Global Account, converted USD to
+  EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID; control's ledger confirmed it.
+  EUR SEPA is refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT
+  (ADR-017, evidence in docs/TESTNET.md).
 
 **Visa**
 
-- Airwallex virtual card for an agent, with limits and freeze on STOP: **in progress, #19**. Our
-  Airwallex mock already models cardholders, cards, card transactions and freeze. TODO: update
-  this line if #19 merges.
+- An agent buys a design tool seat with an Airwallex virtual Visa card whose limits are the
+  warrant's: USD 15.00 per purchase, USD 50.00 in all, merchant category 5734 only (ADR-018).
+- Live on the sandbox (2026-11-02): the USD 12.00 seat was approved; a USD 40.00 purchase was
+  blocked by control (`per_payment_cap`) and declined by the card itself (`LIMIT_EXCEEDED`); STOP
+  froze the card in 627 ms, and the next purchase was refused as `CARD_INACTIVE`.
 
 ## What's next
 
-- Finish the Airwallex virtual card and freeze (#19), and run the Airwallex side on the sandbox.
-- Run the dispute on Metal testnet.
-- Close the known gaps the benchmark shows: a flood from one offer still pays once (#79), and six
-  attacks get through (named in the `pnpm bench` output).
+- Close the known gaps the benchmark shows: a flood of purchases from one offer still pays once
+  (#79; control can't see quantity without reading offer text, which it never does), and the
+  attacks that get through (named in the `pnpm bench` output).
 - Grow the benchmark from 79 cases to 150+.
 - Let the owner turn a repeated approval into a new signed warrant version ("always allow this").
 - TODO: anything the team wants to add.
