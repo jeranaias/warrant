@@ -5,7 +5,7 @@ import type {
   RefundReason,
   SignedOrderRecord,
 } from "@warrant/contracts";
-import { verifyEvidence } from "../pass/index.js";
+import { decodePass, verifyEvidence } from "../pass/index.js";
 import type { EvidenceFinding } from "../pass/index.js";
 
 /**
@@ -45,6 +45,56 @@ export interface DisputeFile {
   findings: OrderFinding[];
   /** Total the evidence says to refund. */
   refund: Money;
+}
+
+/**
+ * A decided dispute, for the event log and the dashboard: per order, the decision, whether the
+ * settlement checked out, and the settlement tx. Codes and ids only, never ticket text.
+ */
+export interface DisputeDecidedEvent {
+  type: "dispute_decided";
+  disputeId: string;
+  claim: DisputeCase["claim"];
+  customer: string;
+  /** Total the evidence says to refund (support then pays it through control). */
+  refund: Money;
+  orders: {
+    orderId: string;
+    reason: RefundReason;
+    refundCents: number;
+    /** The signed order and its settlement checked out. */
+    verified: boolean;
+    /** The order's settlement transaction, when the order is on file. */
+    txHash?: string;
+    /** The mandate the buyer's warrant pass names, when it names one. */
+    mandateId?: string;
+  }[];
+}
+
+export function disputeDecidedEvent(
+  dispute: DisputeCase,
+  file: DisputeFile,
+  orders: ReadonlyMap<string, SignedOrderRecord>,
+): DisputeDecidedEvent {
+  return {
+    type: "dispute_decided",
+    disputeId: file.disputeId,
+    claim: dispute.claim,
+    customer: dispute.customer,
+    refund: file.refund,
+    orders: file.findings.map((f) => {
+      const o = orders.get(f.orderId);
+      const mandateId = decodePass(o?.buyerPass)?.grant.mandateId;
+      return {
+        orderId: f.orderId,
+        reason: f.decision.reason,
+        refundCents: f.decision.refund.cents,
+        verified: f.decision.signedOrderVerified,
+        ...(o ? { txHash: o.txHash } : {}),
+        ...(mandateId ? { mandateId } : {}),
+      };
+    }),
+  };
 }
 
 export async function decideDispute(inp: DisputeInputs): Promise<DisputeFile> {

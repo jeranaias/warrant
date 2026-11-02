@@ -16,7 +16,8 @@ read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 400
 4. The answer is control's decision: `execute` (paid, mock), `needs_owner_approval`, or
    `blocked` with `blockedBy` (`rules`, `purpose`, `owner`, `rail`, `malformed`).
 5. `GET /events?since=<seq>`: every proposal, approval and payment in order, for the analyzer and
-   the dashboard.
+   the dashboard. Also the store's side: `pass_checked` (each warrant pass our store checks,
+   sandbox) and `dispute_decided` (each dispute answered, `POST /disputes` or a scene).
 
 **Owner side:** `GET /approvals` lists what waits; `POST /approvals/<proposalId>` with
 `{"decision":"approved","shownHash":"<the shownHash you displayed>"}` (or `"denied"`) answers it.

@@ -202,3 +202,86 @@ group("benchLine", () => {
     expect(benchLine({ attacks: 1, benign: 1, modes: {} })).toBeNull();
   });
 });
+
+group("store events: the warrant pass check and the dispute decision", () => {
+  const ev = (event: LoggedEvent["event"]): LoggedEvent => ({ seq: 1, at, event });
+  const tx = "0x" + "d".repeat(64);
+
+  it("a pass that checks out: who signed it, the mandate, the cap", () => {
+    const line = describe(
+      ev({
+        type: "pass_checked",
+        ok: true,
+        problems: [],
+        url: "http://127.0.0.1:4021/query/fx-eurusd",
+        amountCents: 5,
+        buyer: {
+          payer: "0x" + "c".repeat(40),
+          ownerId: "own_customer",
+          ownerKey: "1a2b3c4d5e6f7a8b",
+          warrantId: "wrt_customer",
+          mandateId: "0x6908b0a2e62a939f6c16f3e899e4757d46033213fc9e57c50cb41c642c096374",
+          perPaymentCap: { currency: "USDZ", cents: 5 },
+        },
+      }),
+    );
+    expect(line.tone).toBe("ok");
+    expect(line.text).toBe(
+      "Store checked the buyer's warrant pass for /query/fx-eurusd: signed by the owner " +
+        "own_customer (key 1a2b3c4d), mandate 0x6908b0a2..., cap 0.05 USDZ.",
+    );
+  });
+
+  it("a refused pass says why, in the checker's words", () => {
+    const line = describe(
+      ev({
+        type: "pass_checked",
+        ok: false,
+        problems: ["no warrant pass: nothing shows an owner authorized this"],
+        url: "http://127.0.0.1:4021/query/btc-usd",
+        amountCents: 5,
+      }),
+    );
+    expect(line.tone).toBe("stop");
+    expect(line.text).toBe(
+      "Store refused a buyer's warrant pass for /query/btc-usd (with no readable pass). " +
+        "Not served, not charged.",
+    );
+    expect(line.why).toBe("no warrant pass: nothing shows an owner authorized this");
+  });
+
+  it("a dispute: how many refunded and kept, each order's reason and settlement", () => {
+    const line = describe(
+      ev({
+        type: "dispute_decided",
+        disputeId: "dsp_1",
+        claim: "wrong_data",
+        customer: "0x" + "c".repeat(40),
+        refund: { currency: "USDZ", cents: 5 },
+        orders: [
+          {
+            orderId: "ord_1",
+            reason: "data_was_wrong",
+            refundCents: 5,
+            verified: true,
+            txHash: tx,
+          },
+          {
+            orderId: "ord_2",
+            reason: "data_was_correct",
+            refundCents: 0,
+            verified: true,
+            txHash: tx,
+          },
+          { orderId: "ord_404", reason: "order_not_found", refundCents: 0, verified: false },
+        ],
+      }),
+    );
+    expect(line.text).toBe("Dispute dsp_1 (wrong data): 3 orders, refund 1, kept 2.");
+    expect(line.why).toBe(
+      "ord_1: refund 0.05 USDZ (data was wrong, on chain 0xdddddddd...); " +
+        "ord_2: kept (data was correct, on chain 0xdddddddd...); " +
+        "ord_404: kept (order not found)",
+    );
+  });
+});
