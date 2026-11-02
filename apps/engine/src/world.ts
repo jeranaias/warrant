@@ -25,6 +25,7 @@ import {
 import type { PurposeChecker } from "@warrant/control";
 import { MetalAdapter, classifyPay, classifyPull } from "@warrant/rails";
 import type {
+  CardControls,
   CliResult,
   CliRunner,
   RailAdapter,
@@ -43,6 +44,7 @@ import { MockMetalChain, UPSTREAM_PAY_TO, UPSTREAM_URL, addUpstream } from "@war
  */
 
 const eur = (cents: number): Money => ({ currency: "EUR", cents });
+const usd = (cents: number): Money => ({ currency: "USD", cents });
 const addr = (c: string) => "0x" + c.repeat(40);
 
 export const OWNER_ID = "own_demo";
@@ -63,6 +65,22 @@ export const AGENTS: Record<AgentRole, AgentIdentity> = {
   support: { role: "support", agentId: "agt_support", warrantId: "wrt_support" },
   treasury: { role: "treasury", agentId: "agt_treasury", warrantId: "wrt_treasury" },
 };
+
+/**
+ * Treasury's second warrant: the company's virtual Visa card (Kit 2), for one software seat. Its
+ * cap and budget are copied onto the card itself, so the card network enforces them too.
+ */
+export const CARD_WARRANT_ID = "wrt_treasury_card";
+export const CARD_SEAT = {
+  payeeId: "pay_design_tool",
+  displayName: "Design tool seat",
+  routingRef: "merchant_design_tool",
+  /** ISO 18245: computer software stores. */
+  merchantCategoryCode: "5734",
+  price: usd(1200),
+};
+const CARD_CAP = usd(1500);
+const CARD_BUDGET = usd(5000);
 
 /** The two agents that pay on Metal, each through its own mandate. */
 export type MetalRole = "sourcing" | "support";
@@ -111,6 +129,7 @@ export function bodies(
   now: Date,
   terms: MetalTerms = demoTerms(),
   licensorRef = "ben_licensor",
+  card = false,
 ): WarrantBody[] {
   const notBefore = new Date(now.getTime() - 60_000).toISOString();
   const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt: DEMO_EXPIRY };
@@ -164,7 +183,33 @@ export function bodies(
       perPaymentCap: eur(5000),
       totalBudget: eur(10000),
     },
+    ...(card ? [cardBody(common)] : []),
   ];
+}
+
+/** Treasury's card warrant: one payee, the design tool seat, billed monthly. */
+function cardBody(common: Pick<WarrantBody, "version" | "ownerId" | "notBefore" | "expiresAt">) {
+  return {
+    ...common,
+    agentId: AGENTS.treasury.agentId,
+    warrantId: CARD_WARRANT_ID,
+    agentRole: "treasury" as const,
+    purpose: "Pay for the design tool seat our team uses, on the company card.",
+    allowedRails: ["airwallex_card" as const],
+    payees: [
+      {
+        payeeId: CARD_SEAT.payeeId,
+        displayName: CARD_SEAT.displayName,
+        rail: "airwallex_card" as const,
+        routingRef: CARD_SEAT.routingRef,
+        currency: "USD" as const,
+        billingPeriod: "month" as const,
+        merchantCategoryCode: CARD_SEAT.merchantCategoryCode,
+      },
+    ],
+    perPaymentCap: CARD_CAP,
+    totalBudget: CARD_BUDGET,
+  };
 }
 
 /** The upstream batch that went out stale: data we sold from it was wrong (the dispute beat). */
@@ -318,7 +363,13 @@ export interface World {
   settled: () => readonly string[];
   /** Owner side of the kill switch: revoke every live mandate; answers the credentials revoked. */
   revokeMandates: () => Promise<string[]>;
-  rails: { metal_x402: MetalAdapter; airwallex_transfer: RailAdapter };
+  rails: {
+    metal_x402: MetalAdapter;
+    airwallex_transfer: RailAdapter;
+    airwallex_card?: RailAdapter;
+  };
+  /** Lane B's half of the kill switch: freeze every card the warrants use. Set with a card rail. */
+  freezeCards?: () => Promise<{ frozenCardIds: string[] }>;
   /**
    * Owner side: move the store's earnings off Metal to our treasury address (`mandate pull`).
    * Answers the settlement tx, the reference for the Airwallex deposit. Mock mode only for now.
@@ -329,6 +380,8 @@ export interface World {
 export interface WorldOptions {
   /** Pay `airwallex_transfer` through this rail (the Airwallex adapter) to this beneficiary. */
   airwallex?: { transfers: RailAdapter; licensorRef: string };
+  /** Add treasury's card warrant, paid through this card rail (the Airwallex card adapter). */
+  card?: RailAdapter & CardControls;
 }
 
 /**
@@ -392,9 +445,10 @@ export function recordingRunner(run: CliRunner, settled: string[]): CliRunner {
 }
 
 export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
+  const { card } = opts;
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const warrants = new Map(
-    bodies(now, demoTerms(), opts.airwallex?.licensorRef).map((b) => [
+    bodies(now, demoTerms(), opts.airwallex?.licensorRef, card !== undefined).map((b) => [
       b.warrantId,
       signWarrant(b, privateKey, "owner-demo"),
     ]),
@@ -478,7 +532,9 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
         quote: (url) => Promise.resolve(url === UPSTREAM_URL ? upstream.price() : undefined),
       }),
       airwallex_transfer: opts.airwallex?.transfers ?? new AlwaysPaysRail("airwallex_transfer"),
+      ...(card ? { airwallex_card: card } : {}),
     },
+    ...(card ? { freezeCards: () => card.freezeAll() } : {}),
     sweepEarnings: async () => {
       // What the store took on chain moves to our treasury address under the store's own mandate.
       const cents = [...orders.values()].reduce((n, o) => n + o.price.cents, 0);

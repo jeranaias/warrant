@@ -44,6 +44,11 @@ referenced by the tx hash, and treasury pays the EUR 50 licence fee through cont
 `packages/rails/src/airwallex` converts USD to EUR when the wallet is short, then sends a LOCAL
 transfer; PAID is confirmed on `controller.reconcile()`). `mockAirwallexWorld()` builds that world;
 `pnpm engine` still uses the always-pays Airwallex stand-in.
+**Card (Kit 2, ADR-018):** `pnpm scene:card` gives treasury a second warrant, `wrt_treasury_card`
+(payee "Design tool seat", USD 12.00 a month, MCC 5734), paid by `AirwallexCards` on a virtual Visa
+whose own limits mirror the warrant. Mock Airwallex by default; `--sandbox` (or `AIRWALLEX_ENV` /
+`RAILS_MODE=sandbox`) uses the keys in `.env` and `AIRWALLEX_CARD_ID` if set. A world built with a
+card rail (`makeWorld(now, { card })`) freezes its cards on `POST /kill` (`killHooks`).
 **Disputes (ADR-012):** `GET /orders` lists the store's signed orders with their passes.
 `POST /disputes {"orderIds":["ord_1","ord_2"],"claim":"wrong_data"}` (claims: `wrong_data`,
 `not_delivered`, `not_authorized`, `other`) answers with one decision per order and the evidence
@@ -73,3 +78,8 @@ see docs/TESTNET.md "Running live". `config.ts` reads the env (`.env`, `WARRANT_
 **Must never:** in mock mode, use a real key, account, credential or network (everything is in
 memory and made fresh at startup). In live mode: print, log or return a key, a credential's
 contents or the RPC URL; give an agent anything from METAL_HOME; touch mainnet or production.
+
+**Hosted demo (`hosted.ts`, #89):** the built dashboard plus one mock engine per signed-in
+visitor, behind one access code (`DEMO_PASSWORD`, `DEMO_COOKIE_SECRET`; refuses to start without
+them or with `RAILS_MODE=sandbox`). Bundled by `build-hosted.mjs` and run with plain `node` on
+Render (`render.yaml`, docs/RUNBOOK.md "Hosted demo"). Never give it a key.

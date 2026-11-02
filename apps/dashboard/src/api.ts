@@ -5,9 +5,15 @@ import type { AgentRole, Money, PaymentProposal } from "@warrant/contracts";
  * to the engine over HTTP: it never imports engine, control, rails or agent code.
  *
  * Every path goes through `/api`, which the Vite dev server forwards to the engine
- * (see vite.config.ts). Change BASE if the engine is ever served from somewhere else.
+ * (see vite.config.ts). A build can point elsewhere with VITE_API_BASE.
  */
-const BASE = "/api";
+const BASE = (import.meta.env["VITE_API_BASE"] as string | undefined) || "/api";
+
+/**
+ * Built for the hosted demo (`vite build --mode hosted`, issue #89): one mock engine per visitor,
+ * served by apps/engine/src/hosted.ts on the same origin.
+ */
+export const HOSTED = import.meta.env.MODE === "hosted";
 
 /**
  * The owner's key from the owner link (`#/m?owner=<key>` or `#/?owner=<key>`). It is moved out of
@@ -97,7 +103,7 @@ export interface Execution {
 }
 
 export interface KillResult {
-  event: { reason: string; at: string; revokedWarrantIds: string[] };
+  event: { reason: string; at: string; revokedWarrantIds: string[]; frozenCardIds?: string[] };
   revokedMandates: string[];
   problems: string[];
   durationMs: number;
@@ -193,4 +199,6 @@ export const api = {
     justification: string;
     createdAt: string;
   }) => call<{ ok: boolean; error?: string }>("POST", "/budget-changes", body),
+  /** Hosted demo only: a fresh engine for this visitor. */
+  reset: () => call<{ ok: boolean }>("POST", "/reset"),
 };

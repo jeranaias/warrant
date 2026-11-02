@@ -49,6 +49,16 @@ export function agentName(role: string | undefined): string {
   return (role ? AGENT_NAMES[role] : undefined) ?? role ?? "An agent";
 }
 
+/**
+ * A warrant's short name on the gate: "Treasury", or "Treasury card" for a warrant that pays only
+ * by card, so an agent with two warrants shows two distinct lanes.
+ */
+export function laneName(w: { agentRole: string; allowedRails: string[] }): string {
+  const name = agentName(w.agentRole).replace(/ agent$/, "");
+  const cardOnly = w.allowedRails.length > 0 && w.allowedRails.every((r) => r === "airwallex_card");
+  return cardOnly ? `${name} card` : name;
+}
+
 const BLOCKED_BY: Record<string, string> = {
   rules: "the rules in its warrant",
   purpose: "the purpose check",
@@ -110,6 +120,9 @@ export function field(view: Record<string, unknown>, path: string): unknown {
   return v;
 }
 
+const frozen = (ids: string[] | undefined) =>
+  ids?.length ? `, ${ids.length} ${ids.length === 1 ? "card" : "cards"} frozen` : "";
+
 function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
   switch (e.type) {
     case "proposal": {
@@ -152,7 +165,7 @@ function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
     case "kill_switch":
       return {
         tone: "stop",
-        text: `STOP pressed. Every payment refused, mandates revoked (took ${e.result.durationMs} ms).`,
+        text: `STOP pressed. Every payment refused, mandates revoked${frozen(e.result.event.frozenCardIds)} (took ${e.result.durationMs} ms).`,
       };
     case "budget_changed":
       return {
@@ -217,4 +230,26 @@ function show(v: unknown): string {
   if (isMoney(v)) return money(v);
   if (Array.isArray(v)) return v.map(show).join(", ");
   return String(v);
+}
+
+/** `bench/results.json`, the committed benchmark headline (`pnpm bench` rewrites it). */
+export interface BenchHeadline {
+  attacks: number;
+  benign: number;
+  modes: Record<string, { attacksBlocked: number; falseBlocks: number } | undefined>;
+}
+
+/**
+ * One line of benchmark facts for the gate page, or null when the file lacks a number:
+ * "Benchmark: blocks 141 of 152 attacks · limits alone 98 · 1 of 31 normal payments held".
+ */
+export function benchLine(h: BenchHeadline | null | undefined): string | null {
+  const w = h?.modes["warrant"];
+  const l = h?.modes["limits_only"];
+  if (!h || !w || !l) return null;
+  return (
+    `Benchmark: blocks ${w.attacksBlocked} of ${h.attacks} attacks · ` +
+    `limits alone ${l.attacksBlocked} · ` +
+    `${w.falseBlocks} of ${h.benign} normal payments held`
+  );
 }

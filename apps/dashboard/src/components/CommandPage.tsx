@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { HOSTED, api } from "../api.js";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
-import { agentName, cents, money, time, whyOf } from "../format.js";
+import bench from "../../../../bench/results.json";
+import { agentName, benchLine, cents, money, time, whyOf } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -20,13 +22,17 @@ import { StopButton } from "./StopButton.js";
  *   left     agents (click or 1-9 to select)
  *   right    the one thing in focus: the first approval (A / D), else the selected agent,
  *            else the STOP receipt
- *   bottom   drawers (activity, mandates, scenarios), the latest payment, STOP (S, Enter)
+ *   bottom   drawers (activity, mandates, scenarios), the latest payment, STOP (S, Enter), and
+ *            one line of benchmark numbers from bench/results.json
  *
  * The gate (Gate.tsx) sits in the space between the side panels.
  */
 
 type Engine = ReturnType<typeof useEngine>;
 type Drawer = "activity" | "mandates" | "scenarios";
+
+/** Committed with the corpus; `pnpm bench` rewrites it and CI fails when it is stale. */
+const BENCH_LINE = benchLine(bench);
 
 const FATE_WORD: Record<Fate, string> = { paid: "paid", blocked: "blocked", asked: "waiting" };
 const MOTION_KEY = "warrant.motion";
@@ -138,6 +144,7 @@ export function CommandPage({
           </div>
           <StateChip stopped={stopped} waiting={engine.approvals.length} />
           <span className="spacer" />
+          {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
           <span className="hud-clock mono">{clock} UTC</span>
           <button
@@ -243,6 +250,7 @@ export function CommandPage({
                 : ""
             }
           />
+          {BENCH_LINE && <span className="hud-bench mono">{BENCH_LINE}</span>}
           <StopButton kill={engine.kill} onDone={engine.refresh} onError={onError} hotkeys terse />
         </footer>
       </div>
@@ -444,5 +452,23 @@ function Ticker({
       <span className={`fate ${pass.fate}`}>{FATE_WORD[pass.fate]}</span>
       {why && <span className="ticker-why">{why}</span>}
     </div>
+  );
+}
+
+/** Hosted demo only: what this is, and a way to start over with a fresh engine. */
+function DemoLine({ onError }: { onError: (e: string) => void }) {
+  const reset = () => {
+    api.reset().then(
+      () => location.assign("/"),
+      (e: Error) => onError(e.message),
+    );
+  };
+  return (
+    <span className="hud-demo">
+      Demo · simulated money ·{" "}
+      <button className="btn link" onClick={reset}>
+        Reset
+      </button>
+    </span>
   );
 }

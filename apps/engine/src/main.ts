@@ -28,6 +28,7 @@ app.listen(port, "127.0.0.1", () => {
   console.log(
     `engine on http://127.0.0.1:${port}, ${mode} (GET /tasks?role=sourcing, POST /proposals)`,
   );
-  const dash = process.env["DASHBOARD_URL"] ?? "http://127.0.0.1:5173";
+  // localhost, not 127.0.0.1: Vite listens on "localhost", which can be IPv6 (::1) only.
+  const dash = process.env["DASHBOARD_URL"] ?? "http://localhost:5173";
   console.log(`owner link (keep it to yourself): ${dash}/#/m?owner=${ownerToken}`);
 });

@@ -1,6 +1,15 @@
 import { describe as group, expect, it } from "vitest";
 import type { LoggedEvent } from "./api.js";
-import { approveLabel, describe, money, percentUsed, viewRows, whyOf } from "./format.js";
+import {
+  approveLabel,
+  benchLine,
+  describe,
+  laneName,
+  money,
+  percentUsed,
+  viewRows,
+  whyOf,
+} from "./format.js";
 
 const at = "2026-10-30T12:00:00.000Z";
 
@@ -78,6 +87,35 @@ group("describe", () => {
     expect(describe(e).text).toContain("12 ms");
   });
 
+  it("the stop says how many cards it froze", () => {
+    const e: LoggedEvent = {
+      seq: 4,
+      at,
+      event: {
+        type: "kill_switch",
+        result: {
+          event: { reason: "x", at, revokedWarrantIds: [], frozenCardIds: ["c1"] },
+          revokedMandates: [],
+          problems: [],
+          durationMs: 7,
+        },
+      },
+    };
+    expect(describe(e).text).toBe(
+      "STOP pressed. Every payment refused, mandates revoked, 1 card frozen (took 7 ms).",
+    );
+  });
+
+  it("a card-only warrant gets its own lane name", () => {
+    expect(laneName({ agentRole: "treasury", allowedRails: ["airwallex_transfer"] })).toBe(
+      "Treasury",
+    );
+    expect(laneName({ agentRole: "treasury", allowedRails: ["airwallex_card"] })).toBe(
+      "Treasury card",
+    );
+    expect(laneName({ agentRole: "sourcing", allowedRails: [] })).toBe("Sourcing");
+  });
+
   it("flags a decision that did not count", () => {
     const e: LoggedEvent = {
       seq: 4,
@@ -140,5 +178,27 @@ group("reasons and the approve button", () => {
   it("the approve button repeats the amount", () => {
     expect(approveLabel({ amount: { currency: "EUR", cents: 5000 } })).toBe("Approve EUR 50.00");
     expect(approveLabel({ kind: "budget_change" })).toBe("Approve");
+  });
+});
+
+group("benchLine", () => {
+  it("states the committed benchmark numbers, facts only", () => {
+    const h = {
+      attacks: 152,
+      benign: 31,
+      modes: {
+        unprotected: { attacksBlocked: 0, falseBlocks: 0 },
+        limits_only: { attacksBlocked: 98, falseBlocks: 0 },
+        warrant: { attacksBlocked: 141, falseBlocks: 1 },
+      },
+    };
+    expect(benchLine(h)).toBe(
+      "Benchmark: blocks 141 of 152 attacks · limits alone 98 · 1 of 31 normal payments held",
+    );
+  });
+
+  it("shows nothing when a number is missing", () => {
+    expect(benchLine(undefined)).toBeNull();
+    expect(benchLine({ attacks: 1, benign: 1, modes: {} })).toBeNull();
   });
 });
