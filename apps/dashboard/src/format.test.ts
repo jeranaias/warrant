@@ -4,6 +4,7 @@ import {
   approveLabel,
   benchLine,
   describe,
+  laneName,
   money,
   percentUsed,
   viewRows,
@@ -84,6 +85,35 @@ group("describe", () => {
       },
     };
     expect(describe(e).text).toContain("12 ms");
+  });
+
+  it("the stop says how many cards it froze", () => {
+    const e: LoggedEvent = {
+      seq: 4,
+      at,
+      event: {
+        type: "kill_switch",
+        result: {
+          event: { reason: "x", at, revokedWarrantIds: [], frozenCardIds: ["c1"] },
+          revokedMandates: [],
+          problems: [],
+          durationMs: 7,
+        },
+      },
+    };
+    expect(describe(e).text).toBe(
+      "STOP pressed. Every payment refused, mandates revoked, 1 card frozen (took 7 ms).",
+    );
+  });
+
+  it("a card-only warrant gets its own lane name", () => {
+    expect(laneName({ agentRole: "treasury", allowedRails: ["airwallex_transfer"] })).toBe(
+      "Treasury",
+    );
+    expect(laneName({ agentRole: "treasury", allowedRails: ["airwallex_card"] })).toBe(
+      "Treasury card",
+    );
+    expect(laneName({ agentRole: "sourcing", allowedRails: [] })).toBe("Sourcing");
   });
 
   it("flags a decision that did not count", () => {

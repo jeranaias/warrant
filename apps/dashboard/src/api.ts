@@ -103,7 +103,7 @@ export interface Execution {
 }
 
 export interface KillResult {
-  event: { reason: string; at: string; revokedWarrantIds: string[] };
+  event: { reason: string; at: string; revokedWarrantIds: string[]; frozenCardIds?: string[] };
   revokedMandates: string[];
   problems: string[];
   durationMs: number;
