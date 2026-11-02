@@ -146,7 +146,14 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     feed.clear();
-    res.json({ queued: feed.load(scenario(name as ScenarioName, clock())) });
+    const queued = feed.load(scenario(name as ScenarioName, clock()));
+    // Mock world: buyers at our store's door first, so the seller's side of a warrant pass shows.
+    // The customer's agent buys with its owner's pass; in the attacks, a buyer with none.
+    if (world.storeSale) {
+      if (name !== "attacks") record(world.storeSale(true));
+      if (name === "attacks" || name === "all") record(world.storeSale(false));
+    }
+    res.json({ queued });
   });
 
   // Next tasks. Taking a task removes it from the queue. Labels stay server-side.
@@ -158,7 +165,17 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     }
     const limit = Math.min(Math.max(Number(req.query["limit"] ?? 10) || 10, 1), 100);
     const tasks = feed.take(role, limit).map((it) => it.task);
-    for (const t of tasks) fileDispute(disputes, t);
+    for (const t of tasks) {
+      fileDispute(disputes, t);
+      // The store answers the ticket from its records (ADR-012) as support picks it up.
+      if (t.kind === "dispute") {
+        void answerDispute(
+          { world, controller, record },
+          { disputeId: t.disputeId, orderIds: t.orderIds, claim: t.claim },
+          clock(),
+        ).catch(() => undefined);
+      }
+    }
     res.json({ tasks });
   });
 
