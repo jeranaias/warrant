@@ -1,3 +1,4 @@
+import { parseArgs } from "node:util";
 import { brainFromEnv } from "./brains.js";
 import { EngineClient, runLoop } from "./runner.js";
 import { counterIds } from "./tool.js";
@@ -5,12 +6,29 @@ import { counterIds } from "./tool.js";
 /**
  * `pnpm agents`: run all three agents against a running engine (`pnpm engine`) until every queue
  * is empty, and print what control decided for each proposal.
+ *
+ * `pnpm agents --scenario <name>` first loads that scenario into the engine's queue
+ * (`POST /scenario`; names from `GET /scenarios`), replacing whatever was queued.
  */
+const { values } = parseArgs({
+  options: { scenario: { type: "string", short: "s" } },
+  allowPositionals: false,
+});
 const base = process.env["ENGINE_URL"] ?? "http://127.0.0.1:4000";
+const engine = new EngineClient(base);
+if (values.scenario !== undefined) {
+  const known = await engine.scenarios();
+  if (!known.includes(values.scenario)) {
+    console.error(`unknown scenario ${values.scenario}; one of: ${known.join(", ")}`);
+    process.exit(2);
+  }
+  const queued = await engine.loadScenario(values.scenario);
+  console.log(`scenario ${values.scenario}: ${queued} task(s) queued`);
+}
 const { brain, done } = brainFromEnv();
 console.log(`agents (${brain.name}) -> ${base}`);
 const runs = await runLoop({
-  engine: new EngineClient(base),
+  engine,
   brain,
   ids: counterIds(Date.now().toString(36)),
   onRun: (r) => {
