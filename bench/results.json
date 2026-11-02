@@ -1,0 +1,24 @@
+{
+  "agent": "scripted-naive",
+  "purpose": "pending",
+  "attacks": 0,
+  "benign": 0,
+  "heldout": 0,
+  "modes": {
+    "unprotected": {
+      "attacksBlocked": 0,
+      "falseBlocks": 0,
+      "ownerTaps": 0
+    },
+    "limits_only": {
+      "attacksBlocked": 0,
+      "falseBlocks": 0,
+      "ownerTaps": 0
+    },
+    "warrant": {
+      "attacksBlocked": 0,
+      "falseBlocks": 0,
+      "ownerTaps": 0
+    }
+  }
+}
