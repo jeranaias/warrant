@@ -128,12 +128,14 @@ input { width: 100%; font: 400 1rem var(--num); padding: 10px 12px; border-radiu
 input:focus { outline: 2px solid var(--seal); outline-offset: 1px; }
 button { font: 600 0.9rem var(--ui); padding: 10px 12px; border-radius: 8px; cursor: pointer;
   border: 1px solid var(--seal); background: var(--seal-bg); color: var(--text); }
+.what { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .msg { margin: 0; color: var(--stop); font-size: 0.85rem; }
 </style>
 </head>
 <body>
 <form method="post" action="/login">
   <div class="brand"><span class="seal" aria-hidden="true">W</span>Warrant</div>
+  <p class="what">Payment controls for AI agents · demo on simulated money</p>
   <label for="code">Access code</label>
   <input id="code" name="code" type="password" autocomplete="current-password" required autofocus />
   ${message ? `<p class="msg" role="alert">${escapeHtml(message)}</p>` : ""}
