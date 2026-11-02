@@ -358,6 +358,35 @@ describe("rules: Airwallex duplicate window and refunds", () => {
     void _r;
     expect(failed(checkRules(support, noOrder, ctx({ orders })))).toEqual(["refund_matches_order"]);
   });
+
+  it("a refund covers only the orders of the stored dispute it answers (#84)", () => {
+    const two = new Map([...orders, ["ord_2", { ...order, orderId: "ord_2" }]]);
+    const dispute = {
+      disputeId: "dsp_1",
+      customer: order.payer,
+      orderIds: ["ord_1"],
+      claim: "wrong_data" as const,
+      ticketRef: "src_ticket_1",
+      openedAt: NOW.toISOString(),
+    };
+    const disputes = new Map([["src_ticket_1", dispute]]);
+    const detail = (p: PaymentProposal) =>
+      checkRules(support, p, ctx({ orders: two, disputes })).checks.find(
+        (c) => c.rule === "refund_matches_order",
+      );
+    expect(detail(refund({ sourceRef: "src_ticket_1" }))?.pass).toBe(true);
+    // budget-drain-003: the dispute names ord_1, the ticket text adds ord_2
+    expect(detail(refund({ sourceRef: "src_ticket_1", refundOfOrderId: "ord_2" }))).toEqual({
+      rule: "refund_matches_order",
+      pass: false,
+      detail: "ord_2 is not in the dispute",
+    });
+    // no ticket, or a ticket with no dispute on file
+    expect(detail(refund())?.detail).toBe("refund answers no stored dispute");
+    expect(detail(refund({ sourceRef: "src_other" }))?.detail).toBe(
+      "refund answers no stored dispute",
+    );
+  });
 });
 
 describe("ledger", () => {

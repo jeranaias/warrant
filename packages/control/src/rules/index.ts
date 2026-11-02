@@ -1,4 +1,5 @@
 import type {
+  DisputeCase,
   PaymentProposal,
   Rail,
   RuleCheck,
@@ -36,6 +37,11 @@ export interface RulesContext {
   orders?: ReadonlyMap<string, SignedOrderRecord>;
   /** Orders already refunded or with a refund reserved. */
   refundedOrderIds?: ReadonlySet<string>;
+  /**
+   * Stored disputes by `ticketRef` (refunds only). A refund's `sourceRef` names the ticket it
+   * answers. When set, a refund must answer a stored dispute and cover only its orders.
+   */
+  disputes?: ReadonlyMap<string, DisputeCase>;
 }
 
 /**
@@ -174,10 +180,15 @@ export function checkRules(
   } else {
     const id = proposal.refundOfOrderId;
     const order = id === undefined ? undefined : ctx.orders?.get(id);
+    // The ticket text may name more orders than the customer disputed; only the stored dispute counts.
+    const src = proposal.sourceRef;
+    const dispute = src === undefined ? undefined : ctx.disputes?.get(src);
     let why = "";
     if (proposal.category !== "customer_refund") why = "order refund must be customer_refund";
     else if (id === undefined) why = "refund names no order";
     else if (!order) why = "order not found";
+    else if (ctx.disputes && !dispute) why = "refund answers no stored dispute";
+    else if (dispute && !dispute.orderIds.includes(id)) why = `${id} is not in the dispute`;
     else if (ctx.refundedOrderIds?.has(id)) why = "order already refunded";
     else if (order.price.currency !== proposal.amount.currency) why = "currency differs from order";
     else if (cents > order.price.cents) why = `refund ${cents} exceeds order price`;

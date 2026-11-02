@@ -2,6 +2,7 @@ import type { KeyObject } from "node:crypto";
 import { BudgetChangeProposal, PaymentProposal, PurposeVerdict } from "@warrant/contracts";
 import type {
   ControlDecision,
+  DisputeCase,
   Money,
   PaymentSummary,
   Rail,
@@ -97,6 +98,11 @@ export interface ControllerOptions {
   ledger?: Ledger;
   /** Stored signed orders by orderId (refunds go to an order's payer, capped at its price). */
   orders?: () => ReadonlyMap<string, SignedOrderRecord>;
+  /**
+   * Stored disputes by `ticketRef`. When set, a refund must name its dispute's ticket as its
+   * `sourceRef` and may only cover that dispute's orders (rule `refund_matches_order`).
+   */
+  disputes?: () => ReadonlyMap<string, DisputeCase>;
   /** metal_x402: the mandate credential file name inside METAL_HOME for this warrant. */
   credentialFor?: (warrant: Warrant) => string | undefined;
   /**
@@ -516,6 +522,7 @@ export class Controller {
 
   private rulesContext(w: Warrant, now: Date): RulesContext {
     const orders = this.opts.orders?.();
+    const disputes = this.opts.disputes?.();
     return {
       now,
       signatureValid: verifyWarrant(w, this.opts.ownerPublicKey),
@@ -530,6 +537,7 @@ export class Controller {
         ...(r.sourceRef ? { sourceRef: r.sourceRef } : {}),
       })),
       ...(orders ? { orders, refundedOrderIds: this.refundedOrders(w, orders) } : {}),
+      ...(disputes ? { disputes } : {}),
     };
   }
 
