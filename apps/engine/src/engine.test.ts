@@ -2,7 +2,8 @@ import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentTask, PaymentProposal } from "@warrant/contracts";
 import { createEngine, fileDispute } from "./server.js";
-import { AGENTS } from "./world.js";
+import type { ControlEvent } from "@warrant/control";
+import { AGENTS, makeWorld } from "./world.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 let server: Server;
@@ -269,6 +270,31 @@ describe("disputes (ADR-012): the store answers from its records", () => {
       ["ord_3", "owner_authorized", 0],
       ["ord_404", "order_not_found", 0],
     ]);
+    // The decision is in the event log, for the dashboard.
+    const { events } = await get<{ events: { event: { type: string; orders?: unknown[] } }[] }>(
+      "/events",
+    );
+    const decided = events.filter((e) => e.event.type === "dispute_decided").at(-1)?.event;
+    expect(decided?.orders).toEqual([
+      expect.objectContaining({ orderId: "ord_3", reason: "owner_authorized", verified: true }),
+      { orderId: "ord_404", reason: "order_not_found", refundCents: 0, verified: false },
+    ]);
+  });
+
+  it("a world's store events reach the log (sandbox: the store's pass checks)", async () => {
+    let tell: ((e: ControlEvent) => void) | undefined;
+    const world = { ...makeWorld(NOW), watch: (f: (e: ControlEvent) => void) => void (tell = f) };
+    const { app } = createEngine({ scenario: "none", clock: () => NOW, world });
+    tell?.({ type: "pass_checked", ok: false, problems: ["x"], url: "u", amountCents: 5 });
+    const s = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => s.once("listening", () => ok()));
+    const a = s.address();
+    const port = typeof a === "object" && a ? a.port : 0;
+    const r = (await (await fetch(`http://127.0.0.1:${port}/events`)).json()) as {
+      events: { seq: number; event: { type: string } }[];
+    };
+    await new Promise<void>((ok) => s.close(() => ok()));
+    expect(r.events.map((e) => [e.seq, e.event.type])).toEqual([[1, "pass_checked"]]);
   });
 
   it("a refund for an 'other' claim waits for the owner; a data claim pays (ADR-016, #85)", async () => {

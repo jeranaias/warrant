@@ -80,9 +80,24 @@ export interface FeedLine {
 
 /** One event from GET /events as one plain-language line for the activity feed. */
 export function describe(e: LoggedEvent): FeedLine {
-  const { tone, text } = describeEvent(e.event);
-  const why = whyOf(e.event);
-  return { seq: e.seq, at: e.at, tone, text, ...(why ? { why } : {}) };
+  const d = describeEvent(e.event);
+  const why = d.why ?? whyOf(e.event);
+  return { seq: e.seq, at: e.at, tone: d.tone, text: d.text, ...(why ? { why } : {}) };
+}
+
+/** A hash or id cut to its first 10 characters, e.g. "0x6908b0a2...". */
+export function short(h: string): string {
+  return h.length > 13 ? `${h.slice(0, 10)}...` : h;
+}
+
+const words = (code: string) => code.replaceAll("_", " ");
+
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return url;
+  }
 }
 
 /** Short state word for a feed line's pill. */
@@ -123,7 +138,7 @@ export function field(view: Record<string, unknown>, path: string): unknown {
 const frozen = (ids: string[] | undefined) =>
   ids?.length ? `, ${ids.length} ${ids.length === 1 ? "card" : "cards"} frozen` : "";
 
-function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
+function describeEvent(e: ControlEvent): { tone: Tone; text: string; why?: string } {
   switch (e.type) {
     case "proposal": {
       const p = e.proposal;
@@ -172,6 +187,43 @@ function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
         tone: "owner",
         text: `New limits signed for ${e.warrantId} (version ${e.fromVersion} to ${e.toVersion}).`,
       };
+    case "pass_checked": {
+      const b = e.buyer;
+      const what = pathOf(e.url);
+      if (!e.ok) {
+        const who = b ? `from ${short(b.payer)}` : "with no readable pass";
+        return {
+          tone: "stop",
+          text: `Store refused a buyer's warrant pass for ${what} (${who}). Not served, not charged.`,
+          why: e.problems.join("; "),
+        };
+      }
+      const mandate = b?.mandateId ? `, mandate ${short(b.mandateId)}` : "";
+      const signed = b ? `signed by the owner ${b.ownerId} (key ${b.ownerKey.slice(0, 8)})` : "";
+      const cap = b ? `, cap ${money(b.perPaymentCap)}` : "";
+      return {
+        tone: "ok",
+        text: `Store checked the buyer's warrant pass for ${what}: ${signed}${mandate}${cap}.`,
+      };
+    }
+    case "dispute_decided": {
+      const refunded = e.orders.filter((o) => o.refundCents > 0);
+      const kept = e.orders.length - refunded.length;
+      const n = e.orders.length;
+      const lines = e.orders.map((o) => {
+        const chain = o.verified && o.txHash ? `, on chain ${short(o.txHash)}` : "";
+        const outcome =
+          o.refundCents > 0 ? `refund ${cents(o.refundCents, e.refund.currency)}` : "kept";
+        return `${o.orderId}: ${outcome} (${words(o.reason)}${chain})`;
+      });
+      return {
+        tone: "info",
+        text:
+          `Dispute ${e.disputeId} (${words(e.claim)}): ${n} order${n === 1 ? "" : "s"}, ` +
+          `refund ${refunded.length}, kept ${kept}.`,
+        why: lines.join("; "),
+      };
+    }
     default:
       return { tone: "info", text: `Event: ${(e as { type?: string }).type ?? "unknown"}` };
   }

@@ -19,11 +19,12 @@ import {
   issueGrant,
   issuePass,
   keyB64,
+  keyFingerprint,
   passIssuer,
   verifyEvidence,
   verifyPass,
 } from "./pass/index.js";
-import type { SaleExpectation } from "./pass/index.js";
+import type { PassCheckedEvent, SaleExpectation } from "./pass/index.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 const usdz = (cents: number) => ({ currency: "USDZ" as const, cents });
@@ -149,6 +150,41 @@ describe("PassChecker: a seller's memory", () => {
     const h = encodePass(passOf({ nonce: "once" }));
     expect(c.check(h, URL, 5).ok).toBe(true);
     expect(c.check(h, URL, 5).problems).toEqual(["pass already used"]);
+  });
+
+  it("tells onCheck about every check: the grant's public facts, or why it was refused", () => {
+    const seen: PassCheckedEvent[] = [];
+    const c = new PassChecker({
+      payTo: SELLER,
+      category: "data_purchase",
+      clock: () => NOW,
+      onCheck: (e) => seen.push(e),
+    });
+    const mandateId = "0x" + "6".repeat(64);
+    const named = issueGrant({ ...grantBody, mandateId }, owner.privateKey);
+    const pass = issuePass(named, passBody({ nonce: "ev-1" }), control.privateKey);
+    expect(c.check(encodePass(pass), URL, 5).ok).toBe(true);
+    c.check(undefined, URL, 5);
+    c.check("garbage", URL, 5);
+    expect(seen[0]).toEqual({
+      type: "pass_checked",
+      ok: true,
+      problems: [],
+      url: URL,
+      amountCents: 5,
+      buyer: {
+        payer: PAYER,
+        ownerId: "customer-owner",
+        ownerKey: keyFingerprint(keyB64(owner.publicKey)),
+        warrantId: "wrt_customer",
+        mandateId,
+        perPaymentCap: usdz(10),
+      },
+    });
+    expect(seen.slice(1).map((e) => [e.ok, e.buyer, e.problems[0]])).toEqual([
+      [false, undefined, "no warrant pass: nothing shows an owner authorized this"],
+      [false, undefined, "warrant pass unreadable"],
+    ]);
   });
 
   it("an unreadable header is refused as such", () => {
