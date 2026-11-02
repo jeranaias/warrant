@@ -103,6 +103,23 @@ After the kill switch (`POST /kill` in live mode revokes the sourcing and suppor
 | old credential tries to pay        | **refused on chain**: `mandate_revoked`                                                 | same                                                                                    |
 | `pnpm reset:live`                  | replaced: `0x377cdfe0d776665a239bac6a1382ce89c8201ecbbc46b835644782004cd0d7fc` (v3, 3c) | replaced: `0xd1549f88af4f7222126e7c51c8edc9abb45ed692f152b1e1b278a9c4622b8735` (v5, 3c) |
 
+## Live dispute run (2026-11-02)
+
+`RAILS_MODE=sandbox pnpm scene:dispute` (#106). Fill in from the printed output; each hash is on
+the explorer at `https://testnet.metalntwx.com/tx/<hash>`. No `pnpm reset:live` needed after it.
+
+| Step                                                  | Result                                                                                                                                          |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| customer's agent buys `fx-eurusd` (order + pass)      | paid [`0x32a27368…`](https://testnet.metalntwx.com/tx/0x32a27368497132405e32be077a8c434513452a853a1c5422955caddb954ca595), order `ord_aa559b97` |
+| customer's agent buys `btc-usd` (order + pass)        | paid [`0x6f658444…`](https://testnet.metalntwx.com/tx/0x6f6584449fcb9be4ed6864cc1c3b42fc77c5d20a2571b330e21c89fbe7b9940b), order `ord_42e3ae23` |
+| store checks the pass before serving (dashboard line) | owner key `f1d35b487fd9cf20`, customer mandate `0x6908b0a2…`, cap 0.05                                                                          |
+| store: the `fx-eurusd` batch was stale                | no chain call                                                                                                                                   |
+| dispute "data was wrong" on both orders               | both verified on chain under mandate `0x6908b0a2…`; `ord_aa559b97` refund 5c (stale batch), `ord_42e3ae23` kept (data correct)                  |
+| support refunds the `fx-eurusd` order (mandate pull)  | refunded [`0x2314f9bc…`](https://testnet.metalntwx.com/tx/0x2314f9bc7aebbafaa150bf413480794df92d40e73431ada76cd3354514fae8f0) (support mandate) |
+| customer asks again, adds `ord_404`                   | `already_refunded`, `order_not_found`; no chain call                                                                                            |
+| support tries the same refund again                   | refused by our rules (`refund_matches_order`)                                                                                                   |
+| "my agent never agreed" on the `btc-usd` order        | `owner_authorized`: 11 of 11 checks hold                                                                                                        |
+
 ## Windows quirks (metal-agent 0.3.3)
 
 - Run `node <cli>/dist/index.js`, not the `.cmd` shim: `execCliRunner` runs a `.js` bin under
