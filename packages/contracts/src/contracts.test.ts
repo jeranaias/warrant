@@ -104,6 +104,18 @@ describe("contracts", () => {
     ).toThrow();
   });
 
+  it("a card payee may carry a four-digit merchant category code, and nothing else", () => {
+    const [payee] = warrant.payees;
+    const seat = { ...warrant, payees: [{ ...payee, merchantCategoryCode: "5734" }] };
+    expect(Warrant.parse(seat).payees[0]?.merchantCategoryCode).toBe("5734");
+    expect(Warrant.parse(warrant).payees[0]?.merchantCategoryCode).toBeUndefined();
+    for (const bad of ["573", "57345", "57a4", 5734]) {
+      expect(() =>
+        Warrant.parse({ ...warrant, payees: [{ ...payee, merchantCategoryCode: bad }] }),
+      ).toThrow();
+    }
+  });
+
   it("a metal warrant can name its mandate, but never a key or path", () => {
     const mandate = {
       network: "eip155:63825",

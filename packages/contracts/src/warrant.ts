@@ -19,6 +19,14 @@ export const Payee = z
     currency: Currency,
     /** Set for a payee that bills once per period. Absent: no period, paid as often as allowed. */
     billingPeriod: BillingPeriod.optional(),
+    /**
+     * airwallex_card only: the merchant category code (ISO 18245, four digits) this payee charges
+     * under. The card's own controls allow only these codes, so the network refuses any other.
+     */
+    merchantCategoryCode: z
+      .string()
+      .regex(/^\d{4}$/)
+      .optional(),
   })
   .strict();
 export type Payee = z.infer<typeof Payee>;
