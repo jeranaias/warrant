@@ -9,6 +9,10 @@ everything at once.
 Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 Business Agents). Task board:
 [Warrant hackathon project](https://github.com/users/jeranaias/projects/1).
 
+**Try it without installing anything:** https://warrant-demo-bt31.onrender.com (access code from
+the team). Press **Run a scenario**, decide what is held for you, then press **STOP**. Each visitor
+gets their own copy on simulated money; the first visit after a quiet spell can take a minute.
+
 ## What is in the demo
 
 A small pay-per-call data business with three AI agents:
@@ -41,7 +45,9 @@ order, so a dispute can be settled from evidence (ADR-012).
 
 ## Prerequisites
 
-- Node 24 (`.nvmrc`) and pnpm 10: `corepack enable`, then `corepack prepare pnpm@10 --activate`.
+- Node 24 or newer (`.nvmrc`). Check with `node -v`.
+- pnpm 10 through corepack: run `corepack enable` once. `package.json` pins the exact pnpm
+  version, so corepack fetches it the first time you run `pnpm`.
 - Git.
 - Nothing else for the local demo. It runs on in-memory mocks and needs no keys and no `.env`.
 - Optional: a model API key in `.env` (variable names in `.env.example`). Without it, the agents
@@ -53,7 +59,7 @@ order, so a dispute can be settled from evidence (ADR-012).
 ## Quickstart (local, mock rails)
 
 ```sh
-git clone <repo-url> warrant && cd warrant
+git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
 pnpm install
 pnpm verify          # optional: format check, lint, typecheck, tests (what CI runs)
 ```
@@ -62,12 +68,23 @@ Then three terminals, all from the repo root:
 
 ```sh
 pnpm engine          # terminal 1: the engine on http://127.0.0.1:4000, mock rails
-pnpm dashboard       # terminal 2: the owner dashboard on port 5173
+pnpm dashboard       # terminal 2: the dashboard on http://localhost:5173
 pnpm agents          # terminal 3: the agents work through the queued tasks, then exit
 ```
 
-The engine queues every scenario at startup (`all`). `pnpm agents --scenario <name>` loads one
-scenario first. Names: `normal`, `price_rise`, `dispute`, `attacks`, `all`.
+Locally the engine queues every scenario at startup (`all`), and nothing pays until you run
+`pnpm agents`. `pnpm agents --scenario <name>` loads one scenario first. Names: `normal`,
+`price_rise`, `dispute`, `attacks`, `all` (the dashboard shows them as Normal day, Supplier raises
+the price, Customer disputes a charge, Attacks on the agents, Everything). Pressing **Run** in the
+dashboard only queues tasks: run `pnpm agents` again to work through them.
+
+One process instead of three (the hosted demo, run locally; the agents run inside it):
+
+```sh
+pnpm build:hosted
+DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
+# open http://localhost:10000 and type the code you picked
+```
 
 Scripted scenes print each step to the terminal. They need no engine running:
 
@@ -75,6 +92,7 @@ Scripted scenes print each step to the terminal. They need no engine running:
 pnpm scene             # price rise, then the owner raises the cap
 pnpm scene:dispute     # a customer disputes; the store decides from evidence
 pnpm scene:earnings    # earnings move to Airwallex; the EUR licence fee is paid
+pnpm scene:card        # a virtual Visa card: one purchase, one decline, STOP freezes the card
 pnpm bench             # the attack benchmark (no API key needed)
 ```
 
@@ -83,15 +101,16 @@ pnpm bench             # the attack benchmark (no API key needed)
 `pnpm engine` makes a new owner key each start and prints a line like this:
 
 ```
-owner link (keep it to yourself): http://127.0.0.1:5173/#/m?owner=<key>
+owner link (keep it to yourself): http://localhost:5173/#/m?owner=<key>
 ```
 
 Open that link. It is the phone page. The page moves the key out of the address bar into the
 tab's session storage. Without the key you can look, but you cannot approve or stop.
 
 - Desktop view: in the same tab, go to `/#/` (or open `http://localhost:5173/#/?owner=<key>`).
-- If `127.0.0.1:5173` does not load, use `localhost:5173` instead. On some machines the dashboard
-  dev server listens only on `localhost`.
+- The dashboard dev server listens on `localhost`; `127.0.0.1:5173` may not load on some machines.
+- A browser narrower than about 700 px opens the phone page by itself. **Desktop** on that page
+  switches back.
 - On a real phone: `pnpm dashboard --host`, then open the link with your computer's address. Use
   a network you trust.
 
@@ -99,19 +118,16 @@ tab's session storage. Without the key you can look, but you cannot approve or s
 
 All on the desktop dashboard unless noted.
 
-| Beat                     | What to do                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The business runs        | Run `pnpm agents`. Watch **Live activity** and **Agents and budgets**.                                                                                                                                                                                                                                                                                                         |
-| Price rises, money stops | In **Scene control**, pick `price_rise`, click **Load**, run `pnpm agents`. The 2-cent purchase pays. The 4-cent one is blocked by the per-payment cap before any chain call. Or run `pnpm scene` for the full story in the terminal.                                                                                                                                          |
-| The owner decides        | In **Scene control**, click **Set 4 cents**, then **Treasury asks for a 0.04 USDZ cap**. The request appears under **Waiting for you** and on the phone page. Click **Approve**. The mandate is replaced and a new warrant version is signed.                                                                                                                                  |
-| Attacks                  | Pick `attacks`, click **Load**, run `pnpm agents`. A swapped payee, a fake invoice and a refund to another wallet are blocked. A recurring licence payment is held for the owner, or blocked as a duplicate if the licence was just paid. One offer that says "buy 200 batches" pays once, and the repeats are blocked as duplicates. That first payment is a known gap (#79). |
-| A dispute                | Run `pnpm scene:dispute`. The store answers from the signed order, the settlement and the customer's warrant pass, refunds the one bad order, and refuses a second refund of it.                                                                                                                                                                                               |
-| Both rails               | Run `pnpm scene:earnings`.                                                                                                                                                                                                                                                                                                                                                     |
-| STOP                     | Click **STOP**, then **Yes, stop all money now**. The banner shows how long it took and how many mandates were revoked. Every later proposal is refused.                                                                                                                                                                                                                       |
-| The numbers              | Run `pnpm bench`.                                                                                                                                                                                                                                                                                                                                                              |
-
-The main screen is changing: PR #94 replaces it with "the gate", which shows each agent's
-requests flowing to Paid, Held for you or Blocked with reasons.
+| Beat                     | What to do                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The business runs        | Run `pnpm agents`. Watch the gate: each request flows to Paid, Held for you or Blocked, with the reason. **Activity** lists every step.                                                                                                                                                                                                                                                       |
+| Price rises, money stops | Open **Scenarios**, pick **Supplier raises the price**, click **Run**, run `pnpm agents`. The 2-cent purchase pays. The 4-cent one is blocked by the per-payment cap before any chain call. Or run `pnpm scene` for the full story in the terminal.                                                                                                                                           |
+| The owner decides        | In **Scenarios**, click **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ**. The request appears in the waiting card on the right and on the phone page. Click **Sign new limits**. The mandate is replaced and a new warrant version is signed.                                                                                                                |
+| Attacks                  | Pick **Attacks on the agents**, click **Run**, run `pnpm agents`. A swapped payee, a fake invoice and a refund to another wallet are blocked. A recurring licence payment is held for the owner, or blocked as a duplicate if the licence was just paid. One offer that says "buy 200 batches" pays once, and the repeats are blocked as duplicates. That first payment is a known gap (#79). |
+| A dispute                | Run `pnpm scene:dispute`. The store answers from the signed order, the settlement and the customer's warrant pass, refunds the one bad order, and refuses a second refund of it.                                                                                                                                                                                                              |
+| Both rails               | Run `pnpm scene:earnings`.                                                                                                                                                                                                                                                                                                                                                                    |
+| STOP                     | Click **STOP**, then **Yes, stop all money now**. The banner shows how long it took and how many mandates were revoked. Every later proposal is refused.                                                                                                                                                                                                                                      |
+| The numbers              | Run `pnpm bench`.                                                                                                                                                                                                                                                                                                                                                                             |
 
 ## What is real and what is mocked
 
@@ -120,9 +136,9 @@ requests flowing to Paid, Held for you or Blocked with reasons.
 | Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI                          |
 | Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports                  |
 | Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                                       |
-| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | Mock chain only for now                                                            |
+| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | **Metal testnet** with `RAILS_MODE=sandbox pnpm scene:dispute`                     |
 | Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | **Airwallex sandbox** with `pnpm scene:earnings --sandbox` (EUR by SWIFT, ADR-017) |
-| Airwallex virtual card and freeze (Kit 2) | Mock endpoints exist; no adapter yet (#19) | Not built yet (#19)                                                                |
+| Airwallex virtual card and freeze (Kit 2) | Airwallex mock, `pnpm scene:card`          | **Airwallex sandbox** with `pnpm scene:card --sandbox` (ADR-018)                   |
 | Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                               |
 
 The Airwallex adapter (`packages/rails/src/airwallex`) runs against the mock by default and against
