@@ -16,7 +16,9 @@ runner fills ids, warrant, agent, idempotency key and `sourceRef`, then submits 
 - `runner.ts`: `runTask` (one task, any `Submit`), `EngineClient` and `runLoop` (the live loop).
 - `brains.ts`: `brainFromEnv`: the model when `ANTHROPIC_API_KEY` is set, else the script.
 
-Run against the engine: `pnpm engine`, then `pnpm agents`.
+Run against the engine: `pnpm engine`, then `pnpm agents` (or `pnpm agents --scenario <name>` to
+load one of `GET /scenarios` first). `bench/runner/agents-e2e.test.ts` runs every scenario this way
+in CI and checks each task against the feed's label.
 
 **May import:** `@warrant/contracts`, a model SDK, node built-ins.
 
