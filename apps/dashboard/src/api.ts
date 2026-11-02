@@ -9,6 +9,28 @@ import type { AgentRole, Money, PaymentProposal } from "@warrant/contracts";
  */
 const BASE = "/api";
 
+/**
+ * The owner's key from the owner link (`#/m?owner=<key>` or `#/?owner=<key>`). It is moved out of
+ * the address bar into this tab's session storage, and sent only on the owner's actions.
+ */
+const OWNER_KEY = "warrant.owner";
+function ownerToken(): string | undefined {
+  if (typeof location === "undefined") return undefined;
+  const m = /[?&]owner=([A-Za-z0-9_-]+)/.exec(location.hash);
+  try {
+    if (m?.[1]) {
+      sessionStorage.setItem(OWNER_KEY, m[1]);
+      history.replaceState(null, "", location.hash.replace(/[?&]owner=[A-Za-z0-9_-]+/, ""));
+    }
+    return sessionStorage.getItem(OWNER_KEY) ?? undefined;
+  } catch {
+    return m?.[1];
+  }
+}
+let owner = ownerToken();
+/** True when this tab holds the owner's key (the page can approve and stop). */
+export const isOwner = () => (owner ??= ownerToken()) !== undefined;
+
 export type { AgentRole, Money };
 
 export interface PayeeRow {
@@ -115,10 +137,18 @@ export interface ChainView {
   payments: number;
 }
 
-async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+async function call<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown,
+  asOwner = false,
+): Promise<T> {
+  const headers: Record<string, string> =
+    body === undefined ? {} : { "content-type": "application/json" };
+  if (asOwner && isOwner() && owner) headers["authorization"] = `Bearer ${owner}`;
   const res = await fetch(BASE + path, {
     method,
-    headers: body === undefined ? {} : { "content-type": "application/json" },
+    headers,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -139,8 +169,9 @@ export const api = {
       "POST",
       `/approvals/${encodeURIComponent(a.proposalId)}`,
       { decision, shownHash: a.shownHash },
+      true,
     ),
-  kill: (reason: string) => call<KillResult>("POST", "/kill", { reason }),
+  kill: (reason: string) => call<KillResult>("POST", "/kill", { reason }, true),
   killState: () => call<KillState>("GET", "/kill"),
   chain: () => call<ChainView>("GET", "/chain"),
   scenarios: () => call<{ scenarios: string[] }>("GET", "/scenarios"),

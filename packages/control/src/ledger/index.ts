@@ -13,6 +13,8 @@ export interface ReserveInput {
   amount: Money;
   idempotencyKey: string;
   payeeId?: string;
+  /** The proposal's sourceRef (offer, invoice, ticket). */
+  sourceRef?: string;
 }
 
 /** State of one reservation, derived from the log. */
@@ -67,6 +69,7 @@ export class Ledger {
       amount: input.amount,
       idempotencyKey: input.idempotencyKey,
       ...(input.payeeId ? { payeeId: input.payeeId } : {}),
+      ...(input.sourceRef ? { sourceRef: input.sourceRef } : {}),
     });
     return this.get(reservationId);
   }
@@ -204,7 +207,7 @@ export class Ledger {
         throw new Error("reserve entry missing fields");
       }
       this.keys.add(e.idempotencyKey);
-      const payeeId = e.payeeId;
+      const { payeeId, sourceRef } = e;
       this.reservations.set(e.reservationId, {
         reservationId: e.reservationId,
         proposalId: e.proposalId,
@@ -213,6 +216,7 @@ export class Ledger {
         amount: e.amount,
         idempotencyKey: e.idempotencyKey,
         ...(payeeId ? { payeeId } : {}),
+        ...(sourceRef ? { sourceRef } : {}),
         state: "reserved",
         reservedAt: e.at,
       });

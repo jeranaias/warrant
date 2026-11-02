@@ -9,7 +9,7 @@ export const RuleName = z.enum([
   "currency_match",
   "per_payment_cap", // amount <= cap (inclusive)
   "total_budget", // confirmed + reserved + amount <= budget (inclusive)
-  "duplicate_guard", // same idempotencyKey, or same payee+amount inside the window
+  "duplicate_guard", // same idempotencyKey, same payee+amount inside the window, or a source paid twice
   "refund_matches_order", // refunds: order exists, payee = its payer, amount <= its price, not refunded
 ]);
 export type RuleName = z.infer<typeof RuleName>;

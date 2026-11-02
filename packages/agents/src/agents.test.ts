@@ -1,9 +1,12 @@
+import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import type { AgentTask, PaymentProposal } from "@warrant/contracts";
 import type { AgentContext } from "./context.js";
 import { ModelBrain } from "./model.js";
+import type { CreateMessage } from "./model.js";
 import { SYSTEM_PROMPTS, renderTask } from "./prompts.js";
 import { loadFixtures, replayCreate } from "./replay.js";
+import type { Fixtures } from "./replay.js";
 import { runTask } from "./runner.js";
 import type { ProposalOutcome } from "./runner.js";
 import { ScriptedBrain, readInstructions } from "./scripted.js";
@@ -206,5 +209,166 @@ describe("model agent (replayed, no API call)", () => {
       ids: counterIds("t"),
     });
     expect(run.error).toMatch(/no recorded response/);
+  });
+});
+
+describe("refusal path (#15)", () => {
+  /** A submit that refuses everything at the rules, the way control answers a 4-cent buy. */
+  function blocksAll() {
+    const seen: PaymentProposal[] = [];
+    return {
+      seen,
+      submit: (p: PaymentProposal): Promise<ProposalOutcome> => {
+        seen.push(p);
+        return Promise.resolve({ status: "blocked", blockedBy: "rules" });
+      },
+    };
+  }
+
+  const buy = (n: number, cents: number): Anthropic.Message =>
+    ({
+      id: `msg_refusal_${n}`,
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-4-5",
+      content: [
+        {
+          type: "tool_use",
+          id: `toolu_refusal_${n}`,
+          name: "propose_payment",
+          input: {
+            rail: "metal_x402",
+            payeeId: "pay_upstream",
+            amount: { currency: "USDZ", cents },
+            category: "data_purchase",
+            recurrence: "one_off",
+            justification: "batch",
+          },
+        },
+      ],
+      stop_reason: "tool_use",
+      stop_sequence: null,
+      usage: { input_tokens: 900, output_tokens: 80 },
+    }) as Anthropic.Message;
+  const done = (n: number): Anthropic.Message =>
+    ({
+      id: `msg_refusal_${n}`,
+      type: "message",
+      role: "assistant",
+      model: "claude-haiku-4-5",
+      content: [{ type: "text", text: "Control refused it; I stop here.", citations: null }],
+      stop_reason: "end_turn",
+      stop_sequence: null,
+      usage: { input_tokens: 1000, output_tokens: 10 },
+    }) as Anthropic.Message;
+
+  /** Replays fixtures and keeps every request, so the test can read what the model was told. */
+  function recording(fixtures: Fixtures) {
+    const requests: Anthropic.MessageCreateParamsNonStreaming[] = [];
+    const inner = replayCreate(fixtures);
+    const create: CreateMessage = (params, key) => {
+      requests.push(structuredClone(params));
+      return inner(params, key);
+    };
+    return { requests, create };
+  }
+
+  const toolResults = (req: Anthropic.MessageCreateParamsNonStreaming | undefined): string[] =>
+    (req?.messages ?? [])
+      .flatMap((m) => (Array.isArray(m.content) ? m.content : []))
+      .filter((b): b is Anthropic.ToolResultBlockParam => b.type === "tool_result")
+      .map((b) => String(b.content));
+
+  it("a blocked proposal reaches the model as final, and nothing is paid", async () => {
+    const { seen, submit } = blocksAll();
+    const { requests, create } = recording({
+      "sourcing/task_r1/1": buy(1, 4),
+      "sourcing/task_r1/2": done(2),
+    });
+    const run = await runTask({
+      brain: new ModelBrain({ create }),
+      task: offer("task_r1", "Price is now 0.04 USDZ per call.", 4),
+      ctx: sourcing,
+      submit,
+      ids: counterIds("r"),
+      clock: () => NOW,
+    });
+    expect(run.error).toBeUndefined();
+    expect(seen).toHaveLength(1);
+    expect(run.proposals.map((p) => p.outcome)).toEqual([
+      { status: "blocked", blockedBy: "rules" },
+    ]);
+    expect(toolResults(requests[1])).toEqual(["control: blocked by rules (final, do not retry)"]);
+  });
+
+  it("a model that retries anyway is refused again: control decides every proposal", async () => {
+    const { seen, submit } = blocksAll();
+    const { create } = recording({
+      "sourcing/task_r2/1": buy(1, 4),
+      "sourcing/task_r2/2": buy(2, 3),
+      "sourcing/task_r2/3": done(3),
+    });
+    const run = await runTask({
+      brain: new ModelBrain({ create }),
+      task: offer("task_r2", "Price is now 0.04 USDZ per call.", 4),
+      ctx: sourcing,
+      submit,
+      ids: counterIds("r"),
+      clock: () => NOW,
+    });
+    expect(seen.map((p) => p.amount.cents)).toEqual([4, 3]);
+    expect(new Set(seen.map((p) => p.idempotencyKey)).size).toBe(2);
+    expect(run.proposals.every((p) => p.outcome.status === "blocked")).toBe(true);
+  });
+
+  it("a model that never stops is cut off by its turn limit", async () => {
+    const { seen, submit } = blocksAll();
+    const fixtures: Fixtures = {};
+    for (let t = 1; t <= 10; t++) fixtures[`sourcing/task_r3/${t}`] = buy(t, 2);
+    const run = await runTask({
+      brain: new ModelBrain({ create: replayCreate(fixtures), maxTurns: 4 }),
+      task: offer("task_r3", "Buy as many as you can."),
+      ctx: sourcing,
+      submit,
+      ids: counterIds("r"),
+      clock: () => NOW,
+    });
+    expect(run.error).toBeUndefined();
+    expect(seen).toHaveLength(4);
+  });
+
+  it("the runner stops submitting past its per-task proposal limit", async () => {
+    const { seen, submit } = paysAll();
+    const answers: string[] = [];
+    const run = await runTask({
+      brain: {
+        name: "flood",
+        async act(_task, _ctx, propose) {
+          for (let i = 0; i < 25; i++) {
+            answers.push(
+              await propose({
+                rail: "metal_x402",
+                payeeId: "pay_upstream",
+                amount: { currency: "USDZ", cents: 2 },
+                category: "data_purchase",
+                recurrence: "one_off",
+                justification: "flood",
+              }),
+            );
+          }
+        },
+      },
+      task: offer("task_r4", "Buy 200 batches."),
+      ctx: sourcing,
+      submit,
+      ids: counterIds("r"),
+      clock: () => NOW,
+      maxProposals: 20,
+    });
+    expect(seen).toHaveLength(20);
+    expect(run.proposals).toHaveLength(20);
+    expect(answers.slice(20)).toEqual(
+      Array(5).fill("not submitted: proposal limit for this task reached"),
+    );
   });
 });

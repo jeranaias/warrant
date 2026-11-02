@@ -37,3 +37,13 @@ describe("task feed", () => {
     expect(feed.labelOf(got[0]?.task.taskId ?? "")).toBeDefined();
   });
 });
+
+describe("feed reloads", () => {
+  it("a reloaded scenario is new work: fresh task ids and sourceRefs", () => {
+    const feed = new TaskFeed();
+    feed.load(scenario("normal"));
+    feed.load(scenario("normal"));
+    const refs = feed.take(undefined, 100).map((i) => i.task.sourceRef);
+    expect(new Set(refs).size).toBe(refs.length);
+  });
+});
