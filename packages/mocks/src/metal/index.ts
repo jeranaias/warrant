@@ -69,6 +69,21 @@ export interface MockTx {
   at: string;
 }
 
+/**
+ * A fault hits the next `times` (default 1) runs of `command` (default "pay"), only for `url` when
+ * given. Same idea as the Airwallex mock's `Fault`; each kind says whether money moved.
+ */
+export type MetalFault = { command?: "pay" | "pull"; url?: string; times?: number } & (
+  | { kind: "5xx"; status?: number } // pay: seller errors, x402 cancels, nothing paid. pull: RPC error, not sent
+  | { kind: "refuse"; status?: number; reason?: string } // pay: seller refuses (even a valid pass), nothing paid
+  | { kind: "bad-requirements"; reason?: "expired" | "invalid" } // pay: the 402 can't be signed
+  | { kind: "price-change"; cents: number } // pay: charges this, not what it quoted
+  | { kind: "duplicate" } // the answer arrives twice; one payment on chain
+  | { kind: "timeout"; settled?: boolean } // CLI killed; settled = it paid before the kill
+  | { kind: "answer-lost" } // pay: paid, then the answer is lost ("may have settled")
+  | { kind: "slow-settle"; ms: number } // pay: as answer-lost, and the lookup finds it only after ms
+);
+
 export interface MockRefusal {
   mandateId: string;
   reason: string;
@@ -86,8 +101,11 @@ export class MockMetalChain {
   private readonly mandates = new Map<string, MockMandate>();
   private readonly sellers = new Map<string, MockSeller>();
   private readonly pulls = new Map<string, MockTx>();
+  private readonly faults: { f: MetalFault; left: number }[] = [];
+  /** Settlements the facilitator does not show yet (slow-settle): tx hash -> visible from (ms). */
+  private readonly visibleFrom = new Map<string, number>();
   private seq = 0;
-  /** Test hook: the next `pay` signs and then loses its answer ("may have settled"). */
+  /** Test hook: the next `pay` signs and then loses its answer. Same as the "answer-lost" fault. */
   loseNextPayAnswer = false;
 
   constructor(private readonly clock: () => Date = () => new Date()) {}
@@ -150,9 +168,32 @@ export class MockMetalChain {
     return this.txs.find((t) => t.hash === hash);
   }
 
-  /** Facilitator `/settlements` lookup by nonce. */
+  /** Facilitator `/settlements` lookup by nonce. A slow settlement is not there yet. */
   settlementByNonce(nonce: string): MockTx | undefined {
-    return this.txs.find((t) => t.nonce === nonce);
+    const t = this.txs.find((x) => x.nonce === nonce);
+    const from = t ? this.visibleFrom.get(t.hash) : undefined;
+    return from !== undefined && this.clock().getTime() < from ? undefined : t;
+  }
+
+  /** What the seller's 402 asks right now (what x402Quote reads), or undefined. */
+  quote(url: string): number | undefined {
+    return this.sellers.get(normalizeUrl(url))?.price();
+  }
+
+  fault(f: MetalFault): void {
+    this.faults.push({ f, left: f.times ?? 1 });
+  }
+
+  private takeFault(command: "pay" | "pull", url?: string): MetalFault | undefined {
+    const hit = this.faults.find(
+      (x) =>
+        x.left > 0 &&
+        (x.f.command ?? "pay") === command &&
+        (!x.f.url || normalizeUrl(x.f.url) === normalizeUrl(url ?? "")),
+    );
+    if (!hit) return undefined;
+    hit.left--;
+    return hit.f;
   }
 
   /** A CliRunner that answers like `metal-agent` 0.3.3. */
@@ -208,7 +249,18 @@ export class MockMetalChain {
       return out(1, "", "error: fetch failed (no seller at that URL); nothing was signed");
     const m = cred ? this.mandates.get(cred) : undefined;
     if (!m) return out(1, "", "error: cannot read credential; nothing was signed");
-    const cents = seller.price();
+    let f = this.takeFault("pay", url);
+    if (!f && this.loseNextPayAnswer) {
+      this.loseNextPayAnswer = false;
+      f = { kind: "answer-lost" };
+    }
+    if (f?.kind === "bad-requirements") {
+      const why =
+        f.reason === "invalid" ? "invalid payment requirements" : "payment requirements expired";
+      return out(1, "", `error: Failed to create payment payload: ${why}; nothing was signed`);
+    }
+    if (f?.kind === "timeout" && !f.settled) return timedOut(""); // killed before signing
+    const cents = f?.kind === "price-change" ? f.cents : seller.price();
     const refusal = this.check(m, seller.payTo, cents);
     if (refusal) {
       this.refusals.push({
@@ -223,6 +275,18 @@ export class MockMetalChain {
     const nonce = this.hex(`nonce:${this.seq++}`);
     const signedOffer = JSON.stringify({ mock: true, mandate: m.mandateId, nonce, url, cents });
     const tx = this.move("payment", m, seller.payTo, cents, nonce, signedOffer);
+    if (f?.kind === "5xx" || f?.kind === "refuse") {
+      this.undo(tx, m); // x402: a handler error >= 400 cancels the payment
+      const status = f.status ?? (f.kind === "refuse" ? 403 : 503);
+      const why =
+        f.kind === "refuse" ? `seller_refused${f.reason ? ` (${f.reason})` : ""}` : "seller_error";
+      return out(
+        1,
+        `nonce ${nonce}\nstatus ${status}\n`,
+        `error: payment refused: ${why}; nothing was paid`,
+      );
+    }
+    if (f?.kind === "timeout") return timedOut(`nonce ${nonce}\n`); // it settled; the answer never came
     let body: string;
     try {
       body = seller.deliver({
@@ -243,27 +307,25 @@ export class MockMetalChain {
         "error: payment refused: seller_error; nothing was paid",
       );
     }
-    if (this.loseNextPayAnswer) {
-      this.loseNextPayAnswer = false;
+    if (f?.kind === "slow-settle") this.visibleFrom.set(tx.hash, this.clock().getTime() + f.ms);
+    if (f?.kind === "answer-lost" || f?.kind === "slow-settle") {
       return out(1, `nonce ${nonce}\n`, "error: a payment was signed and may have settled");
     }
-    return out(
-      0,
-      [
-        `mandate ${m.mandateId}`,
-        `nonce ${nonce}`,
-        "status 200",
-        `payer ${m.principal}`,
-        `payee ${seller.payTo}`,
-        `amount ${usdz(cents)} *USDZ`,
-        "network eip155:63825",
-        `transaction ${tx.hash}`,
-        `explorer https://testnet.metalntwx.com/tx/${tx.hash}`,
-        `body ${body}`,
-        "",
-      ].join("\n"),
+    const answer = [
+      `mandate ${m.mandateId}`,
+      `nonce ${nonce}`,
+      "status 200",
+      `payer ${m.principal}`,
+      `payee ${seller.payTo}`,
+      `amount ${usdz(cents)} *USDZ`,
+      "network eip155:63825",
+      `transaction ${tx.hash}`,
+      `explorer https://testnet.metalntwx.com/tx/${tx.hash}`,
+      `body ${body}`,
       "",
-    );
+    ].join("\n");
+    // duplicate: the same answer arrives twice (a retried response); one payment on chain.
+    return out(0, f?.kind === "duplicate" ? answer + answer : answer, "");
   }
 
   private pull(
@@ -277,6 +339,9 @@ export class MockMetalChain {
     const key = paymentId ? `${m.mandateId}:${paymentId}` : undefined;
     const prior = key ? this.pulls.get(key) : undefined;
     if (prior) return out(0, `transaction ${prior.hash}\noutcome already paid, nothing sent\n`, "");
+    const f = this.takeFault("pull");
+    if (f?.kind === "5xx") return out(1, "", `error: rpc answered ${f.status ?? 503}; not sent`);
+    if (f?.kind === "timeout" && !f.settled) return timedOut(""); // killed before sending
     const cents = Math.round(Number(amount) * 100);
     if (!/^\d+(\.\d{1,2})?$/.test(amount)) return out(1, "", "error: amount must be whole cents");
     const refusal = this.check(m, to, cents);
@@ -292,20 +357,18 @@ export class MockMetalChain {
     }
     const tx = this.move("pull", m, to, cents, this.hex(`pull:${this.seq++}`));
     if (key) this.pulls.set(key, tx);
-    return out(
-      0,
-      [
-        `transaction ${tx.hash}`,
-        "outcome paid",
-        `spent ${usdz(m.spentCents)} *USDZ of ${usdz(m.budgetCents)} *USDZ`,
-        `payer ${m.principal}`,
-        `payee ${to}`,
-        `amount ${usdz(cents)} *USDZ`,
-        `explorer https://testnet.metalntwx.com/tx/${tx.hash}`,
-        "",
-      ].join("\n"),
+    if (f?.kind === "timeout") return timedOut(""); // sent; re-run with the same id to learn it
+    const answer = [
+      `transaction ${tx.hash}`,
+      "outcome paid",
+      `spent ${usdz(m.spentCents)} *USDZ of ${usdz(m.budgetCents)} *USDZ`,
+      `payer ${m.principal}`,
+      `payee ${to}`,
+      `amount ${usdz(cents)} *USDZ`,
+      `explorer https://testnet.metalntwx.com/tx/${tx.hash}`,
       "",
-    );
+    ].join("\n");
+    return out(0, f?.kind === "duplicate" ? answer + answer : answer, "");
   }
 
   private move(
@@ -374,6 +437,11 @@ function out(code: number, stdout: string, stderr: string): CliResult {
   return { code, stdout, stderr, timedOut: false };
 }
 
+/** What the runner returns when it killed the CLI at its timeout (exec's `killed`). */
+function timedOut(stdout: string): CliResult {
+  return { code: 1, stdout, stderr: "", timedOut: true };
+}
+
 /**
  * The upstream data provider our sourcing agent buys from (Kit 11). It charges 2 cents per
  * call, until the owner of the scene raises it to 4: over sourcing's 3-cent cap, so our rules
@@ -408,3 +476,6 @@ export function addUpstream(chain: MockMetalChain, startCents = 2): Upstream {
   chain.addSeller(upstream);
   return upstream;
 }
+
+export { startMetalMock } from "./server.js";
+export type { MetalMock } from "./server.js";
