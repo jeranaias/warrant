@@ -82,6 +82,16 @@ export interface SubmitResult {
   error?: string;
 }
 
+/** What one reconcile run did, by reservation id. */
+export interface ReconcileResult {
+  confirmed: string[];
+  released: string[];
+  still: string[];
+}
+
+/** Automatic status checks before a decision run at most this often (explicit reconcile always runs). */
+const SETTLE_EVERY_MS = 2_000;
+
 export type ControlEvent =
   | { type: "proposal"; proposal: PaymentProposal; result: SubmitResult }
   | { type: "approval_requested"; pending: PendingApproval }
@@ -150,6 +160,8 @@ export class Controller {
   private readonly clock: () => Date;
   private readonly proposals = new Map<string, PaymentProposal>();
   private readonly budgetChanges = new Map<string, BudgetChangeProposal>();
+  private reconciling: Promise<ReconcileResult> | undefined;
+  private lastSettleMs = Number.NEGATIVE_INFINITY;
 
   constructor(private readonly opts: ControllerOptions) {
     this.ledger = opts.ledger ?? new Ledger(undefined, opts.clock);
@@ -162,6 +174,8 @@ export class Controller {
     const parsed = PaymentProposal.safeParse(raw);
     if (!parsed.success) return { blockedBy: "malformed", error: "malformed proposal" };
     const proposal = parsed.data;
+    const settling = this.settleInDoubt();
+    if (settling) await settling;
     const result = await this.decide(proposal);
     this.emit({ type: "proposal", proposal, result });
     return result;
@@ -172,6 +186,8 @@ export class Controller {
     const proposalId =
       raw && typeof raw === "object" && "proposalId" in raw ? String(raw.proposalId) : "";
     if (this.budgetChanges.has(proposalId)) return this.decideBudgetChange(raw, proposalId);
+    const settling = this.settleInDoubt();
+    if (settling) await settling;
     const proposal = this.proposals.get(proposalId);
     const warrant = proposal ? this.opts.getWarrant(proposal.warrantId) : undefined;
     const current = proposal && warrant ? this.approvalView(proposal, warrant) : undefined;
@@ -200,24 +216,55 @@ export class Controller {
 
   /**
    * Resolve reservations left unconfirmed by a timeout or an ambiguous rail answer, by asking the
-   * rail for the outcome. Money stays held until the rail says what happened.
+   * rail for the outcome (`getStatus`, never a resend). Money stays held until the rail says what
+   * happened; each settled one is logged as an execution (ADR-019). One run at a time.
    */
-  async reconcile(): Promise<{ confirmed: string[]; released: string[]; still: string[] }> {
-    const out = { confirmed: [] as string[], released: [] as string[], still: [] as string[] };
+  reconcile(): Promise<ReconcileResult> {
+    this.reconciling ??= this.runReconcile().finally(() => {
+      this.reconciling = undefined;
+    });
+    return this.reconciling;
+  }
+
+  private async runReconcile(): Promise<ReconcileResult> {
+    const out: ReconcileResult = { confirmed: [], released: [], still: [] };
     for (const r of this.ledger.unconfirmed()) {
       const rail = this.opts.rails[r.rail];
       const s = rail ? await rail.getStatus(r.idempotencyKey).catch(() => undefined) : undefined;
-      if (s?.status === "succeeded") {
+      // a concurrent path may have settled it while we waited on the rail
+      if (this.ledger.get(r.reservationId).state !== "unconfirmed") continue;
+      if (s?.status !== "succeeded" && s?.status !== "failed") {
+        out.still.push(r.reservationId);
+        continue;
+      }
+      if (s.status === "succeeded") {
         this.ledger.confirm(r.reservationId, s.railRef);
         out.confirmed.push(r.reservationId);
-      } else if (s?.status === "failed") {
+      } else {
         this.ledger.release(r.reservationId, s.railRef);
         out.released.push(r.reservationId);
-      } else {
-        out.still.push(r.reservationId);
       }
+      const execution: Execution = {
+        reservationId: r.reservationId,
+        status: s.status,
+        ...(s.railRef ? { railRef: s.railRef } : {}),
+        detail: s.status === "failed" && s.detail ? `status check: ${s.detail}` : "status check",
+      };
+      this.emit({ type: "execution", proposalId: r.proposalId, execution });
     }
     return out;
+  }
+
+  /**
+   * Before deciding a new payment, settle the ones in doubt, so budgets count what the rail says.
+   * At most every `SETTLE_EVERY_MS`, and only when something is unconfirmed; otherwise undefined,
+   * so the common path adds no await before the decision.
+   */
+  private settleInDoubt(): Promise<ReconcileResult> | undefined {
+    const now = Date.now();
+    if (!this.ledger.unconfirmed().length || now - this.lastSettleMs < SETTLE_EVERY_MS) return;
+    this.lastSettleMs = now;
+    return this.reconcile();
   }
 
   /**

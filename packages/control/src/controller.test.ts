@@ -4,7 +4,7 @@ import type { PaymentProposal, PurposeVerdict, Warrant, WarrantBody } from "@war
 import type { RailAdapter, RailInstruction, RailResult } from "@warrant/rails";
 import { AGENT_BUDGETS, UPSTREAM_PRICE_AFTER, UPSTREAM_PRICE_BEFORE } from "./business.js";
 import { Controller } from "./controller.js";
-import type { PurposeChecker } from "./controller.js";
+import type { ControlEvent, PurposeChecker } from "./controller.js";
 import { signWarrant } from "./crypto.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
@@ -49,12 +49,14 @@ class FakeRail implements RailAdapter {
   calls: RailInstruction[] = [];
   next: RailResult | "throw" = { status: "succeeded", railRef: "0xtx" };
   status: RailResult = { status: "unknown" };
+  statusChecks = 0;
   execute(i: RailInstruction): Promise<RailResult> {
     this.calls.push(i);
     if (this.next === "throw") return Promise.reject(new Error("socket hang up"));
     return Promise.resolve(this.next);
   }
   getStatus(): Promise<RailResult> {
+    this.statusChecks++;
     return Promise.resolve(this.status);
   }
 }
@@ -78,6 +80,7 @@ function setup(
   let warrant: Warrant = signWarrant(body, privateKey, "owner-k1");
   let killed = false;
   const seen: { summaries: unknown[] } = { summaries: [] };
+  const events: ControlEvent[] = [];
   const check = opts.check ?? verdictOf(opts.verdict ?? "consistent");
   const controller = new Controller({
     ownerPublicKey: publicKey,
@@ -93,11 +96,13 @@ function setup(
     credentialFor: () => "sourcing.json",
     killSwitchEngaged: () => killed,
     clock: () => NOW,
+    onEvent: (e) => events.push(e),
   });
   return {
     rail,
     controller,
     seen,
+    events,
     kill: () => (killed = true),
     resign: (over: Partial<WarrantBody>) =>
       (warrant = signWarrant({ ...body, ...over }, privateKey, "owner-k1")),
@@ -354,6 +359,75 @@ describe("ledger around the rail", () => {
     rail.status = { status: "succeeded", railRef: "0xlate" };
     expect((await controller.reconcile()).confirmed).toHaveLength(1);
     expect(controller.ledger.spentCents("wrt_sourcing")).toBe(4);
+  });
+
+  it("timeout then the rail says it failed: released, the budget comes back, the log says so", async () => {
+    const { controller, rail, events } = await paidOnce();
+    rail.next = "throw";
+    const r = await controller.submit(proposal());
+    expect(controller.ledger.committedCents("wrt_sourcing")).toBe(4); // held while in doubt
+
+    rail.status = { status: "failed", detail: "no payment with this key" };
+    expect((await controller.reconcile()).released).toHaveLength(1);
+    expect(controller.ledger.committedCents("wrt_sourcing")).toBe(2);
+    expect(controller.ledger.spentCents("wrt_sourcing")).toBe(2);
+    expect(events.at(-1)).toMatchObject({
+      type: "execution",
+      proposalId: r.decision?.proposalId,
+      execution: { status: "failed", detail: "status check: no payment with this key" },
+    });
+    expect(rail.calls).toHaveLength(2); // never resent
+  });
+
+  it("timeout then the rail says it paid: confirmed once, logged as paid", async () => {
+    const { controller, rail, events } = await paidOnce();
+    rail.next = "throw";
+    await controller.submit(proposal());
+    rail.status = { status: "succeeded", railRef: "0xlate" };
+    await controller.reconcile();
+    expect(await controller.reconcile()).toEqual({ confirmed: [], released: [], still: [] });
+    const settled = events.filter(
+      (e) => e.type === "execution" && e.execution.railRef === "0xlate",
+    );
+    expect(settled).toHaveLength(1);
+    expect(controller.ledger.spentCents("wrt_sourcing")).toBe(4);
+    expect(rail.calls).toHaveLength(2);
+  });
+
+  it("the same payment sent again while it is in doubt is refused, nothing resent", async () => {
+    const { controller, rail } = await paidOnce();
+    rail.next = "throw";
+    const p = proposal();
+    await controller.submit(p);
+    const again = await controller.submit({ ...p, proposalId: "prop_again_in_doubt" });
+    expect(again.blockedBy).toBe("rules");
+    expect(rail.calls).toHaveLength(2);
+    expect(controller.ledger.unconfirmed()).toHaveLength(1);
+  });
+
+  it("a new payment first settles what is in doubt, so the budget counts what the rail says", async () => {
+    const { controller, rail, events } = await paidOnce();
+    rail.next = "throw";
+    await controller.submit(proposal());
+    rail.next = { status: "succeeded", railRef: "0xtx" };
+    rail.status = { status: "failed" };
+    await controller.submit(proposal());
+    const types = events
+      .slice(-3)
+      .map((e) => (e.type === "execution" ? e.execution.status : e.type));
+    expect(types).toEqual(["failed", "succeeded", "proposal"]);
+    expect(controller.ledger.unconfirmed()).toHaveLength(0);
+    expect(controller.ledger.spentCents("wrt_sourcing")).toBe(4);
+  });
+
+  it("two reconciles at once ask the rail once per payment", async () => {
+    const { controller, rail } = await paidOnce();
+    rail.next = "throw";
+    await controller.submit(proposal());
+    rail.status = { status: "succeeded", railRef: "0xlate" };
+    const [a, b] = await Promise.all([controller.reconcile(), controller.reconcile()]);
+    expect(a).toBe(b);
+    expect(rail.statusChecks).toBe(1);
   });
 
   it("a replayed idempotency key never pays twice", async () => {
