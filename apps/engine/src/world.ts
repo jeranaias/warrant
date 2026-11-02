@@ -23,7 +23,7 @@ import {
   signWarrant,
 } from "@warrant/control";
 import type { PurposeChecker } from "@warrant/control";
-import { MetalAdapter, classifyPay } from "@warrant/rails";
+import { MetalAdapter, classifyPay, classifyPull } from "@warrant/rails";
 import type {
   CliResult,
   CliRunner,
@@ -49,6 +49,8 @@ export const OWNER_ID = "own_demo";
 export const CUSTOMER_ADDRESS = addr("c");
 const STORE_ADDRESS = addr("5");
 const PRINCIPAL = addr("a");
+/** Our treasury's own Metal address: earnings land here before the Airwallex deposit. */
+const TREASURY_ADDRESS = addr("7");
 
 export interface AgentIdentity {
   role: AgentRole;
@@ -105,7 +107,11 @@ function onMandate(t: MetalTerms["mandates"][MetalRole]) {
   };
 }
 
-export function bodies(now: Date, terms: MetalTerms = demoTerms()): WarrantBody[] {
+export function bodies(
+  now: Date,
+  terms: MetalTerms = demoTerms(),
+  licensorRef = "ben_licensor",
+): WarrantBody[] {
   const notBefore = new Date(now.getTime() - 60_000).toISOString();
   const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt: DEMO_EXPIRY };
   return [
@@ -138,7 +144,7 @@ export function bodies(now: Date, terms: MetalTerms = demoTerms()): WarrantBody[
       ...onMandate(terms.mandates.support),
     },
     {
-      // The engine's treasury pays the EUR licence fee only. Earnings sweeps come with lane B.
+      // The engine's treasury pays the EUR licence fee only. The earnings sweep is the owner's side.
       ...common,
       agentId: AGENTS.treasury.agentId,
       warrantId: AGENTS.treasury.warrantId,
@@ -150,7 +156,7 @@ export function bodies(now: Date, terms: MetalTerms = demoTerms()): WarrantBody[
           payeeId: "pay_licensor",
           displayName: "Data licensor (EUR)",
           rail: "airwallex_transfer",
-          routingRef: "ben_licensor",
+          routingRef: licensorRef,
           currency: "EUR",
         },
       ],
@@ -311,7 +317,17 @@ export interface World {
   settled: () => readonly string[];
   /** Owner side of the kill switch: revoke every live mandate; answers the credentials revoked. */
   revokeMandates: () => Promise<string[]>;
-  rails: { metal_x402: MetalAdapter; airwallex_transfer: AlwaysPaysRail };
+  rails: { metal_x402: MetalAdapter; airwallex_transfer: RailAdapter };
+  /**
+   * Owner side: move the store's earnings off Metal to our treasury address (`mandate pull`).
+   * Answers the settlement tx, the reference for the Airwallex deposit. Mock mode only for now.
+   */
+  sweepEarnings?: () => Promise<{ tx: string; amount: Money }>;
+}
+
+export interface WorldOptions {
+  /** Pay `airwallex_transfer` through this rail (the Airwallex adapter) to this beneficiary. */
+  airwallex?: { transfers: RailAdapter; licensorRef: string };
 }
 
 /**
@@ -374,10 +390,13 @@ export function recordingRunner(run: CliRunner, settled: string[]): CliRunner {
   };
 }
 
-export function makeWorld(now = new Date()): World {
+export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const warrants = new Map(
-    bodies(now).map((b) => [b.warrantId, signWarrant(b, privateKey, "owner-demo")]),
+    bodies(now, demoTerms(), opts.airwallex?.licensorRef).map((b) => [
+      b.warrantId,
+      signWarrant(b, privateKey, "owner-demo"),
+    ]),
   );
   const passFor = customerPasses(now);
   const orders = new Map(["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now, passFor)]));
@@ -457,7 +476,41 @@ export function makeWorld(now = new Date()): World {
         rpcUrl: "mock",
         quote: (url) => Promise.resolve(url === UPSTREAM_URL ? upstream.price() : undefined),
       }),
-      airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
+      airwallex_transfer: opts.airwallex?.transfers ?? new AlwaysPaysRail("airwallex_transfer"),
+    },
+    sweepEarnings: async () => {
+      // What the store took on chain moves to our treasury address under the store's own mandate.
+      const cents = [...orders.values()].reduce((n, o) => n + o.price.cents, 0);
+      if (!chain.mandateList().some((m) => m.credential === "store-sweep.json")) {
+        chain.fund(STORE_ADDRESS, cents);
+        chain.addMandate({
+          credential: "store-sweep.json",
+          principal: STORE_ADDRESS,
+          capCents: cents,
+          budgetCents: cents,
+          payees: [TREASURY_ADDRESS],
+          expiresAt: expires,
+        });
+      }
+      const pull = classifyPull(
+        await chain.runner()(
+          [
+            "mandate",
+            "pull",
+            "--credential",
+            "store-sweep.json",
+            "--to",
+            TREASURY_ADDRESS,
+            "--amount",
+            `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`,
+            "--payment-id",
+            "sweep-1",
+          ],
+          60_000,
+        ),
+      );
+      if (pull.kind !== "paid" || !pull.tx) throw new Error(`sweep did not settle: ${pull.kind}`);
+      return { tx: pull.tx, amount: { currency: "USDZ", cents } };
     },
   };
 }

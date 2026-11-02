@@ -33,6 +33,12 @@ each mandate. `GET /chain` shows mandates, spend and on-chain refusals; `POST /u
 {"cents":4}` raises the provider's price; `POST /limits-only/pay` pays around Warrant (benchmark
 "limits only" mode). `pnpm scene` plays the Kit 11 price rise and limit change start to finish.
 
+**Airwallex (lane B base):** `pnpm scene:earnings` plays DEMO beat 6 on the mock chain and the
+Airwallex mock: the store's earnings move off Metal (`mandate pull`), land as an Airwallex deposit
+referenced by the tx hash, and treasury pays the EUR 50 licence fee through control (the adapter in
+`packages/rails/src/airwallex` converts USD to EUR when the wallet is short, then sends a LOCAL
+transfer; PAID is confirmed on `controller.reconcile()`). `mockAirwallexWorld()` builds that world;
+`pnpm engine` still uses the always-pays Airwallex stand-in.
 **Disputes (ADR-012):** `GET /orders` lists the store's signed orders with their passes.
 `POST /disputes {"orderIds":["ord_1","ord_2"],"claim":"wrong_data"}` (claims: `wrong_data`,
 `not_delivered`, `not_authorized`, `other`) answers with one decision per order and the evidence
