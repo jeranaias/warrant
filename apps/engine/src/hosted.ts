@@ -1,9 +1,7 @@
 import { resolve } from "node:path";
-import { deterministicPurpose } from "@warrant/control";
 import { railsMode } from "./config.js";
-import { startAgents } from "./hosted-agents.js";
+import { hostedEngine, startAgents } from "./hosted-agents.js";
 import { hostedApp } from "./hosted-app.js";
-import { createEngine } from "./server.js";
 
 /**
  * The hosted demo (issue #89, docs/RUNBOOK.md "Hosted demo"): the built dashboard plus one mock
@@ -30,7 +28,7 @@ const hosted = hostedApp({
   password,
   cookieSecret,
   distDir,
-  makeEngine: (ownerToken) => createEngine({ purpose: deterministicPurpose, ownerToken }),
+  makeEngine: hostedEngine,
   startAgents: (engine) => startAgents(engine),
 });
 

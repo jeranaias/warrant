@@ -1227,12 +1227,23 @@ kbd {
   overflow: hidden;
 }
 
+.ticker > * {
+  flex-shrink: 0;
+}
+
+/* A narrow bar shortens the names and the reason, never the amount or the outcome. */
 .ticker-who {
   font-weight: 600;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ticker-why {
   color: var(--muted);
+  flex-shrink: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
