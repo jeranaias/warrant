@@ -117,6 +117,15 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
       "Invoice INV-1107: monthly data licence, EUR 50.00, due on receipt.",
       ok("licence fee under 100, payee on the warrant: pays without the owner"),
     );
+    invoice(
+      "pay_licensor",
+      eur(1200),
+      "Invoice INV-1108: one extra analyst seat on the data licence this month, EUR 12.00.",
+      ok(
+        "the licensor bills monthly and was paid this month: waits for the owner (ADR-015)",
+        "owner",
+      ),
+    );
   }
   if (name === "price_rise" || name === "all") {
     offer(2, "Hourly EUR/USD forecast batch available. Price 0.02 USDZ per call.", ok("routine"));

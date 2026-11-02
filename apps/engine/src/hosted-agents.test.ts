@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deterministicPurpose } from "@warrant/control";
-import { startAgents } from "./hosted-agents.js";
+import { hostedEngine, startAgents } from "./hosted-agents.js";
 import { SessionStore } from "./hosted-sessions.js";
 import { createEngine } from "./server.js";
 import type { Engine } from "./server.js";
@@ -104,5 +104,32 @@ describe("hosted demo: the agents run inside the session", () => {
     expect(stopped).toEqual(["a1"]);
     store.close();
     expect(stopped).toEqual(["a1", "a2"]);
+  });
+
+  it("a fresh visitor's engine is idle: nothing is paid until they load a scenario", async () => {
+    const e = hostedEngine("owner-key");
+    const agents = startAgents(e, { paceMs: 1, idleMs: 5 });
+    try {
+      await new Promise((ok) => setTimeout(ok, 200));
+      expect(await decided(e)).toBe(0);
+      await call(e, "/scenario", { method: "POST", body: JSON.stringify({ name: "normal" }) });
+      await until(async () => (await decided(e)) > 0);
+    } finally {
+      agents.stop();
+    }
+  });
+
+  it("the full run leaves the owner something to decide, through control's own rules", async () => {
+    const e = hostedEngine("owner-key");
+    const agents = startAgents(e, { paceMs: 1, idleMs: 5 });
+    type Pending = { pending: { reasons: string[] }[] };
+    try {
+      await call(e, "/scenario", { method: "POST", body: JSON.stringify({ name: "all" }) });
+      await until(async () => ((await call(e, "/approvals")) as Pending).pending.length > 0);
+      const { pending } = (await call(e, "/approvals")) as Pending;
+      expect(pending.flatMap((p) => p.reasons).join(" ")).toContain("already paid this month");
+    } finally {
+      agents.stop();
+    }
   });
 });
