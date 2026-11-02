@@ -7,6 +7,8 @@ bought. After each first settlement, `onAfterSettle` stores a `SignedOrderRecord
 tx hash, payer, sha256 of what we delivered). Support's dispute flow reads those records.
 With `passes` set (on by default in sandbox, `STORE_REQUIRE_PASS`), an item is served only to a
 buyer whose warrant pass (`x-warrant-pass`, ADR-012) checks out; the record keeps the pass.
+`verify.ts` checks a stored order's settlement on chain for disputes (metal-pay
+`verifyMandatePayment` over its tx and signed order; never returns the RPC URL).
 
 **May import:** `@warrant/contracts`, `@warrant/control` (constants, and `PassChecker` in `main.ts` only), `@metalntwx/metal-pay`,
 `@x402/*` (pinned to the version metal-pay resolves, so there is one `x402ResourceServer` type), `express`, `viem`, node built-ins.

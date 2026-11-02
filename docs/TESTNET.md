@@ -46,9 +46,10 @@ in the data dir). Airwallex stays on the in-memory rail in this command; the Air
 the real sandbox with `pnpm scene:earnings --sandbox` (see "Airwallex sandbox" below).
 
 ```sh
-RAILS_MODE=sandbox pnpm scene     # the price-rise + limit-change story, on chain (about 2 minutes)
-pnpm reset:live                   # owner: sourcing back on day-one limits before the next run
-RAILS_MODE=sandbox pnpm engine    # the engine API on testnet (plus upstream seller and store)
+RAILS_MODE=sandbox pnpm scene          # the price-rise + limit-change story, on chain (about 2 minutes)
+pnpm reset:live                        # owner: sourcing back on day-one limits before the next run
+RAILS_MODE=sandbox pnpm scene:dispute  # the dispute story, on chain (no reset needed after it)
+RAILS_MODE=sandbox pnpm engine         # the engine API on testnet (plus upstream seller and store)
 ```
 
 What it needs:
@@ -57,11 +58,22 @@ What it needs:
 - `METAL_HOME/warrant-public.env`: public addresses and mandate ids (`pnpm setup:testnet` writes
   it). The engine reads `METAL_UPSTREAM_ADDRESS` from it.
 - The CLI at `METAL_HOME/cli` (`npm i @metalntwx/metal-agent@0.3.3` there), or `METAL_AGENT_BIN`.
+- For `scene:dispute` also: `METAL_CUSTOMER_ADDRESS` (in `warrant-public.env`) and the customer
+  agent's credential `METAL_HOME/customer-agent.json` (or `METAL_CUSTOMER_CREDENTIAL`), and USDZ
+  in the customer account. The scene checks these first and says which one is missing.
 
 What it changes on chain: two 2-cent payments and one 4-cent payment from the business account to
 the upstream account, and one `mandate replace` of sourcing (3-cent cap -> 4-cent cap; the old
 credential is then refused as `mandate_revoked`). The refused attempts send nothing.
-`pnpm reset:live` is a second `mandate replace` back to 3 cents. Each replace writes a new
+`pnpm reset:live` is a second `mandate replace` back to 3 cents.
+
+`scene:dispute` on chain: the customer's agent buys two 5-cent queries from our store
+(`customer-agent.json`, a signed order and a warrant pass on each), the store checks both
+settlements with metal-pay's `verifyMandatePayment`, and support refunds one 5-cent order to the
+customer by `mandate pull` (support mandate, payment id unique per run). It replaces no mandate.
+Each run spends 10 cents of the customer mandate's 2 USDZ budget (about 20 runs) and 5 cents of
+support's 4 USDZ. The orders stay in `WARRANT_DATA_DIR/orders.jsonl` (append-only). It prints
+every transaction with its explorer link. Each replace writes a new
 credential file (`sourcing-v<N>-<time>.json`) into METAL_HOME and records it in
 `WARRANT_DATA_DIR/owner-state.json` (default `METAL_HOME/warrant-live`). Old credential files stay
 (history). At startup each warrant is signed from `mandate status`; the scene refuses to start

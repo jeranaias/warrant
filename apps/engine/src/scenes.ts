@@ -21,7 +21,11 @@ export interface SceneStep {
   moneyMoved: boolean;
   /** The settlement transaction when money moved. */
   tx?: string;
+  /** What the step rests on, one line each (e.g. a dispute's on-chain checks). */
+  notes?: string[];
 }
+
+export const explorerTx = (tx: string) => `https://testnet.metalntwx.com/tx/${tx}`;
 
 /** The step's settlement transaction, if a payment settled since `before`. */
 function moved(engine: Engine, before: number): Pick<SceneStep, "moneyMoved" | "tx"> {
@@ -202,6 +206,32 @@ const said = (f: DisputeFile) =>
     )
     .join("; ");
 
+/** The disputed orders. The mock world's three by default; the live scene's on testnet. */
+export interface DisputeOrders {
+  /** Served from a bad batch: refunded. */
+  bad: string;
+  /** Served from a good batch: stands. */
+  good: string;
+  /** Disputed as "my agent never agreed". */
+  authorized: string;
+  /** The account that paid for them. Default: the mock world's customer. */
+  customer?: string;
+  /** Makes refund payment ids unique per run (testnet `mandate pull --payment-id`). */
+  run?: string;
+}
+
+const MOCK_ORDERS: DisputeOrders = { bad: "ord_1", good: "ord_2", authorized: "ord_3" };
+
+/** Per order: the on-chain check and, when there is one, the settlement's explorer link. */
+function evidenceNotes(engine: Engine, f: DisputeFile): string[] {
+  return f.findings.flatMap((x) => {
+    const first = x.evidence[0];
+    const tx = engine.world.orders().get(x.orderId)?.txHash;
+    if (!first) return [];
+    return [`${x.orderId}: ${first.what}${tx ? ` ${explorerTx(tx)}` : ""}`];
+  });
+}
+
 /**
  * Kit 11 beat, Metal's ask (ADR-012): a customer disputes. The store decides from evidence alone
  * and refunds by `mandate pull` only what the evidence supports:
@@ -214,16 +244,23 @@ const said = (f: DisputeFile) =>
 export async function disputeScene(
   now = () => new Date(),
   engine = createEngine({ scenario: "none", clock: now }),
+  o: DisputeOrders = MOCK_ORDERS,
 ): Promise<SceneStep[]> {
   const { controller, world } = engine;
   const steps: SceneStep[] = [];
+  const customer = o.customer ? { customer: o.customer } : {};
 
   const first = await answerDispute(
     engine,
-    { disputeId: "dsp_scene_1", orderIds: ["ord_1", "ord_2"], claim: "wrong_data" },
+    { disputeId: "dsp_scene_1", orderIds: [o.bad, o.good], claim: "wrong_data", ...customer },
     now(),
   );
-  steps.push({ step: "customer: the data was wrong", outcome: said(first), moneyMoved: false });
+  steps.push({
+    step: "customer: the data was wrong",
+    outcome: said(first),
+    moneyMoved: false,
+    notes: evidenceNotes(engine, first),
+  });
 
   let n = 0;
   const refund = (file: DisputeFile, orderId: string, cents: number): PaymentProposal => ({
@@ -238,7 +275,7 @@ export async function disputeScene(
     recurrence: "one_off",
     refundOfOrderId: orderId,
     sourceRef: file.ticketRef,
-    idempotencyKey: `scene-dispute-refund-${n}`,
+    idempotencyKey: `scene-dispute-refund-${o.run ? `${o.run}-` : ""}${n}`,
     justification: "the store's dispute file says refund",
     createdAt: now().toISOString(),
   });
@@ -255,7 +292,7 @@ export async function disputeScene(
 
   const again = await answerDispute(
     engine,
-    { disputeId: "dsp_scene_2", orderIds: ["ord_1", "ord_404"], claim: "wrong_data" },
+    { disputeId: "dsp_scene_2", orderIds: [o.bad, "ord_404"], claim: "wrong_data", ...customer },
     now(),
   );
   steps.push({
@@ -265,17 +302,18 @@ export async function disputeScene(
   });
 
   const before = world.settled().length;
-  const twice = await controller.submit(refund(again, "ord_1", 5));
+  const price = world.orders().get(o.bad)?.price.cents ?? 5;
+  const twice = await controller.submit(refund(again, o.bad, price));
   const failedRules = twice.decision?.rules.checks.filter((c) => !c.pass).map((c) => c.rule);
   steps.push({
-    step: "support tries to refund ord_1 again",
+    step: `support tries to refund ${o.bad} again`,
     outcome: `${twice.blockedBy ?? "not blocked"} (${(failedRules ?? []).join(", ")})`,
     ...moved(engine, before),
   });
 
   const denied = await answerDispute(
     engine,
-    { disputeId: "dsp_scene_3", orderIds: ["ord_3"], claim: "not_authorized" },
+    { disputeId: "dsp_scene_3", orderIds: [o.authorized], claim: "not_authorized", ...customer },
     now(),
   );
   const ev = denied.findings[0]?.evidence ?? [];
@@ -283,6 +321,7 @@ export async function disputeScene(
     step: "customer: my agent never agreed",
     outcome: `${said(denied)}: ${ev.filter((e) => e.ok).length} of ${ev.length} checks hold`,
     moneyMoved: false,
+    notes: ev.map((e) => `${e.ok ? "holds" : "FAILS"}: ${e.what}`),
   });
   return steps;
 }
