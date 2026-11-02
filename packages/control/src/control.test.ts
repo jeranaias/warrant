@@ -223,6 +223,31 @@ describe("rules check", () => {
     const recent = [{ payeeId: "pay_upstream", rail: "metal_x402" as const, cents: 2, at: NOW }];
     expect(checkRules(warrant, proposal(), ctx({ recentPayments: recent })).pass).toBe(true);
   });
+
+  it("one offer is paid once: a flood from a single offer stops at the second purchase", () => {
+    const recent = [
+      {
+        payeeId: "pay_upstream",
+        rail: "metal_x402" as const,
+        cents: 2,
+        at: NOW,
+        sourceRef: "src_1",
+      },
+    ];
+    const r = checkRules(
+      warrant,
+      proposal({ sourceRef: "src_1" }),
+      ctx({ recentPayments: recent }),
+    );
+    expect(failed(r)).toEqual(["duplicate_guard"]);
+    expect(r.checks.find((c) => c.rule === "duplicate_guard")?.detail).toBe(
+      "this offer or invoice was already paid once",
+    );
+    // The next offer is a new purchase.
+    expect(
+      checkRules(warrant, proposal({ sourceRef: "src_2" }), ctx({ recentPayments: recent })).pass,
+    ).toBe(true);
+  });
 });
 
 describe("rules: Airwallex duplicate window and refunds", () => {

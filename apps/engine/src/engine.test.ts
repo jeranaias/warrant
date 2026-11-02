@@ -111,9 +111,21 @@ describe("engine: tasks in, decisions out", () => {
     const p = { ...proposalFor(tasks[0] as AgentTask), recurrence: "recurring" as const };
     const r = await post<Result>("/proposals", p);
     expect(r.body.decision?.outcome).toBe("needs_owner_approval");
-    const ok = await post<Result>(`/approvals/${r.body.decision?.proposalId}`, {
+    const id = r.body.decision?.proposalId ?? "";
+    const { pending } = await get<{ pending: { proposalId: string; shownHash: string }[] }>(
+      "/approvals",
+    );
+    const shown = pending.find((a) => a.proposalId === id)?.shownHash ?? "";
+
+    // Bound to what was shown (ADR-007): no hash, or another view's hash, approves nothing.
+    expect((await post(`/approvals/${id}`, { decision: "approved" })).status).toBe(400);
+    const wrong = await post<{ ok?: boolean; error?: string }>(`/approvals/${id}`, {
       decision: "approved",
+      shownHash: "0".repeat(64),
     });
+    expect(wrong.body.error).toBe("approval is for a different view");
+
+    const ok = await post<Result>(`/approvals/${id}`, { decision: "approved", shownHash: shown });
     expect(ok.body.execution?.status).toBe("succeeded");
   });
 
@@ -187,5 +199,61 @@ describe("engine: tasks in, decisions out", () => {
     const chain = await get<{ mandates: { revoked: boolean }[] }>("/chain");
     expect(chain.mandates.every((m) => m.revoked)).toBe(true);
     expect((await get<{ engaged: boolean }>("/kill")).engaged).toBe(true);
+  });
+});
+
+describe("the owner's key (phone page sign-in)", () => {
+  it("approving and the emergency stop need the owner's key; reading stays open", async () => {
+    const { app } = createEngine({ scenario: "none", clock: () => NOW, ownerToken: "owner-key-1" });
+    const s = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => s.once("listening", () => ok()));
+    const a = s.address();
+    const at = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
+    const kill = (auth?: string) =>
+      fetch(`${at}/kill`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(auth ? { authorization: auth } : {}) },
+        body: JSON.stringify({ reason: "test" }),
+      });
+    try {
+      expect((await fetch(`${at}/approvals`)).status).toBe(200);
+      expect((await kill()).status).toBe(401);
+      expect((await kill("Bearer wrong")).status).toBe(401);
+      expect((await fetch(`${at}/approvals/prop_x`, { method: "POST" })).status).toBe(401);
+      expect((await kill("Bearer owner-key-1")).status).toBe(200);
+    } finally {
+      await new Promise<void>((ok) => s.close(() => ok()));
+    }
+  });
+});
+
+describe("disputes (ADR-012): the store answers from its records", () => {
+  type File = {
+    findings: { orderId: string; decision: { reason: string; refund: { cents: number } } }[];
+  };
+
+  it("lists the stored orders with the customer's pass", async () => {
+    const { orders } = await get<{ orders: { orderId: string; buyerPass?: string }[] }>("/orders");
+    expect(orders.map((o) => o.orderId)).toEqual(["ord_1", "ord_2", "ord_3"]);
+    expect(orders.every((o) => typeof o.buyerPass === "string")).toBe(true);
+  });
+
+  it("decides per order: a signed pass stands, an unknown order gets nothing", async () => {
+    const r = await post<File>("/disputes", {
+      orderIds: ["ord_3", "ord_404"],
+      claim: "not_authorized",
+    });
+    expect(r.status).toBe(200);
+    expect(
+      r.body.findings.map((f) => [f.orderId, f.decision.reason, f.decision.refund.cents]),
+    ).toEqual([
+      ["ord_3", "owner_authorized", 0],
+      ["ord_404", "order_not_found", 0],
+    ]);
+  });
+
+  it("refuses a malformed dispute", async () => {
+    expect((await post("/disputes", { orderIds: [], claim: "wrong_data" })).status).toBe(400);
+    expect((await post("/disputes", { orderIds: ["ord_1"], claim: "refund me" })).status).toBe(400);
   });
 });
