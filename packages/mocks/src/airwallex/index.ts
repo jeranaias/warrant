@@ -1,6 +1,6 @@
 // Mock Airwallex: auth, DELEGATE cardholders, virtual cards (freeze), simulated single-phase
 // transactions, a transactions list, an opt-in wallet with INSUFFICIENT_FUNDS declines, simulated
-// deposits and FX quotes.
+// deposits, FX quotes, conversions, beneficiaries and transfers.
 // Shapes were checked against the real sandbox on 2026-10-30 (legacy shape, no x-api-version).
 // Anything not observed there is marked ASSUMED or UNVERIFIED.
 import { randomUUID } from "node:crypto";
@@ -28,6 +28,12 @@ interface CardRec {
   currencies: string[]; // allowed_currencies, empty = all
   categories: string[]; // allowed_merchant_categories, empty = all
   spent: number;
+}
+
+interface TransferRec {
+  t: Json; // the public body; status is advanced in place
+  createdMs: number;
+  cents: number;
 }
 
 export interface AirwallexOptions {
@@ -62,6 +68,9 @@ export interface AirwallexMock {
     transactions: Json[];
     deposits: Json[];
     quotes: Map<string, QuoteRec>;
+    conversions: Map<string, Json>;
+    beneficiaries: Map<string, Json>;
+    transfers: Map<string, TransferRec>;
     rates: Map<string, number>; // pair -> rate in integer micro-units
   };
 }
@@ -71,6 +80,13 @@ const err = (status: number, code: string, message: string, source?: string): Ou
   status,
   body: { code, message, source: source ?? "" }, // sandbox error bodies always carry source, "" when empty
 });
+// FX service errors (conversions) also carry details: [{ code: "correlation_id", message: <uuid> }].
+// Probed on the duplicate request_id, insufficient_funds and expired_quote errors.
+const fxErr = (status: number, code: string, message: string, source: string): Out => {
+  const out = err(status, code, message, source);
+  const details = [{ code: "correlation_id", message: randomUUID() }];
+  return { ...out, body: { ...(out.body as Json), details } };
+};
 const stamp = () => new Date().toISOString().replace("Z", "+0000");
 const strList = (x: unknown): string[] | null =>
   x === undefined || x === null
@@ -81,8 +97,8 @@ const strList = (x: unknown): string[] | null =>
 const mask = (n: number) => "************" + String(1000 + (n % 9000));
 
 /** Money in cents (at least `min`), parsed from the decimal string. No exponent, max 2 decimals, no float math. */
-function toCents(x: unknown, min = 1): number | null {
-  if (typeof x !== "number") return null;
+function toCents(x: unknown, min = 1, text = false): number | null {
+  if (typeof x !== "number" && !(text && typeof x === "string")) return null;
   const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(x));
   if (!m) return null;
   const cents = Number(m[1] + (m[2] ?? "").padEnd(2, "0"));
@@ -133,6 +149,74 @@ function convert(cents: number, fromBase: boolean, micro: number): number | null
   return out <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(out) : null;
 }
 
+// Validation failures on beneficiaries (and transfers) share one envelope, probed 2026-10-30: note there
+// is no top-level "source", the failing fields are listed in details.errors.
+const VALIDATION_MESSAGE =
+  "The request failed our schema validation. Refer to the errors object for erroneous fields, codes and parameters.";
+const validationFailed = (errors: { code: string; source: string }[]): Out => ({
+  status: 400,
+  body: { code: "validation_failed", details: { errors }, message: VALIDATION_MESSAGE },
+});
+
+/** Country, two check digits, then 11 to 30 letters or digits, and the ISO 7064 mod-97 check. */
+function validIban(x: unknown): x is string {
+  if (typeof x !== "string" || !/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(x)) return false;
+  const digits = (x.slice(4) + x.slice(0, 4)).replace(/[A-Z]/g, (c) =>
+    String(c.charCodeAt(0) - 55),
+  );
+  let rem = 0;
+  for (const ch of digits) rem = (rem * 10 + Number(ch)) % 97;
+  return rem === 1;
+}
+
+// The sandbox adds bank_name from the IBAN (a bank directory). The mock knows only the bank we probed:
+// ES + bank code 2100. Any other bank gets no bank_name (a known gap, ASSUMED).
+const BANK_NAMES: Record<string, string> = { "ES:2100": "CAIXABANK, S.A." };
+
+// The accepted transfer reasons, from the Airwallex docs.
+const TRANSFER_REASONS = [
+  "audio_visual_services",
+  "bill_payment",
+  "business_expenses",
+  "construction",
+  "donation_charitable_contribution",
+  "education_training",
+  "freight",
+  "goods_purchased",
+  "investment_capital",
+  "investment_proceeds",
+  "living_expenses",
+  "loan_credit_repayment",
+  "medical_services",
+  "pension",
+  "professional_business_services",
+  "real_estate",
+  "taxes",
+  "technical_services",
+  "transfer_to_own_account",
+  "travel",
+  "wages_salary",
+  "other_services",
+];
+
+// The payer profile the sandbox attached to every transfer on 2026-10-30 (fake sandbox data).
+const TRANSFER_PAYER = {
+  additional_info: {
+    business_incorporation_date: "2026-09-05",
+    business_registration_number: "123456789",
+    business_registration_type: "COMPANY",
+  },
+  address: {
+    city: "Los Angeles",
+    country_code: "US",
+    postcode: "90001",
+    state: "CA",
+    street_address: "0241 Alberto Island",
+  },
+  company_name: "Sandbox Business",
+  entity_type: "COMPANY",
+};
+
 export async function startAirwallexMock({
   port = 0,
   balances = {},
@@ -145,8 +229,13 @@ export async function startAirwallexMock({
     transactions: [],
     deposits: [],
     quotes: new Map(),
+    conversions: new Map(),
+    beneficiaries: new Map(),
+    transfers: new Map(),
     rates: new Map(),
   };
+  const conversionRequests = new Set<string>();
+  const transferRequests = new Map<string, string>(); // request_id -> transfer id
   for (const [pair, rate] of Object.entries(rates)) {
     const micro = toMicro(rate);
     if (!/^[A-Z]{6}$/.test(pair) || micro === null) {
@@ -457,6 +546,131 @@ export async function startAirwallexMock({
     return null;
   }
 
+  // Probed 2026-10-30 (our own sandbox key): create is 201 and the conversion is SETTLED at once, with
+  // settlement_cutoff_at equal to created_at; a repeated request_id is 400 invalid_argument whatever the
+  // body; selling a currency the wallet holds none of is 400 insufficient_funds, source "conversion"
+  // (not a SCHEDULED booking); a used-up quote is 400 expired_quote, source "quoteId". Trimmed from the
+  // real shape: awx_rate, mid_rate and rate_details. Unprobed and ASSUMED: the order of the checks, that
+  // a refused conversion does not consume its request_id, the other error messages and sources, the
+  // inclusive balance and quote-expiry edges, the 1.00 minimum for any currency, quote reuse (MULTI_USE
+  // was probed, reuse was not), quote_id echoed on the conversion, the UTC conversion_date, and the
+  // 7-character short_reference_id alphabet. A currency with no wallet holds zero here, while card
+  // purchases treat it as unlimited: a conversion needs real money behind it.
+  function createConversion(b: Json): Out {
+    const rid = b.request_id;
+    if (typeof rid !== "string" || rid === "") {
+      return fxErr(400, "field_required", "request_id is required", "request_id");
+    }
+    if (rid.length > 64) {
+      return fxErr(
+        400,
+        "invalid_argument",
+        "request_id must be at most 64 characters",
+        "request_id",
+      );
+    }
+    for (const f of ["buy_currency", "sell_currency"]) {
+      if (b[f] === undefined) return fxErr(400, "field_required", `${f} is required`, f);
+      if (!isCcy(b[f])) return fxErr(400, "invalid_argument", `Invalid ${f}`, f);
+    }
+    const sellDealt = b.sell_amount !== undefined;
+    if (!sellDealt && b.buy_amount === undefined) {
+      return fxErr(400, "field_required", "buy_amount or sell_amount is required", "sell_amount");
+    }
+    if (sellDealt && b.buy_amount !== undefined) {
+      return fxErr(
+        400,
+        "invalid_argument",
+        "Set only one of buy_amount and sell_amount",
+        "sell_amount",
+      );
+    }
+    const field = sellDealt ? "sell_amount" : "buy_amount";
+    const dealt = toCents(b[field], 1, true);
+    if (dealt === null) return fxErr(400, "invalid_argument", `Invalid ${field}`, field);
+    if (conversionRequests.has(rid)) {
+      const message = `request_id '${rid}' has been used in the past. Please use a different request_id for this request`;
+      return fxErr(400, "invalid_argument", message, "request_id");
+    }
+    let rate: { pair: string; micro: number; base: string } | null;
+    if (b.quote_id !== undefined) {
+      const q = typeof b.quote_id === "string" ? state.quotes.get(b.quote_id) : undefined;
+      if (!q) return fxErr(400, "invalid_quote_id", "Invalid quote", "quoteId");
+      if (now() > q.validToMs) return fxErr(400, "expired_quote", "Quote has expired", "quoteId");
+      if (q.buyCurrency !== b.buy_currency || q.sellCurrency !== b.sell_currency) {
+        return fxErr(400, "invalid_argument", "Quote does not match this conversion", "quoteId");
+      }
+      rate = { pair: q.pair, micro: q.micro, base: q.pair.slice(0, 3) };
+    } else {
+      rate = b.buy_currency === b.sell_currency ? null : rateFor(b.sell_currency, b.buy_currency);
+    }
+    if (!rate) return fxErr(400, "unsupported_currency", "No rate for this pair", "buy_currency");
+    if (dealt < 100) return fxErr(400, "amount_below_limit", "Amount is below the minimum", field);
+    const dealtCcy: string = sellDealt ? b.sell_currency : b.buy_currency;
+    const other = convert(dealt, dealtCcy === rate.base, rate.micro);
+    if (other === null) return fxErr(400, "amount_above_limit", "Amount too large", field);
+    const [buy, sell] = sellDealt ? [other, dealt] : [dealt, other];
+    const from = wallet.get(b.sell_currency);
+    if (!from || sell > from.available) {
+      return fxErr(400, "insufficient_funds", "insufficient_funds", "conversion");
+    }
+    from.available -= sell;
+    const to = wallet.get(b.buy_currency) ?? { available: 0, reserved: 0 };
+    to.available += buy;
+    wallet.set(b.buy_currency, to);
+    const ms = now();
+    const day = new Date(ms).toISOString().slice(0, 10);
+    const at = sec(ms);
+    const conversion = {
+      buy_amount: buy / 100,
+      buy_currency: b.buy_currency,
+      client_rate: rate.micro / 1_000_000,
+      conversion_date: day,
+      conversion_id: randomUUID(),
+      created_at: at,
+      currency_pair: rate.pair,
+      dealt_currency: dealtCcy,
+      ...(b.quote_id === undefined ? {} : { quote_id: b.quote_id }),
+      request_id: rid,
+      sell_amount: sell / 100,
+      sell_currency: b.sell_currency,
+      settlement_cutoff_at: at,
+      short_reference_id: `C${day.slice(2, 4)}${day.slice(5, 7)}${day.slice(8, 10)}-${randomUUID().replaceAll("-", "").slice(0, 7).toUpperCase()}`,
+      status: "SETTLED",
+      updated_at: at,
+    };
+    conversionRequests.add(rid);
+    state.conversions.set(conversion.conversion_id, conversion);
+    return { status: 201, body: conversion };
+  }
+
+  // GET /fx/conversions. Probed 2026-10-30 with our own REST key: {has_more, items}, and request_id is a
+  // working filter: asked about a conversion that same key had made about 1h45m earlier, the list returned
+  // it on the first request. An earlier note said the list lags; that came from asking the MCP, a different
+  // sandbox account, so it proved nothing. NOT probed: how soon after creation a conversion shows up (the
+  // real transfers list showed a new transfer in the same second). The mock lists every conversion at once.
+  // ASSUMED: the filters other than request_id, page_size 10 to 1000 with the BELOW_MIN_PAGE_SIZE body of the
+  // transactions list, and no from_created_at / to_created_at support.
+  function listConversions(q: URLSearchParams): Out {
+    const pageNum = intParam(q, "page_num", 0, 0, Number.MAX_SAFE_INTEGER);
+    if (pageNum === null) return err(400, "invalid_argument", "Invalid page_num", "page_num");
+    const rawSize = q.get("page_size");
+    if (rawSize !== null && /^-?\d+$/.test(rawSize) && Number(rawSize) < 10) {
+      return err(400, "invalid_argument", "BELOW_MIN_PAGE_SIZE");
+    }
+    const pageSize = intParam(q, "page_size", 100, 10, 1000);
+    if (pageSize === null) return err(400, "invalid_argument", "Invalid page_size", "page_size");
+    const filters = ["request_id", "buy_currency", "sell_currency", "status"];
+    const all = [...state.conversions.values()]
+      .reverse()
+      .filter((c) => filters.every((k) => !q.has(k) || c[k] === q.get(k)));
+    const end = (pageNum + 1) * pageSize;
+    return {
+      status: 200,
+      body: { has_more: all.length > end, items: all.slice(pageNum * pageSize, end) },
+    };
+  }
+
   function updateCard(id: string, b: Json): Out {
     const rec = state.cards.get(id);
     if (!rec) return err(404, "resource_not_found", "Card not found"); // ASSUMED code
@@ -547,6 +761,300 @@ export async function startAirwallexMock({
     };
   }
 
+  // POST /beneficiaries/create. Shape probed 2026-10-30 with our own REST key (a beneficiary made through
+  // the MCP lives in a different sandbox account and is invisible here): 201 with the beneficiary echoed
+  // WITHOUT company_name, bank_name added from the IBAN, payer_entity_type defaulting to COMPANY, and a new
+  // id every time (the same beneficiary twice is two 201s). A bad IBAN is 400 validation_failed with
+  // details.errors [{code "083", source "beneficiary.bank_details.iban"}] and no top-level source.
+  // Scope is EUR SEPA companies: PERSONAL, other currencies and SWIFT are refused. ASSUMED: those refusals,
+  // every other error code and source (field_required / invalid_argument), that only presence is checked
+  // for postcode and state (the sandbox wants 5 digits and an ES-xx state for Spain), and that the 083 code
+  // also covers a malformed IBAN or one whose country differs from bank_country_code.
+  function createBeneficiary(b: Json): Out {
+    const ben: Json = b.beneficiary ?? {};
+    const bank: Json = ben.bank_details ?? {};
+    const addr: Json = ben.address ?? {};
+    const errors: { code: string; source: string }[] = [];
+    const text = (v: unknown, source: string, min: number, max: number) => {
+      if (v === undefined) errors.push({ code: "field_required", source });
+      else if (typeof v !== "string" || v.length < min || v.length > max) {
+        errors.push({ code: "invalid_argument", source });
+      }
+    };
+    if (ben.entity_type === undefined)
+      errors.push({ code: "field_required", source: "beneficiary.entity_type" });
+    else if (ben.entity_type !== "COMPANY")
+      errors.push({ code: "invalid_argument", source: "beneficiary.entity_type" });
+    if (ben.type !== undefined && ben.type !== "BANK_ACCOUNT") {
+      errors.push({ code: "invalid_argument", source: "beneficiary.type" });
+    }
+    text(ben.company_name, "beneficiary.company_name", 1, 100);
+    if (bank.account_currency === undefined) {
+      errors.push({ code: "field_required", source: "beneficiary.bank_details.account_currency" });
+    } else if (bank.account_currency !== "EUR") {
+      errors.push({
+        code: "invalid_argument",
+        source: "beneficiary.bank_details.account_currency",
+      });
+    }
+    text(bank.account_name, "beneficiary.bank_details.account_name", 2, 200);
+    if (typeof bank.account_name === "string" && /^\d+$/.test(bank.account_name)) {
+      errors.push({ code: "invalid_argument", source: "beneficiary.bank_details.account_name" });
+    }
+    text(bank.bank_country_code, "beneficiary.bank_details.bank_country_code", 2, 2);
+    const countryMismatch =
+      typeof bank.bank_country_code === "string" &&
+      validIban(bank.iban) &&
+      bank.iban.slice(0, 2) !== bank.bank_country_code;
+    if (!validIban(bank.iban) || countryMismatch) {
+      errors.push({ code: "083", source: "beneficiary.bank_details.iban" });
+    }
+    text(addr.street_address, "beneficiary.address.street_address", 5, 200);
+    text(addr.city, "beneficiary.address.city", 1, 50);
+    text(addr.state, "beneficiary.address.state", 1, 50);
+    text(addr.postcode, "beneficiary.address.postcode", 1, 20);
+    text(addr.country_code, "beneficiary.address.country_code", 2, 2);
+    const methods = b.transfer_methods;
+    if (methods === undefined) errors.push({ code: "field_required", source: "transfer_methods" });
+    else if (
+      !Array.isArray(methods) ||
+      methods.length === 0 ||
+      methods.some((m) => m !== "LOCAL")
+    ) {
+      errors.push({ code: "invalid_argument", source: "transfer_methods" });
+    }
+    if (errors.length) return validationFailed(errors);
+    const iban: string = bank.iban;
+    const bankName = BANK_NAMES[iban.slice(0, 2) + ":" + iban.slice(4, 8)];
+    const rec = {
+      beneficiary: {
+        address: {
+          city: addr.city,
+          country_code: addr.country_code,
+          postcode: addr.postcode,
+          state: addr.state,
+          street_address: addr.street_address,
+        },
+        bank_details: {
+          account_currency: "EUR",
+          account_name: bank.account_name,
+          bank_country_code: bank.bank_country_code,
+          ...(bankName ? { bank_name: bankName } : {}),
+          iban,
+        },
+        entity_type: "COMPANY",
+        type: "BANK_ACCOUNT",
+      },
+      id: randomUUID(),
+      ...(typeof b.nickname === "string" ? { nickname: b.nickname } : {}),
+      payer_entity_type: "COMPANY",
+      transfer_methods: methods,
+    };
+    state.beneficiaries.set(rec.id, rec);
+    return { status: 201, body: rec };
+  }
+
+  // The sandbox moved a new transfer from SCHEDULED to PROCESSING within about a second (probed 2026-10-30:
+  // PROCESSING on the next read, updated_at unchanged). The one-second threshold is ASSUMED.
+  function advance(rec: TransferRec): Json {
+    if (rec.t.status === "SCHEDULED" && now() - rec.createdMs >= 1000) rec.t.status = "PROCESSING";
+    return rec.t;
+  }
+
+  // POST /transfers/create. Probed 2026-10-30 with our own REST key (EUR to a EUR SEPA beneficiary, LOCAL):
+  // 201, status SCHEDULED, funding FUNDED, fee 0, and the wallet is debited at once (available and total
+  // both fall by the amount). A reused request_id is 400 duplicate_request_id with the first transfer's id
+  // in details. More than the wallet holds is 400 balance_insufficient (source "transfer"), nothing booked.
+  // An unknown beneficiary_id is 400 validation_failed with details.errors [{045, beneficiary_id}].
+  // Scope is same-currency LOCAL transfers (what the licence fee needs: convert first, then pay). ASSUMED:
+  // refusing SWIFT and a differing source_currency, every other validation code and source, that checks run
+  // validation first, then reuse, then funds, that a refused request does not use up its request_id, that the
+  // exact balance passes, that amounts may be decimal strings as well as numbers, and the payer profile.
+  function createTransfer(b: Json): Out {
+    const errors: { code: string; source: string }[] = [];
+    const bad = (code: string, source: string) => errors.push({ code, source });
+    const rid = b.request_id;
+    if (rid === undefined || rid === "") bad("field_required", "request_id");
+    else if (typeof rid !== "string" || rid.length > 50) bad("invalid_argument", "request_id");
+    const ben =
+      typeof b.beneficiary_id === "string" ? state.beneficiaries.get(b.beneficiary_id) : undefined;
+    if (b.beneficiary_id === undefined) bad("field_required", "beneficiary_id");
+    else if (!ben) bad("045", "beneficiary_id");
+    const benCcy = ben?.beneficiary.bank_details.account_currency;
+    if (b.transfer_currency === undefined) bad("field_required", "transfer_currency");
+    else if (!isCcy(b.transfer_currency) || (ben && b.transfer_currency !== benCcy)) {
+      bad("invalid_argument", "transfer_currency");
+    }
+    if (b.source_currency === undefined) bad("field_required", "source_currency");
+    else if (!isCcy(b.source_currency) || b.source_currency !== b.transfer_currency) {
+      bad("invalid_argument", "source_currency");
+    }
+    const hasTransfer = b.transfer_amount !== undefined;
+    const hasSource = b.source_amount !== undefined;
+    let cents: number | null = null;
+    if (hasTransfer === hasSource)
+      bad(hasTransfer ? "invalid_argument" : "field_required", "transfer_amount");
+    else {
+      const field = hasTransfer ? "transfer_amount" : "source_amount";
+      cents = toCents(b[field], 1, true);
+      if (cents === null) bad("invalid_argument", field);
+    }
+    if (b.transfer_method === undefined) bad("field_required", "transfer_method");
+    else if (b.transfer_method !== "LOCAL") bad("invalid_argument", "transfer_method");
+    if (b.reason === undefined) bad("field_required", "reason");
+    else if (!TRANSFER_REASONS.includes(b.reason)) bad("invalid_argument", "reason");
+    if (b.reference === undefined) bad("field_required", "reference");
+    else if (
+      typeof b.reference !== "string" ||
+      b.reference.length < 1 ||
+      b.reference.length > 140
+    ) {
+      bad("invalid_argument", "reference");
+    }
+    if (errors.length || !ben || cents === null) return validationFailed(errors);
+
+    const used = transferRequests.get(rid);
+    if (used !== undefined) {
+      const message = `The request ID ${rid} has been used for a transfer with the transfer ID ${used} before. Please use a different requestID if you wish to create a separate transfer.`;
+      return {
+        status: 400,
+        body: {
+          code: "duplicate_request_id",
+          details: { id: used, request_id: rid },
+          message,
+          source: "request_id",
+        },
+      };
+    }
+    const ccy: string = b.transfer_currency;
+    const wal = wallet.get(ccy);
+    if (!wal || cents > wal.available) {
+      return {
+        status: 400,
+        body: {
+          code: "balance_insufficient",
+          details: {},
+          message:
+            "There is insufficient Wallet balance to fund this transfer. Top up your Wallet balance or provide a lower amount.",
+          source: "transfer",
+        },
+      };
+    }
+    wal.available -= cents;
+    const ms = now();
+    const day = new Date(ms).toISOString().slice(0, 10);
+    const at = sec(ms);
+    const amount = cents / 100;
+    const transfer: Json = {
+      amount_beneficiary_receives: amount,
+      amount_payer_pays: amount,
+      beneficiary: ben.beneficiary,
+      beneficiary_id: b.beneficiary_id,
+      created_at: at,
+      fee_amount: 0,
+      fee_currency: ccy,
+      fee_paid_by: "PAYER",
+      funding: { status: "FUNDED" },
+      id: randomUUID(),
+      payer: TRANSFER_PAYER,
+      reason: b.reason,
+      reference: b.reference,
+      remarks: "",
+      request_id: rid,
+      short_reference_id: `P${day.slice(2, 4)}${day.slice(5, 7)}${day.slice(8, 10)}-${randomUUID().replaceAll("-", "").slice(0, 7).toUpperCase()}`,
+      source_amount: amount,
+      source_currency: ccy,
+      status: "SCHEDULED",
+      swift_charge_option: "SHARED",
+      transfer_amount: amount,
+      transfer_currency: ccy,
+      transfer_date: day,
+      transfer_method: "LOCAL",
+      updated_at: at,
+    };
+    state.transfers.set(transfer.id, { t: transfer, createdMs: ms, cents });
+    transferRequests.set(rid, transfer.id);
+    return { status: 201, body: transfer };
+  }
+
+  // GET /transfers. Probed 2026-10-30: the filter by request_id found a transfer created in the same
+  // second (so this is the after-timeout lookup, and it is immediate), and the envelope is {items} only,
+  // with no has_more. ASSUMED: newest first, the other filters (the documented ones: status, beneficiary_id,
+  // transfer_currency, short_reference_id), and that the cursor paging (page, page_size) is not needed:
+  // every match is returned.
+  function listTransfers(q: URLSearchParams): Out {
+    const filters = [
+      "request_id",
+      "status",
+      "beneficiary_id",
+      "transfer_currency",
+      "short_reference_id",
+    ];
+    const items = [...state.transfers.values()]
+      .reverse()
+      .map(advance)
+      .filter((tr) => filters.every((k) => !q.has(k) || tr[k] === q.get(k)));
+    return { status: 200, body: { items } };
+  }
+
+  // POST /simulation/transfers/{id}/transition. Probed 2026-10-30 with our REST key: SENT then PAID work in
+  // that order and the wallet does not move after the create; a transition the transfer cannot make is
+  // HTTP 500 {code "operation_failed", message "Request could not be processed"}, not a 400 (seen for
+  // repeating PROCESSING and for FAILED from PROCESSING); CANCELLED from PROCESSING answers with status
+  // FAILED (failure_reason "simulation", failure_type "PAYMENT_RECALLED"), then the transfer reads back as
+  // CANCELLED with a failure block, and the amount returns to the wallet. ASSUMED: PROCESSING from SCHEDULED
+  // is allowed (the docs' order), every other pair is a 500, the 400 and 404 bodies, that a transfer cannot
+  // be cancelled from SCHEDULED or SENT, and that the answer is the transfer's own shape (the sandbox's
+  // answer used an older field order and added a swift_code to the beneficiary).
+  function transition(id: string, b: Json): Out {
+    const rec = state.transfers.get(id);
+    if (!rec) return err(404, "resource_not_found", "Transfer not found");
+    const next = b.next_status;
+    if (
+      typeof next !== "string" ||
+      !["PROCESSING", "SENT", "PAID", "FAILED", "CANCELLED", "OVERDUE"].includes(next)
+    ) {
+      return err(400, "invalid_argument", "Invalid next_status", "next_status");
+    }
+    const tr = advance(rec);
+    const touch = () => {
+      tr.updated_at = sec(now());
+    };
+    if (next === "PROCESSING" && tr.status === "SCHEDULED") {
+      tr.status = "PROCESSING";
+      touch();
+      return { status: 200, body: tr };
+    }
+    if (
+      (next === "SENT" && tr.status === "PROCESSING") ||
+      (next === "PAID" && tr.status === "SENT")
+    ) {
+      tr.status = next;
+      tr.dispatch_date = new Date(now()).toISOString().slice(0, 10);
+      touch();
+      return { status: 200, body: tr };
+    }
+    if (next === "CANCELLED" && tr.status === "PROCESSING") {
+      const wal = wallet.get(tr.transfer_currency);
+      if (wal) wal.available += rec.cents;
+      tr.status = "CANCELLED";
+      tr.failure = { details: { type: "PAYMENT_RECALLED" }, message: "simulation" };
+      touch();
+      const answer: Json = {
+        ...tr,
+        status: "FAILED",
+        failure_reason: "simulation",
+        failure_type: "PAYMENT_RECALLED",
+      };
+      Reflect.deleteProperty(answer, "failure");
+      return { status: 200, body: answer };
+    }
+    return {
+      status: 500,
+      body: { code: "operation_failed", message: "Request could not be processed" },
+    };
+  }
+
   function route(
     method: string,
     path: string,
@@ -632,11 +1140,44 @@ export async function startAirwallexMock({
     if (method === "POST" && path === "/api/v1/simulation/deposit/create") return createDeposit(b);
     if (method === "GET" && path === "/api/v1/deposits") return listDeposits(query);
     if (method === "POST" && path === "/api/v1/fx/quotes/create") return createQuote(b);
+    if (method === "POST" && path === "/api/v1/fx/conversions/create") return createConversion(b);
+    if (method === "GET" && path === "/api/v1/fx/conversions") return listConversions(query);
+    const conversion = /^\/api\/v1\/fx\/conversions\/([^/]+)$/.exec(path);
+    if (method === "GET" && conversion) {
+      const found = state.conversions.get(conversion[1] ?? "");
+      // The 404 code is ASSUMED: only the success of GET by id was probed.
+      return found
+        ? { status: 200, body: found }
+        : fxErr(404, "resource_not_found", "Conversion not found", "conversion_id");
+    }
+    if (method === "POST" && path === "/api/v1/beneficiaries/create") return createBeneficiary(b);
+    const bene = /^\/api\/v1\/beneficiaries\/([^/]+)$/.exec(path);
+    if (method === "GET" && bene) {
+      // Probed once, with an id from another sandbox account: an unknown id is 200 with NO body.
+      const found = state.beneficiaries.get(bene[1] ?? "");
+      return found ? { status: 200, body: found } : { status: 200, body: undefined };
+    }
+    if (method === "POST" && path === "/api/v1/transfers/create") return createTransfer(b);
+    if (method === "GET" && path === "/api/v1/transfers") return listTransfers(query);
+    const sim = /^\/api\/v1\/simulation\/transfers\/([^/]+)\/transition$/.exec(path);
+    if (method === "POST" && sim) return transition(sim[1] ?? "", b);
+    const transfer = /^\/api\/v1\/transfers\/([^/]+)$/.exec(path);
+    if (method === "GET" && transfer) {
+      const found = state.transfers.get(transfer[1] ?? "");
+      // The 404 body is ASSUMED: an unknown transfer id was not probed.
+      return found
+        ? { status: 200, body: advance(found) }
+        : err(404, "resource_not_found", "Transfer not found");
+    }
     return err(404, "resource_not_found", `No route for ${method} ${path}`);
   }
 
   const send = (res: ServerResponse, out: Out) => {
     if (res.destroyed) return;
+    if (out.body === undefined) {
+      res.writeHead(out.status).end();
+      return;
+    }
     res.writeHead(out.status, { "content-type": "application/json" }).end(JSON.stringify(out.body));
   };
 

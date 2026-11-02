@@ -882,6 +882,234 @@ describe("rates and clock options", () => {
   );
 });
 
+const CONVERT = "/api/v1/fx/conversions/create";
+const CONVERSION = (id: string) => `/api/v1/fx/conversions/${id}`;
+const FX = { rates: { EURUSD: "1.122223" }, balances: { USD: 100 } };
+
+// Sell 5 USD for EUR by default; every test overrides what it cares about.
+const convert = (patch: object = {}) =>
+  call(CONVERT, {
+    body: {
+      request_id: `conv_${++seq}`,
+      buy_currency: "EUR",
+      sell_currency: "USD",
+      sell_amount: "5",
+      ...patch,
+    },
+  });
+
+const quoteFor = async (validity = "HR_1") =>
+  (
+    await call(QUOTE, {
+      body: { buy_currency: "EUR", sell_currency: "USD", sell_amount: 5, validity },
+    })
+  ).json;
+
+const CORRELATION = [{ code: "correlation_id", message: expect.any(String) }];
+
+describe("FX conversions", () => {
+  it("converts at the market rate, moves exact cents, and answers in the sandbox shape", async () => {
+    await restart({ ...FX, now: () => T0 });
+    const res = await convert({ request_id: "r1" });
+    expect(res.status).toBe(201);
+    // Real sandbox answer for the same request: 5.00 USD at 1.122223 bought 4.46 EUR, SETTLED at once.
+    expect(res.json).toMatchObject({
+      buy_amount: 4.46,
+      buy_currency: "EUR",
+      sell_amount: 5,
+      sell_currency: "USD",
+      client_rate: 1.122223,
+      currency_pair: "EURUSD",
+      dealt_currency: "USD",
+      request_id: "r1",
+      status: "SETTLED",
+      conversion_date: "2026-10-30",
+      created_at: "2026-10-30T20:08:32+0000",
+      settlement_cutoff_at: "2026-10-30T20:08:32+0000",
+      updated_at: "2026-10-30T20:08:32+0000",
+    });
+    expect(res.json.conversion_id).toEqual(expect.any(String));
+    expect(res.json.short_reference_id).toMatch(/^C261030-[A-Z0-9]{7}$/);
+    expect(res.json).not.toHaveProperty("quote_id");
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95, total_amount: 95 });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 4.46, total_amount: 4.46 });
+  });
+
+  it("reads a conversion back by id, and 404s an unknown one", async () => {
+    await restart(FX);
+    const made = await convert();
+    const got = await call(CONVERSION(made.json.conversion_id));
+    expect(got.status).toBe(200);
+    expect(got.json).toEqual(made.json);
+    const missing = await call(CONVERSION("nope"));
+    expect(missing.status).toBe(404); // ASSUMED: the 404 code and body were not probed
+    expect(missing.json.code).toBe("resource_not_found");
+    expect((await call(CONVERSION("x"), { token: null })).status).toBe(401);
+  });
+
+  it("derives the sell side when buy is the dealt side", async () => {
+    await restart(FX);
+    // 4.46 EUR x 1.122223 = 5.0051 USD, nearest cent 5.01
+    const res = await convert({ sell_amount: undefined, buy_amount: "4.46" });
+    expect(res.json).toMatchObject({ buy_amount: 4.46, sell_amount: 5.01, dealt_currency: "EUR" });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 94.99 });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 4.46 });
+  });
+
+  it("rounds an exact half cent up (the tie direction is ASSUMED)", async () => {
+    await restart({ rates: { EURUSD: "2.000000" }, balances: { USD: 10 } });
+    // 1.01 USD buys 0.505 EUR at 2.0: the tie goes up to 0.51
+    expect((await convert({ sell_amount: "1.01" })).json.buy_amount).toBe(0.51);
+  });
+
+  it("a quote locks its rate when the market moves, and can be used again", async () => {
+    await restart({ ...FX, now: () => T0 });
+    const q = await quoteFor();
+    mock.state.rates.set("EURUSD", 1_000_000); // the market moves to 1.000000
+    const locked = await convert({ quote_id: q.quote_id });
+    // quote_id echoed on the conversion is ASSUMED (the docs say so; not probed)
+    expect(locked.json).toMatchObject({
+      buy_amount: 4.46,
+      client_rate: 1.122223,
+      quote_id: q.quote_id,
+    });
+    expect((await convert({ quote_id: q.quote_id })).status).toBe(201); // MULTI_USE reuse: ASSUMED
+    const market = await convert();
+    expect(market.json).toMatchObject({ buy_amount: 5, client_rate: 1 });
+  });
+
+  it("refuses an expired quote with the sandbox body, valid up to valid_to_at inclusive", async () => {
+    let clock = T0;
+    await restart({ ...FX, now: () => clock });
+    const q = await quoteFor("MIN_1");
+    clock = T0 + 60_000; // exactly valid_to_at: still good (inclusive is ASSUMED from the docs)
+    expect((await convert({ quote_id: q.quote_id })).status).toBe(201);
+    clock = T0 + 60_001;
+    const late = await convert({ quote_id: q.quote_id });
+    expect(late.status).toBe(400);
+    expect(late.json).toEqual({
+      code: "expired_quote",
+      message: "Quote has expired",
+      source: "quoteId",
+      details: CORRELATION,
+    });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 });
+    expect(mock.state.conversions.size).toBe(1);
+  });
+
+  it("refuses an unknown quote and a quote for another direction", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 100, EUR: 100 } });
+    const unknown = await convert({ quote_id: "nope" });
+    expect(unknown.status).toBe(400);
+    expect(unknown.json).toMatchObject({ code: "invalid_quote_id", source: "quoteId" });
+    const q = await quoteFor(); // sell USD, buy EUR
+    const reversed = await convert({
+      quote_id: q.quote_id,
+      sell_currency: "EUR",
+      buy_currency: "USD",
+    });
+    expect(reversed.status).toBe(400);
+    expect(reversed.json).toMatchObject({ code: "invalid_argument", source: "quoteId" });
+    expect(mock.state.conversions.size).toBe(0);
+  });
+
+  it("rejects a repeated request_id, same body or not, with the sandbox body", async () => {
+    await restart(FX);
+    const first = await convert({ request_id: "dup-1" });
+    const again = await convert({ request_id: "dup-1" });
+    expect(again.status).toBe(400);
+    expect(again.json).toEqual({
+      code: "invalid_argument",
+      message:
+        "request_id 'dup-1' has been used in the past. Please use a different request_id for this request",
+      source: "request_id",
+      details: CORRELATION,
+    });
+    expect((await convert({ request_id: "dup-1", sell_amount: "6" })).status).toBe(400);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 }); // moved once
+    expect(mock.state.conversions.size).toBe(1);
+    expect((await call(CONVERSION(first.json.conversion_id))).json).toEqual(first.json);
+  });
+
+  it("does not consume a request_id on a refused conversion (ASSUMED)", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 1 } });
+    expect((await convert({ request_id: "retry-1" })).json.code).toBe("insufficient_funds");
+    await call(DEPOSIT, { body: { amount: 10, currency: "USD" } });
+    expect((await convert({ request_id: "retry-1" })).status).toBe(201);
+  });
+
+  it("refuses to sell more than is available, inclusive at the exact balance, nothing moves", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 5 } });
+    const over = await convert({ sell_amount: "5.01" });
+    expect(over.status).toBe(400);
+    // Real sandbox answer when selling a currency the wallet holds none of (SGD, 2026-10-30).
+    expect(over.json).toEqual({
+      code: "insufficient_funds",
+      message: "insufficient_funds",
+      source: "conversion",
+      details: CORRELATION,
+    });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 5 });
+    expect(await balanceOf("EUR")).toBeUndefined();
+    expect(mock.state.conversions.size).toBe(0);
+    expect((await convert({ sell_amount: "5" })).status).toBe(201); // exact balance passes (ASSUMED)
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 0 });
+  });
+
+  it("conversions spend available funds, not funds a card has reserved", async () => {
+    await restart({ rates: FX.rates, balances: { USD: 10 } });
+    await pay(await makeCard([{ amount: 10, interval: "PER_TRANSACTION" }]), 5);
+    expect((await convert({ sell_amount: "5.01" })).json.code).toBe("insufficient_funds");
+    expect((await convert({ sell_amount: "5" })).status).toBe(201);
+  });
+
+  it("an unseeded currency is zero for conversions but unlimited for card purchases", async () => {
+    await restart({ rates: FX.rates }); // no wallet at all
+    expect((await convert()).json.code).toBe("insufficient_funds");
+    expect((await pay(await makeCard(), 5)).json.status).toBe("PENDING");
+  });
+
+  it("refuses a dealt amount under 1.00 (the limit is ASSUMED to apply to any currency)", async () => {
+    await restart(FX);
+    const low = await convert({ sell_amount: "0.99" });
+    expect(low.status).toBe(400);
+    expect(low.json.code).toBe("amount_below_limit");
+    expect((await convert({ sell_amount: "1.00" })).status).toBe(201);
+  });
+
+  it.each([
+    [{ request_id: undefined }, "field_required", "request_id"],
+    [{ request_id: "" }, "field_required", "request_id"],
+    [{ request_id: "x".repeat(65) }, "invalid_argument", "request_id"],
+    [{ buy_currency: undefined }, "field_required", "buy_currency"],
+    [{ sell_currency: "usd" }, "invalid_argument", "sell_currency"],
+    [{ sell_amount: undefined }, "field_required", "sell_amount"],
+    [{ buy_amount: "4" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "10.001" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "1e1" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "-5" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: "abc" }, "invalid_argument", "sell_amount"],
+    [{ sell_amount: 0 }, "invalid_argument", "sell_amount"],
+    [{ buy_currency: "USD" }, "unsupported_currency", "buy_currency"],
+    [{ buy_currency: "GBP" }, "unsupported_currency", "buy_currency"],
+  ])("refuses %j with %s on %s, moving nothing", async (patch, code, source) => {
+    await restart(FX);
+    const res = await convert(patch);
+    expect(res.status).toBe(400);
+    expect(res.json).toMatchObject({ code, source });
+    expect(res.json.details).toEqual(CORRELATION);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 100 });
+    expect(mock.state.conversions.size).toBe(0);
+  });
+
+  it("needs a token", async () => {
+    await restart(FX);
+    const res = await call(CONVERT, { token: null, body: { request_id: "t" } });
+    expect(res.status).toBe(401);
+    expect((await call(CONVERT, { body: { request_id: "t" } })).status).toBe(400); // route exists
+  });
+});
+
 describe("cards list (GET /issuing/cards)", () => {
   it("lists a cardholder's cards oldest first in the summary shape, without request_id or controls", async () => {
     const a = await makeHolder();
@@ -955,5 +1183,776 @@ describe("cards list (GET /issuing/cards)", () => {
   it("needs a token", async () => {
     expect((await call(CARDS, { token: null })).status).toBe(401);
     expect((await call(CARDS)).status).toBe(200);
+  });
+});
+
+const CONVERSIONS = "/api/v1/fx/conversions";
+const SEEDED = { rates: { EURUSD: "1.122223" }, balances: { USD: 100, EUR: 100 } };
+
+describe("conversions list (GET /fx/conversions)", () => {
+  it("lists newest first as {has_more, items} and finds one conversion by request_id", async () => {
+    await restart(SEEDED);
+    const made = [];
+    for (const id of ["r1", "r2", "r3"]) made.push((await convert({ request_id: id })).json);
+    const all = await call(CONVERSIONS);
+    expect(all.status).toBe(200);
+    expect(all.json.has_more).toBe(false);
+    expect(all.json.items.map((c: Json) => c.request_id)).toEqual(["r3", "r2", "r1"]);
+
+    const one = await call(`${CONVERSIONS}?request_id=r2`);
+    expect(one.json).toEqual({ has_more: false, items: [made[1]] });
+    const none = await call(`${CONVERSIONS}?request_id=never-sent`);
+    expect(none.json).toEqual({ has_more: false, items: [] });
+  });
+
+  it("filters by buy_currency, sell_currency and status", async () => {
+    await restart(SEEDED);
+    await convert({ request_id: "a" });
+    await convert({ request_id: "b" });
+    await convert({ request_id: "c", sell_currency: "EUR", buy_currency: "USD" });
+    const count = async (qs: string) => (await call(`${CONVERSIONS}?${qs}`)).json.items.length;
+    expect(await count("sell_currency=USD")).toBe(2);
+    expect(await count("sell_currency=EUR")).toBe(1);
+    expect(await count("buy_currency=EUR")).toBe(2);
+    expect(await count("status=SETTLED")).toBe(3);
+    expect(await count("status=CANCELLED")).toBe(0);
+    expect(await count("sell_currency=USD&buy_currency=USD")).toBe(0);
+  });
+
+  it("pages with page_num from 0 and page_size (default 100, minimum 10)", async () => {
+    await restart(SEEDED);
+    for (let n = 0; n < 12; n++) await convert({ request_id: `p${n}`, sell_amount: "1" });
+    const first = await call(`${CONVERSIONS}?page_num=0&page_size=10`);
+    expect(first.json.items).toHaveLength(10);
+    expect(first.json.has_more).toBe(true);
+    expect(first.json.items[0].request_id).toBe("p11");
+    const second = await call(`${CONVERSIONS}?page_num=1&page_size=10`);
+    expect(second.json.items).toHaveLength(2);
+    expect(second.json.has_more).toBe(false);
+    expect((await call(CONVERSIONS)).json.items).toHaveLength(12);
+  });
+
+  // The 10 minimum is from the MCP tool schema and the sandbox's other lists; the exact body for this
+  // endpoint is ASSUMED to match the transactions list.
+  it.each(["page_size=9", "page_size=0"])("%s is BELOW_MIN_PAGE_SIZE", async (qs) => {
+    await restart(SEEDED);
+    const res = await call(`${CONVERSIONS}?${qs}`);
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "invalid_argument",
+      message: "BELOW_MIN_PAGE_SIZE",
+      source: "",
+    });
+  });
+
+  it.each(["page_num=-1", "page_num=x", "page_size=1001", "page_size=1.5"])(
+    "refuses %s with 400",
+    async (qs) => {
+      await restart(SEEDED);
+      expect((await call(`${CONVERSIONS}?${qs}`)).status).toBe(400);
+    },
+  );
+
+  it("needs a token", async () => {
+    await restart(SEEDED);
+    expect((await call(CONVERSIONS, { token: null })).status).toBe(401);
+    expect((await call(CONVERSIONS)).status).toBe(200);
+  });
+
+  // After a timeout the caller must not resend: the conversion may exist. It looks the request up by
+  // request_id instead, and a resend would be refused anyway (the real API answers a reused request_id with
+  // a 400).
+  it("after a timed-out create, the caller finds the conversion by request_id and does not resend", async () => {
+    await restart(SEEDED);
+    mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: CONVERT });
+    await expect(
+      call(CONVERT, {
+        body: {
+          request_id: "timeout-1",
+          buy_currency: "EUR",
+          sell_currency: "USD",
+          sell_amount: "5",
+        },
+        signal: AbortSignal.timeout(50),
+      }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    const found = await call(`${CONVERSIONS}?request_id=timeout-1`);
+    expect(found.json.items).toHaveLength(1);
+    expect(found.json.items[0]).toMatchObject({ request_id: "timeout-1", status: "SETTLED" });
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 });
+
+    // a blind resend is refused, so the money moved once
+    expect((await convert({ request_id: "timeout-1" })).status).toBe(400);
+    expect(await balanceOf("USD")).toMatchObject({ available_amount: 95 });
+  });
+});
+
+const BENS = "/api/v1/beneficiaries";
+// A real Spanish IBAN (CaixaBank, bank code 2100). The sandbox rejected the docs example
+// ES8023100001180000012345 even though its checksum is fine: it also looks the bank up.
+const GOOD_IBAN = "ES9121000418450200051332";
+
+const benBody = (): Json => ({
+  beneficiary: {
+    type: "BANK_ACCOUNT",
+    entity_type: "COMPANY",
+    company_name: "Warrant Licence Fee Probe SL",
+    address: {
+      street_address: "Calle de Prueba 1",
+      city: "Madrid",
+      state: "ES-M",
+      postcode: "28001",
+      country_code: "ES",
+    },
+    bank_details: {
+      account_currency: "EUR",
+      account_name: "Warrant Licence Fee Probe SL",
+      bank_country_code: "ES",
+      iban: GOOD_IBAN,
+    },
+  },
+  transfer_methods: ["LOCAL"],
+  nickname: "warrant-licence-fee-probe",
+});
+
+/** A copy of the body with the value at a dotted path replaced, or removed when `value` is undefined. */
+function edit(path: string, value?: unknown): Json {
+  const body = benBody();
+  const keys = path.split(".");
+  const last = keys.pop() as string;
+  let node = body;
+  for (const k of keys) node = node[k];
+  if (value === undefined) Reflect.deleteProperty(node, last);
+  else node[last] = value;
+  return body;
+}
+
+const VALIDATION_MESSAGE =
+  "The request failed our schema validation. Refer to the errors object for erroneous fields, codes and parameters.";
+
+describe("beneficiaries", () => {
+  it("creates a EUR SEPA company beneficiary and echoes the sandbox shape", async () => {
+    const res = await call(`${BENS}/create`, { body: benBody() });
+    expect(res.status).toBe(201);
+    // Real REST answer (2026-10-30): no company_name in the echo, bank_name added from the IBAN, and
+    // payer_entity_type defaulted to COMPANY.
+    expect(res.json).toEqual({
+      beneficiary: {
+        address: {
+          city: "Madrid",
+          country_code: "ES",
+          postcode: "28001",
+          state: "ES-M",
+          street_address: "Calle de Prueba 1",
+        },
+        bank_details: {
+          account_currency: "EUR",
+          account_name: "Warrant Licence Fee Probe SL",
+          bank_country_code: "ES",
+          bank_name: "CAIXABANK, S.A.",
+          iban: GOOD_IBAN,
+        },
+        entity_type: "COMPANY",
+        type: "BANK_ACCOUNT",
+      },
+      id: expect.any(String),
+      nickname: "warrant-licence-fee-probe",
+      payer_entity_type: "COMPANY",
+      transfer_methods: ["LOCAL"],
+    });
+  });
+
+  it("reads it back by id; an unknown id is 200 with an empty body, as the sandbox answered", async () => {
+    const made = await call(`${BENS}/create`, { body: benBody() });
+    const got = await call(`${BENS}/${made.json.id}`);
+    expect(got.status).toBe(200);
+    expect(got.json).toEqual(made.json);
+
+    // Probed once, with an id that belongs to another sandbox account: 200 and no body at all.
+    const res = await fetch(`${mock.url}${BENS}/nope`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("");
+  });
+
+  it("allows duplicates: the same beneficiary created twice is 201 both times, with two ids", async () => {
+    const first = await call(`${BENS}/create`, { body: benBody() });
+    const second = await call(`${BENS}/create`, { body: benBody() });
+    expect([first.status, second.status]).toEqual([201, 201]);
+    expect(second.json.id).not.toBe(first.json.id);
+    expect(mock.state.beneficiaries.size).toBe(2);
+  });
+
+  it("refuses a bad IBAN with the exact sandbox body", async () => {
+    const res = await call(`${BENS}/create`, {
+      body: edit("beneficiary.bank_details.iban", "ES9121000418450200051333"),
+    });
+    expect(res.status).toBe(400);
+    // Real REST answer (2026-10-30). Note: no top-level "source" on this error shape.
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code: "083", source: "beneficiary.bank_details.iban" }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(mock.state.beneficiaries.size).toBe(0);
+  });
+
+  // The 083 code for these is ASSUMED: only the wrong-checksum case was probed.
+  it.each([
+    ["a country prefix that differs from bank_country_code", "DE89370400440532013000"],
+    ["lowercase letters", "es9121000418450200051332"],
+    ["too short", "ES91"],
+    ["not a string", 12345],
+  ])("refuses an IBAN with %s", async (_why, iban) => {
+    const res = await call(`${BENS}/create`, { body: edit("beneficiary.bank_details.iban", iban) });
+    expect(res.status).toBe(400);
+    expect(res.json.details.errors).toEqual([
+      { code: "083", source: "beneficiary.bank_details.iban" },
+    ]);
+  });
+
+  // A valid-checksum IBAN with an unknown bank code is accepted here, a known gap: the real sandbox
+  // rejected the docs example ES8023100001180000012345 (bank 2310) with 083, so it checks a bank directory.
+  it("does not mirror the sandbox's bank directory: a valid IBAN of any bank is accepted", async () => {
+    const res = await call(`${BENS}/create`, {
+      body: edit("beneficiary.bank_details.iban", "ES8023100001180000012345"),
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.beneficiary.bank_details).not.toHaveProperty("bank_name");
+  });
+
+  // Error codes and sources for these are ASSUMED: field_required for a missing field, invalid_argument
+  // for a bad value, in the same validation_failed envelope.
+  it.each([
+    ["company_name is missing", "beneficiary.company_name", undefined, "field_required"],
+    ["company_name is empty", "beneficiary.company_name", "", "invalid_argument"],
+    ["entity_type is PERSONAL", "beneficiary.entity_type", "PERSONAL", "invalid_argument"],
+    [
+      "account_currency is USD",
+      "beneficiary.bank_details.account_currency",
+      "USD",
+      "invalid_argument",
+    ],
+    [
+      "account_name is all digits",
+      "beneficiary.bank_details.account_name",
+      "12345",
+      "invalid_argument",
+    ],
+    [
+      "bank_country_code is missing",
+      "beneficiary.bank_details.bank_country_code",
+      undefined,
+      "field_required",
+    ],
+    ["the street is too short", "beneficiary.address.street_address", "Ab", "invalid_argument"],
+    ["the city is missing", "beneficiary.address.city", undefined, "field_required"],
+    ["the postcode is missing", "beneficiary.address.postcode", undefined, "field_required"],
+    [
+      "the address country is missing",
+      "beneficiary.address.country_code",
+      undefined,
+      "field_required",
+    ],
+    ["transfer_methods is missing", "transfer_methods", undefined, "field_required"],
+    ["transfer_methods is SWIFT only", "transfer_methods", ["SWIFT"], "invalid_argument"],
+    ["transfer_methods is empty", "transfer_methods", [], "invalid_argument"],
+  ])("refuses a body where %s", async (_why, path, value, code) => {
+    const res = await call(`${BENS}/create`, { body: edit(path, value) });
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code, source: path }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(mock.state.beneficiaries.size).toBe(0);
+  });
+
+  it("needs a token", async () => {
+    expect((await call(`${BENS}/create`, { token: null, body: benBody() })).status).toBe(401);
+    expect((await call(`${BENS}/nope`, { token: null })).status).toBe(401);
+    expect((await call(`${BENS}/create`, { body: benBody() })).status).toBe(201);
+  });
+});
+
+const TRANSFERS = "/api/v1/transfers";
+const TRANSFER_CREATE = `${TRANSFERS}/create`;
+
+/** A fresh mock with a 100 EUR wallet and one beneficiary; returns the beneficiary id. */
+async function setup(opts: Parameters<typeof startAirwallexMock>[0] = {}) {
+  await restart({ balances: { EUR: 100 }, ...opts });
+  return (await call(`${BENS}/create`, { body: benBody() })).json.id as string;
+}
+
+/** A transfer body for the beneficiary; a patch value of undefined removes that key. */
+const trBody = (bid: string, patch: Json = {}): Json => ({
+  request_id: `tr_${++seq}`,
+  beneficiary_id: bid,
+  source_currency: "EUR",
+  transfer_currency: "EUR",
+  transfer_amount: 5,
+  transfer_method: "LOCAL",
+  reason: "professional_business_services",
+  reference: "warrant probe",
+  ...patch,
+});
+
+const BALANCE_INSUFFICIENT = {
+  code: "balance_insufficient",
+  details: {},
+  message:
+    "There is insufficient Wallet balance to fund this transfer. Top up your Wallet balance or provide a lower amount.",
+  source: "transfer",
+};
+
+describe("transfers", () => {
+  it("creates a LOCAL EUR transfer: 201, SCHEDULED, funded, no fee, in the real shape", async () => {
+    const bid = await setup({ now: () => T0 });
+    const res = await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "r1" }) });
+    expect(res.status).toBe(201);
+    // Real REST answer for the same request (2026-10-30).
+    expect(res.json).toMatchObject({
+      amount_beneficiary_receives: 5,
+      amount_payer_pays: 5,
+      beneficiary_id: bid,
+      created_at: "2026-10-30T20:08:32+0000",
+      updated_at: "2026-10-30T20:08:32+0000",
+      fee_amount: 0,
+      fee_currency: "EUR",
+      fee_paid_by: "PAYER",
+      funding: { status: "FUNDED" },
+      reason: "professional_business_services",
+      reference: "warrant probe",
+      remarks: "",
+      request_id: "r1",
+      source_amount: 5,
+      source_currency: "EUR",
+      status: "SCHEDULED",
+      swift_charge_option: "SHARED",
+      transfer_amount: 5,
+      transfer_currency: "EUR",
+      transfer_date: "2026-10-30",
+      transfer_method: "LOCAL",
+    });
+    expect(res.json.id).toEqual(expect.any(String));
+    expect(res.json.short_reference_id).toMatch(/^P261030-[A-Z0-9]{7}$/);
+    expect(res.json.payer).toMatchObject({
+      company_name: "Sandbox Business",
+      entity_type: "COMPANY",
+    });
+    expect(res.json.beneficiary.bank_details).toMatchObject({
+      iban: GOOD_IBAN,
+      bank_name: "CAIXABANK, S.A.",
+    });
+  });
+
+  it("takes the money out of the wallet at once: available and total both fall", async () => {
+    const bid = await setup();
+    await call(TRANSFER_CREATE, { body: trBody(bid) });
+    expect(await balanceOf("EUR")).toMatchObject({
+      available_amount: 95,
+      total_amount: 95,
+      reserved_amount: 0,
+      pending_amount: 0,
+    });
+  });
+
+  it("accepts source_amount instead of transfer_amount (same currency, no fee)", async () => {
+    const bid = await setup();
+    const res = await call(TRANSFER_CREATE, {
+      body: trBody(bid, { transfer_amount: undefined, source_amount: 7.5 }),
+    });
+    expect(res.status).toBe(201);
+    expect(res.json).toMatchObject({
+      source_amount: 7.5,
+      transfer_amount: 7.5,
+      amount_payer_pays: 7.5,
+    });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 92.5 });
+  });
+
+  // Probed: the sandbox showed PROCESSING within about a second of the create. The 1000 ms threshold, and
+  // that the update leaves updated_at alone (it did), follow that observation; the exact timing is ASSUMED.
+  it("moves SCHEDULED to PROCESSING by itself after about a second", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const made = await call(TRANSFER_CREATE, { body: trBody(bid) });
+    const status = async () => (await call(`${TRANSFERS}/${made.json.id}`)).json;
+    expect((await status()).status).toBe("SCHEDULED");
+    clock = T0 + 999;
+    expect((await status()).status).toBe("SCHEDULED");
+    clock = T0 + 1000;
+    const later = await status();
+    expect(later.status).toBe("PROCESSING");
+    expect(later.updated_at).toBe(made.json.updated_at);
+  });
+
+  it("reads a transfer back by id (404 when unknown, ASSUMED) and needs a token", async () => {
+    const bid = await setup();
+    const made = await call(TRANSFER_CREATE, { body: trBody(bid) });
+    const got = await call(`${TRANSFERS}/${made.json.id}`);
+    expect(got.status).toBe(200);
+    expect(got.json).toMatchObject({ id: made.json.id, request_id: made.json.request_id });
+    expect((await call(`${TRANSFERS}/nope`)).status).toBe(404);
+    expect((await call(`${TRANSFERS}/${made.json.id}`, { token: null })).status).toBe(401);
+    expect((await call(TRANSFER_CREATE, { token: null, body: trBody(bid) })).status).toBe(401);
+  });
+});
+
+describe("transfers refusals", () => {
+  it("rejects a reused request_id with the exact sandbox body, and the existing id in details", async () => {
+    const bid = await setup();
+    const first = await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "dup-1" }) });
+    const again = await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "dup-1" }) });
+    expect(again.status).toBe(400);
+    // Real REST answer (2026-10-30): its own code, and the first transfer's id in details.
+    expect(again.json).toEqual({
+      code: "duplicate_request_id",
+      details: { id: first.json.id, request_id: "dup-1" },
+      message: `The request ID dup-1 has been used for a transfer with the transfer ID ${first.json.id} before. Please use a different requestID if you wish to create a separate transfer.`,
+      source: "request_id",
+    });
+    // A different amount under the same id is refused the same way (ASSUMED: only the same body was probed).
+    const other = await call(TRANSFER_CREATE, {
+      body: trBody(bid, { request_id: "dup-1", transfer_amount: 9 }),
+    });
+    expect(other.json.code).toBe("duplicate_request_id");
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 }); // moved once
+  });
+
+  it("refuses more than the wallet holds with balance_insufficient, and moves nothing", async () => {
+    const bid = await setup({ balances: { EUR: 5 } });
+    const over = await call(TRANSFER_CREATE, { body: trBody(bid, { transfer_amount: 5.01 }) });
+    expect(over.status).toBe(400);
+    expect(over.json).toEqual(BALANCE_INSUFFICIENT); // real answer to a 20,000,000 EUR transfer
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 5 });
+    expect(mock.state.transfers.size).toBe(0);
+    // the exact balance passes (inclusive: ASSUMED)
+    expect(
+      (await call(TRANSFER_CREATE, { body: trBody(bid, { transfer_amount: 5 }) })).status,
+    ).toBe(201);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 0 });
+  });
+
+  it("treats a currency with no wallet as zero", async () => {
+    await restart({}); // no balances at all
+    const bid = (await call(`${BENS}/create`, { body: benBody() })).json.id as string;
+    const res = await call(TRANSFER_CREATE, { body: trBody(bid) });
+    expect(res.json).toEqual(BALANCE_INSUFFICIENT);
+  });
+
+  // ASSUMED: a refused request does not use up its request_id (the sandbox was only asked about reuse
+  // after a success).
+  it("does not consume the request_id of a refused transfer", async () => {
+    const bid = await setup({ balances: { EUR: 1 } });
+    const body = trBody(bid, { request_id: "retry-1" });
+    expect((await call(TRANSFER_CREATE, { body })).json.code).toBe("balance_insufficient");
+    await call(DEPOSIT, { body: { amount: 10, currency: "EUR" } });
+    expect((await call(TRANSFER_CREATE, { body })).status).toBe(201);
+  });
+
+  it("refuses a beneficiary_id it does not know with the exact 045 body", async () => {
+    const bid = await setup();
+    expect(bid).toEqual(expect.any(String));
+    const res = await call(TRANSFER_CREATE, { body: trBody(bid, { beneficiary_id: "nope" }) });
+    expect(res.status).toBe(400);
+    // Real REST answer (2026-10-30), for a beneficiary that belonged to another sandbox account.
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code: "045", source: "beneficiary_id" }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100 });
+  });
+
+  // Codes and sources are ASSUMED (only 045 on beneficiary_id was probed): field_required for a missing
+  // field, invalid_argument for a bad value, in the same validation_failed envelope.
+  it.each([
+    ["request_id is missing", { request_id: undefined }, "field_required", "request_id"],
+    [
+      "request_id is 51 characters",
+      { request_id: "x".repeat(51) },
+      "invalid_argument",
+      "request_id",
+    ],
+    [
+      "beneficiary_id is missing",
+      { beneficiary_id: undefined },
+      "field_required",
+      "beneficiary_id",
+    ],
+    ["reason is missing", { reason: undefined }, "field_required", "reason"],
+    ["reason is not an accepted value", { reason: "gifts" }, "invalid_argument", "reason"],
+    ["reference is missing", { reference: undefined }, "field_required", "reference"],
+    [
+      "reference is 141 characters",
+      { reference: "r".repeat(141) },
+      "invalid_argument",
+      "reference",
+    ],
+    [
+      "both amounts are missing",
+      { transfer_amount: undefined },
+      "field_required",
+      "transfer_amount",
+    ],
+    ["both amounts are given", { source_amount: 5 }, "invalid_argument", "transfer_amount"],
+    [
+      "the amount has 3 decimals",
+      { transfer_amount: 10.001 },
+      "invalid_argument",
+      "transfer_amount",
+    ],
+    ["the amount is zero", { transfer_amount: 0 }, "invalid_argument", "transfer_amount"],
+    ["the amount is negative", { transfer_amount: -5 }, "invalid_argument", "transfer_amount"],
+    [
+      "the amount is exponent notation",
+      { transfer_amount: "1e1" },
+      "invalid_argument",
+      "transfer_amount",
+    ],
+    [
+      "transfer_method is missing",
+      { transfer_method: undefined },
+      "field_required",
+      "transfer_method",
+    ],
+    [
+      "transfer_method is SWIFT",
+      { transfer_method: "SWIFT" },
+      "invalid_argument",
+      "transfer_method",
+    ],
+    [
+      "source_currency differs (no conversion here)",
+      { source_currency: "GBP" },
+      "invalid_argument",
+      "source_currency",
+    ],
+    [
+      "transfer_currency is not the beneficiary's",
+      { source_currency: "USD", transfer_currency: "USD" },
+      "invalid_argument",
+      "transfer_currency",
+    ],
+    [
+      "source_currency is missing",
+      { source_currency: undefined },
+      "field_required",
+      "source_currency",
+    ],
+  ])("refuses a transfer where %s", async (_why, patch, code, source) => {
+    const bid = await setup();
+    const res = await call(TRANSFER_CREATE, { body: trBody(bid, patch) });
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "validation_failed",
+      details: { errors: [{ code, source }] },
+      message: VALIDATION_MESSAGE,
+    });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100 });
+    expect(mock.state.transfers.size).toBe(0);
+  });
+});
+
+describe("transfers list (GET /transfers)", () => {
+  // Probed 2026-10-30: the new transfer was listed at once, and the envelope is {items} with no has_more.
+  it("finds a transfer by request_id straight after creating it, as {items}", async () => {
+    const bid = await setup();
+    const a = await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "list-a" }) });
+    await call(TRANSFER_CREATE, { body: trBody(bid, { request_id: "list-b" }) });
+    const res = await call(`${TRANSFERS}?request_id=list-a`);
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.json)).toEqual(["items"]);
+    expect(res.json.items).toHaveLength(1);
+    expect(res.json.items[0]).toMatchObject({ id: a.json.id, request_id: "list-a" });
+    expect((await call(`${TRANSFERS}?request_id=never-sent`)).json).toEqual({ items: [] });
+  });
+
+  it("lists newest first and filters by status, beneficiary, currency and short reference", async () => {
+    const bid = await setup();
+    const other = (await call(`${BENS}/create`, { body: benBody() })).json.id as string;
+    const first = await call(TRANSFER_CREATE, { body: trBody(bid) });
+    const second = await call(TRANSFER_CREATE, { body: trBody(other) });
+    const ids = async (qs: string) =>
+      (await call(`${TRANSFERS}?${qs}`)).json.items.map((t: Json) => t.id);
+    expect(await ids("")).toEqual([second.json.id, first.json.id]); // newest first: ASSUMED
+    expect(await ids(`beneficiary_id=${other}`)).toEqual([second.json.id]);
+    expect(await ids("transfer_currency=EUR")).toHaveLength(2);
+    expect(await ids("transfer_currency=USD")).toEqual([]);
+    expect(await ids("status=SCHEDULED")).toHaveLength(2);
+    expect(await ids("status=PAID")).toEqual([]);
+    expect(await ids(`short_reference_id=${first.json.short_reference_id}`)).toEqual([
+      first.json.id,
+    ]);
+  });
+
+  // The real answer to a timeout: the caller does not know the transfer id, so it looks the request up,
+  // and a blind resend is refused with the existing id in the refusal.
+  it("after a timed-out create the caller finds the transfer by request_id and never resends", async () => {
+    const bid = await setup();
+    const body = trBody(bid, { request_id: "timeout-1" });
+    mock.fault({ kind: "timeout-after", ms: 400, method: "POST", path: TRANSFER_CREATE });
+    await expect(
+      call(TRANSFER_CREATE, { body, signal: AbortSignal.timeout(50) }),
+    ).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    const found = await call(`${TRANSFERS}?request_id=timeout-1`);
+    expect(found.json.items).toHaveLength(1);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+
+    const resend = await call(TRANSFER_CREATE, { body });
+    expect(resend.status).toBe(400);
+    expect(resend.json.code).toBe("duplicate_request_id");
+    expect(resend.json.details.id).toBe(found.json.items[0].id);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+  });
+
+  it("needs a token", async () => {
+    await setup();
+    expect((await call(TRANSFERS, { token: null })).status).toBe(401);
+    expect((await call(TRANSFERS)).status).toBe(200);
+  });
+});
+
+const simulate = (id: string, next_status: unknown) =>
+  call(`/api/v1/simulation/transfers/${id}/transition`, { body: { next_status } });
+
+// Real answer (2026-10-30) to a transition the transfer cannot make: a 500, not a 400.
+const OPERATION_FAILED = { code: "operation_failed", message: "Request could not be processed" };
+
+describe("transfer status simulation", () => {
+  it("walks PROCESSING, SENT, PAID in order, and the wallet does not move after the create", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+
+    // Straight after the create it is still SCHEDULED, so PROCESSING is a legal next step (docs).
+    const processing = await simulate(id, "PROCESSING");
+    expect(processing.status).toBe(200);
+    expect(processing.json.status).toBe("PROCESSING");
+
+    clock = T0 + 4000;
+    const sent = await simulate(id, "SENT");
+    expect(sent.status).toBe(200);
+    expect(sent.json).toMatchObject({ status: "SENT", dispatch_date: "2026-10-30", id });
+    expect(sent.json.updated_at).toBe("2026-10-30T20:08:36+0000");
+
+    const paid = await simulate(id, "PAID");
+    expect(paid.status).toBe(200);
+    expect(paid.json.status).toBe("PAID");
+
+    const got = await call(`${TRANSFERS}/${id}`);
+    expect(got.json).toMatchObject({ status: "PAID", dispatch_date: "2026-10-30" });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95, total_amount: 95 });
+    expect((await call(`${TRANSFERS}?status=PAID`)).json.items.map((t: Json) => t.id)).toEqual([
+      id,
+    ]);
+  });
+
+  it("answers 500 operation_failed when asked for the status it already has", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    clock = T0 + 1000; // the transfer has moved to PROCESSING by itself
+    const again = await simulate(id, "PROCESSING");
+    expect(again.status).toBe(500);
+    expect(again.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe("PROCESSING");
+  });
+
+  it("refuses FAILED from PROCESSING with a 500, and nothing is refunded", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    clock = T0 + 1000;
+    const failed = await simulate(id, "FAILED");
+    expect(failed.status).toBe(500);
+    expect(failed.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe("PROCESSING");
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+  });
+
+  // Real answer (2026-10-30): simulating CANCELLED answers with status FAILED (PAYMENT_RECALLED), the
+  // transfer reads back as CANCELLED with a failure block, and the money returns to the wallet.
+  it("CANCELLED shows FAILED in the answer, settles as CANCELLED, and refunds the wallet", async () => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 95 });
+    clock = T0 + 1000;
+
+    const res = await simulate(id, "CANCELLED");
+    expect(res.status).toBe(200);
+    expect(res.json).toMatchObject({
+      id,
+      status: "FAILED",
+      failure_reason: "simulation",
+      failure_type: "PAYMENT_RECALLED",
+    });
+
+    const got = await call(`${TRANSFERS}/${id}`);
+    expect(got.json.status).toBe("CANCELLED");
+    expect(got.json.failure).toEqual({
+      details: { type: "PAYMENT_RECALLED" },
+      message: "simulation",
+    });
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100, total_amount: 100 });
+    expect((await call(`${TRANSFERS}?status=CANCELLED`)).json.items.map((t: Json) => t.id)).toEqual(
+      [id],
+    );
+    expect((await call(`${TRANSFERS}?status=PROCESSING`)).json.items).toEqual([]);
+
+    // a second cancel is refused, so the refund happens once
+    expect((await simulate(id, "CANCELLED")).status).toBe(500);
+    expect(await balanceOf("EUR")).toMatchObject({ available_amount: 100 });
+  });
+
+  // The 500 for the first two rows and for repeating a status is probed; the rest follow the docs'
+  // "no skipping, in order" rule and are ASSUMED to answer the same way.
+  it.each([
+    ["SCHEDULED", "SENT"],
+    ["SCHEDULED", "PAID"],
+    ["SCHEDULED", "CANCELLED"],
+    ["PROCESSING", "PAID"],
+    ["PROCESSING", "OVERDUE"],
+    ["SENT", "PROCESSING"],
+    ["SENT", "CANCELLED"],
+    ["PAID", "PROCESSING"],
+    ["PAID", "CANCELLED"],
+    ["CANCELLED", "SENT"],
+  ])("refuses %s -> %s with 500 operation_failed", async (from, next) => {
+    let clock = T0;
+    const bid = await setup({ now: () => clock });
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    if (from !== "SCHEDULED") clock = T0 + 1000;
+    if (from === "SENT" || from === "PAID") await simulate(id, "SENT");
+    if (from === "PAID") await simulate(id, "PAID");
+    if (from === "CANCELLED") await simulate(id, "CANCELLED");
+    const before = (await call(`${TRANSFERS}/${id}`)).json.status;
+    const res = await simulate(id, next);
+    expect(res.status).toBe(500);
+    expect(res.json).toEqual(OPERATION_FAILED);
+    expect((await call(`${TRANSFERS}/${id}`)).json.status).toBe(before);
+  });
+
+  // ASSUMED: the bodies for a bad next_status and an unknown transfer were not probed.
+  it("refuses a bad next_status with 400, an unknown transfer with 404, and needs a token", async () => {
+    const bid = await setup();
+    const { id } = (await call(TRANSFER_CREATE, { body: trBody(bid) })).json;
+    for (const bad of [undefined, "DONE", 5]) {
+      const res = await simulate(id, bad);
+      expect(res.status).toBe(400);
+      expect(res.json).toMatchObject({ code: "invalid_argument", source: "next_status" });
+    }
+    expect((await simulate("nope", "PROCESSING")).status).toBe(404);
+    const noToken = await call(`/api/v1/simulation/transfers/${id}/transition`, {
+      token: null,
+      body: { next_status: "PROCESSING" },
+    });
+    expect(noToken.status).toBe(401);
   });
 });
