@@ -74,17 +74,29 @@ const LICENSOR_SWIFT = {
   address: { street: "Unter den Linden 1", city: "Berlin", postcode: "10117", country: "DE" },
 };
 
-export async function sandboxAirwallexWorld(now = new Date()): Promise<AirwallexWorld> {
+/**
+ * An AirwallexClient on the real sandbox, with the owner's keys from .env (AIRWALLEX_BASE_URL,
+ * AIRWALLEX_CLIENT_ID, AIRWALLEX_API_KEY via loadEnv). Throws naming what is missing.
+ */
+export function sandboxAirwallexClient(): AirwallexClient {
   loadEnv();
   const need = ["AIRWALLEX_BASE_URL", "AIRWALLEX_CLIENT_ID", "AIRWALLEX_API_KEY"] as const;
   const missing = need.filter((k) => !process.env[k]);
   if (missing.length) throw new Error(`sandbox needs ${missing.join(", ")} in .env`);
-  const client = new AirwallexClient({
-    baseUrl: String(process.env["AIRWALLEX_BASE_URL"]).replace(/\/$/, ""),
+  const baseUrl = String(process.env["AIRWALLEX_BASE_URL"]).replace(/\/$/, "");
+  if (!/sandbox|demo|127\.0\.0\.1|localhost/.test(baseUrl)) {
+    throw new Error("AIRWALLEX_BASE_URL must be the Airwallex sandbox, never production");
+  }
+  return new AirwallexClient({
+    baseUrl,
     clientId: String(process.env["AIRWALLEX_CLIENT_ID"]),
     apiKey: String(process.env["AIRWALLEX_API_KEY"]),
     timeoutMs: 30_000,
   });
+}
+
+export async function sandboxAirwallexWorld(now = new Date()): Promise<AirwallexWorld> {
+  const client = sandboxAirwallexClient();
   const found = await client.call(
     "GET",
     `/api/v1/beneficiaries?nick_name=${encodeURIComponent(LICENSOR_SWIFT.name)}`,
