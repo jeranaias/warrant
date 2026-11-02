@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentTask, PaymentProposal } from "@warrant/contracts";
-import { createEngine } from "./server.js";
+import { createEngine, fileDispute } from "./server.js";
 import { AGENTS } from "./world.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
@@ -269,6 +269,30 @@ describe("disputes (ADR-012): the store answers from its records", () => {
       ["ord_3", "owner_authorized", 0],
       ["ord_404", "order_not_found", 0],
     ]);
+  });
+
+  it("a refund for an 'other' claim waits for the owner; a data claim pays (ADR-016, #85)", async () => {
+    const engine = createEngine({ scenario: "none", clock: () => NOW });
+    const t = (claim: "other" | "wrong_data", orderId: string): AgentTask => ({
+      kind: "dispute",
+      role: "support",
+      taskId: `task_${claim}`,
+      at: NOW.toISOString(),
+      sourceRef: `src_${claim}`,
+      disputeId: `dsp_${claim}`,
+      orderIds: [orderId],
+      claim,
+      content: "untrusted ticket text",
+    });
+    fileDispute(engine.disputes, t("other", "ord_1"));
+    fileDispute(engine.disputes, t("wrong_data", "ord_2"));
+    const other = await engine.controller.submit(proposalFor(t("other", "ord_1")));
+    expect(other.decision?.outcome).toBe("needs_owner_approval");
+    expect(other.approval?.reasons).toEqual([
+      'dispute claim "other" is not one we refund without the owner',
+    ]);
+    const wrong = await engine.controller.submit(proposalFor(t("wrong_data", "ord_2")));
+    expect(wrong.execution?.status).toBe("succeeded");
   });
 
   it("refuses a malformed dispute", async () => {
