@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@metalntwx/metal-pay": "^0.3.3",
+    "@warrant/agents": "workspace:*",
     "@warrant/contracts": "workspace:*",
     "@warrant/control": "workspace:*",
     "@warrant/mocks": "workspace:*",
