@@ -67,6 +67,7 @@ function proposalFor(t: AgentTask): PaymentProposal {
       refundOfOrderId: t.orderIds[0],
     };
   }
+  if (t.kind !== "invoice") throw new Error(`no test proposal for ${t.kind} tasks yet`);
   return {
     ...common,
     rail: "airwallex_transfer",

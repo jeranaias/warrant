@@ -26,6 +26,8 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 | `RefundDecision`       | orders.ts   | Per-order outcome with a reason code, decided in code from stored orders.                                                  |
 | `WarrantGrant`         | pass.ts     | Owner-signed public part of a warrant a seller may see: payer, categories, cap, delegated key. No budgets (ADR-012).       |
 | `WarrantPass`          | pass.ts     | Grant + one purchase signed by the delegated key, sent as `x-warrant-pass` on the paid request (ADR-012).                  |
+| `AgentTask`            | tasks.ts    | One piece of work for an agent: `data_offer`, `dispute`, `invoice`, `sweep`, `spend_review`. `content` is untrusted text.  |
+| `AgentSpend`           | tasks.ts    | One agent's cap, budget and spend, as control reports it in a `spend_review` task.                                         |
 | `LedgerEntry`          | ledger.ts   | Append-only, hash-chained. reserve / confirm / release / unconfirmed / inbound / kill_switch.                              |
 
 ## Decided (2026-10-23)
@@ -48,3 +50,11 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 
 - Warrant pass (ADR-012): `WarrantGrant` and `WarrantPass` are signed with ed25519 over JCS like
   the warrant. `SignedOrderRecord.buyerPass` keeps the pass the buyer sent, as received.
+
+## Decided (2026-11-02)
+
+- Treasury gets two more task kinds (#26). `sweep`: earnings `available` in our Metal account,
+  moved by one `treasury_sweep` proposal to our own Metal address on the warrant, then deposited
+  to Airwallex by rails (ADR-010 item 4). `spend_review`: each agent's cap, budget and spend
+  (`AgentSpend`) plus the 20 USDZ `totalLimit`, answered with `BudgetChangeProposal`s that always
+  wait for the owner (ADR-007). The numbers come from control and the ledger, never from `content`.

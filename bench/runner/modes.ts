@@ -116,6 +116,8 @@ function priorProposal(
       refundOfOrderId: task.orderIds[i % task.orderIds.length] ?? "ord_1",
     };
   }
+  // Bench cases only make invoice tasks for treasury (case.ts).
+  if (task.kind !== "invoice") throw new Error(`bench: no prior payments for ${task.kind} tasks`);
   return {
     ...common,
     rail: "airwallex_transfer",
