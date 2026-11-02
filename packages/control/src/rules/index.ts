@@ -12,6 +12,17 @@ import type {
 /** ADR-006 / ADR-011: same payee + amount + rail inside this window is a duplicate (inclusive). */
 export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
 
+/**
+ * ADR-014: amounts within this share of the larger one count as "the same amount" for the
+ * duplicate window (inclusive), so EUR 49.99 after EUR 50.00 is caught. In basis points.
+ */
+export const DUPLICATE_TOLERANCE_BPS = 100;
+
+/** |a - b| <= 1% of the larger amount, in integer math. Equal amounts always match. */
+export function nearlySameAmount(a: number, b: number): boolean {
+  return Math.abs(a - b) * 10_000 <= Math.max(a, b) * DUPLICATE_TOLERANCE_BPS;
+}
+
 export interface RecentPayment {
   payeeId: string;
   rail: Rail;
@@ -156,12 +167,15 @@ export function checkRules(
         (r) =>
           r.payeeId === proposal.payeeId &&
           r.rail === proposal.rail &&
-          r.cents === cents &&
+          nearlySameAmount(r.cents, cents) &&
           now - r.at.getTime() <= DUPLICATE_WINDOW_MS,
       );
       if (dup) {
         ok = false;
-        detail = "same payee, amount and rail within 10 minutes";
+        detail =
+          dup.cents === cents
+            ? "same payee, amount and rail within 10 minutes"
+            : `same payee and rail within 10 minutes, ${dup.cents} vs ${cents} is within 1%`;
       }
     }
     // One offer or invoice is paid once. "Buy 200 now" in a single offer is a flood, not 200
