@@ -61,6 +61,10 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 - A recurring payee carries its period (#87): `Payee.billingPeriod` (`day`, `week`, `month`),
   optional and signed with the warrant. The licensor is `month`. Control makes a second payment to
   that payee inside one period wait for the owner; the period lengths are control constants.
+- `WarrantGrant.mandateId` (optional): the Metal mandate the grant's payer pays under, the
+  warrant's `MandateRef.mandateId`. A seller can match it to the mandate the settlement names on
+  chain (metal-pay's `verifyMandatePayment`), and show which mandate a pass sits on. Optional, so
+  grants signed before it still verify.
 - A card payee carries its merchant category code (#19): `Payee.merchantCategoryCode`, four
   digits, optional and signed with the warrant (the design tool seat is `5734`). The Airwallex card
   adapter copies the codes into the card's `allowed_merchant_categories`, so the card network
