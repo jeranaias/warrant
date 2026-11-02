@@ -1,6 +1,7 @@
 import { describe as group, expect, it } from "vitest";
 import type { LoggedEvent } from "./api.js";
 import {
+  agentsLine,
   approveLabel,
   benchLine,
   describe,
@@ -329,6 +330,26 @@ group("first-visit wording", () => {
     );
     expect(ownerLine(events.slice(0, 3), roleOf, 1)).toBe("You approved new limits.");
     expect(ownerLine(events, roleOf, 4)).toBeNull();
+    const stop = ev(5, {
+      type: "kill_switch",
+      result: {
+        event: { reason: "owner pressed stop", at, revokedWarrantIds: ["wrt_sourcing"] },
+        revokedMandates: [],
+        problems: [],
+        durationMs: 0,
+      },
+    });
+    expect(ownerLine([...events, stop], roleOf, 4)).toBe(
+      "You pressed STOP: every payment is refused.",
+    );
+  });
+
+  it("revoked warrants read as agent names", () => {
+    expect(agentsLine(["sourcing", "support", "treasury"])).toBe(
+      "Sourcing, Support and Treasury agents",
+    );
+    expect(agentsLine(["support"])).toBe("Support agent");
+    expect(agentsLine([])).toBe("");
   });
 });
 

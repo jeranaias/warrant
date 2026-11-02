@@ -878,6 +878,10 @@ select {
   border-color: var(--stop);
 }
 
+button.chip {
+  cursor: pointer;
+}
+
 .counts {
   display: flex;
   gap: 20px;
@@ -1479,6 +1483,8 @@ kbd {
   border: 1px solid var(--wait);
   background: var(--solid);
   box-shadow: 0 0 0 3px var(--wait-bg);
+  /* Clear of the sticky header when the waiting chip scrolls here. */
+  scroll-margin-top: 80px;
 }
 
 .ph-wait > .sheet-k {
@@ -1510,7 +1516,13 @@ kbd {
 .ph-wait .approval-foot .btn {
   flex: 1;
   min-height: 52px;
-  font-size: 1rem;
+  padding-inline: 10px;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.ph-demo {
+  margin: 0;
 }
 
 .ph-wait .approval-foot .mono {

@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { HOSTED, api } from "../api.js";
+import { HOSTED } from "../api.js";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
 import bench from "../../../../bench/results.json";
-import { agentName, benchLine, cents, money, ownerLine, time, whyOf } from "../format.js";
+import {
+  agentName,
+  agentsLine,
+  benchLine,
+  cents,
+  money,
+  ownerLine,
+  time,
+  whyOf,
+} from "../format.js";
 import { OTHER, leftFraction, limitRequests, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -11,6 +20,7 @@ import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
 import { ApprovalCard, keyOf } from "./Approvals.js";
 import { Chain } from "./Chain.js";
+import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { Gate } from "./Gate.js";
 import { Scene } from "./Scene.js";
@@ -165,7 +175,7 @@ export function CommandPage({
 
         <aside className="hud-right" aria-live="polite">
           {stopped && engine.kill?.last ? (
-            <StopReceipt kill={engine.kill} />
+            <StopReceipt kill={engine.kill} roleOf={roleOfWarrant} />
           ) : focus ? (
             <section className="sheet sheet-wait">
               <div className="sheet-k">
@@ -405,7 +415,13 @@ function AgentPanel({
   );
 }
 
-function StopReceipt({ kill }: { kill: KillState }) {
+function StopReceipt({
+  kill,
+  roleOf,
+}: {
+  kill: KillState;
+  roleOf: (warrantId: string) => string | undefined;
+}) {
   const r = kill.last;
   if (!r) return null;
   return (
@@ -417,7 +433,7 @@ function StopReceipt({ kill }: { kill: KillState }) {
       </p>
       <dl className="facts">
         <dt>Warrants revoked</dt>
-        <dd className="mono">{r.event.revokedWarrantIds.join(", ") || "none"}</dd>
+        <dd>{agentsLine(r.event.revokedWarrantIds.map(roleOf)) || "none"}</dd>
         <dt>Mandates revoked</dt>
         <dd className="mono">{r.revokedMandates.length}</dd>
         <dt>Reason</dt>
@@ -465,23 +481,5 @@ function Ticker({
       <span className={`fate ${pass.fate}`}>{FATE_WORD[pass.fate]}</span>
       {why && <span className="ticker-why">{why}</span>}
     </div>
-  );
-}
-
-/** Hosted demo only: what this is, and a way to start over with a fresh engine. */
-function DemoLine({ onError }: { onError: (e: string) => void }) {
-  const reset = () => {
-    api.reset().then(
-      () => location.assign("/"),
-      (e: Error) => onError(e.message),
-    );
-  };
-  return (
-    <span className="hud-demo">
-      Demo · simulated money ·{" "}
-      <button className="btn link" onClick={reset}>
-        Reset
-      </button>
-    </span>
   );
 }
