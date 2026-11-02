@@ -12,3 +12,6 @@ the replay log (ledger + decisions, step by step). Vite + React.
   exact rendered content.
 - Display or store full card numbers, CVV or API keys.
 - Put the kill switch behind more than one click plus a confirm.
+- Sell itself. No taglines, slogans or self-praise anywhere in the UI ("secure", "powerful",
+  "you're protected"). Labels and facts only; a reason only where it explains a specific decision.
+  The pitch belongs in the demo and the README, never in the product.
