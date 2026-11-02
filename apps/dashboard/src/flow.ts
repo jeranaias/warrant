@@ -34,6 +34,7 @@ export const REASONS: Record<string, string> = {
   purpose: "failed the purpose check",
   owner: "denied by you",
   rail: "the rail refused it",
+  card: "declined by the card",
   malformed: "malformed request",
   stopped: "stopped",
 };
@@ -81,7 +82,8 @@ export function passesOf(events: LoggedEvent[], warrants: WarrantRow[]): Pass[] 
     }
     if (fate === "paid" && failed.has(p.proposalId)) {
       fate = "blocked";
-      reason = REASONS["rail"];
+      // The card network's own refusal (its limits mirror the warrant) reads as the card's.
+      reason = REASONS[p.rail === "airwallex_card" ? "card" : "rail"];
     }
     if (fate === "blocked" && !reason) {
       const rule = d?.rules?.checks.find((c) => !c.pass)?.rule;

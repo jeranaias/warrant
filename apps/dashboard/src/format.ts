@@ -49,6 +49,16 @@ export function agentName(role: string | undefined): string {
   return (role ? AGENT_NAMES[role] : undefined) ?? role ?? "An agent";
 }
 
+/**
+ * A warrant's short name on the gate: "Treasury", or "Treasury card" for a warrant that pays only
+ * by card, so an agent with two warrants shows two distinct lanes.
+ */
+export function laneName(w: { agentRole: string; allowedRails: string[] }): string {
+  const name = agentName(w.agentRole).replace(/ agent$/, "");
+  const cardOnly = w.allowedRails.length > 0 && w.allowedRails.every((r) => r === "airwallex_card");
+  return cardOnly ? `${name} card` : name;
+}
+
 const BLOCKED_BY: Record<string, string> = {
   rules: "the rules in its warrant",
   purpose: "the purpose check",
@@ -110,6 +120,9 @@ export function field(view: Record<string, unknown>, path: string): unknown {
   return v;
 }
 
+const frozen = (ids: string[] | undefined) =>
+  ids?.length ? `, ${ids.length} ${ids.length === 1 ? "card" : "cards"} frozen` : "";
+
 function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
   switch (e.type) {
     case "proposal": {
@@ -152,7 +165,7 @@ function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
     case "kill_switch":
       return {
         tone: "stop",
-        text: `STOP pressed. Every payment refused, mandates revoked (took ${e.result.durationMs} ms).`,
+        text: `STOP pressed. Every payment refused, mandates revoked${frozen(e.result.event.frozenCardIds)} (took ${e.result.durationMs} ms).`,
       };
     case "budget_changed":
       return {

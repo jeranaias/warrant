@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { WarrantRow } from "../api.js";
-import { agentName, money } from "../format.js";
+import { agentName, laneName, money } from "../format.js";
 import { paidByCurrency, reasonsOf, tally } from "../flow.js";
 import type { Fate, Pass } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -229,7 +229,7 @@ export function Gate({
             onClick={() => onSelect(a.w.warrantId)}
             role="button"
             tabIndex={0}
-            aria-label={`${agentName(a.w.agentRole)}: ${a.n} requests`}
+            aria-label={`${laneName(a.w)}: ${a.n} requests`}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") onSelect(a.w.warrantId);
             }}
@@ -243,7 +243,7 @@ export function Gate({
               fill={tintOf(a.i)}
             />
             <text className="gt-name" x={AX - 20} y={a.c - 4} textAnchor="end">
-              {agentName(a.w.agentRole).replace(/ agent$/, "")}
+              {laneName(a.w)}
             </text>
             <text className="gt-sub" x={AX - 20} y={a.c + 14} textAnchor="end">
               {a.n} {a.n === 1 ? "request" : "requests"}
