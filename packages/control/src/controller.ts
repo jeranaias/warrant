@@ -13,7 +13,11 @@ import type {
 import type { RailAdapter, RailStatus } from "@warrant/rails";
 import { ApprovalBook } from "./approvals/index.js";
 import type { ApprovalView, PendingApproval } from "./approvals/index.js";
-import { REFUND_WITHOUT_OWNER_MAX, REFUNDS_WITHOUT_OWNER_PER_DAY } from "./business.js";
+import {
+  BILLING_PERIOD_MS,
+  REFUND_WITHOUT_OWNER_MAX,
+  REFUNDS_WITHOUT_OWNER_PER_DAY,
+} from "./business.js";
 import { verifyWarrant } from "./crypto.js";
 import { Ledger } from "./ledger/index.js";
 import type { Reservation } from "./ledger/index.js";
@@ -417,6 +421,7 @@ export class Controller {
     // Refunds the rules accepted (real order, its payer, at most its price, once) ask only when
     // they look unusual.
     if (isRefund(p)) reasons.push(...this.unusualRefund(p, w));
+    else reasons.push(...this.againThisPeriod(p, w));
     if (p.recurrence === "recurring") reasons.push("recurring payment");
     if (
       (p.rail === "airwallex_transfer" || p.rail === "airwallex_fx") &&
@@ -649,6 +654,25 @@ export class Controller {
       }
     }
     return why;
+  }
+
+  /**
+   * ADR-015: a payee the warrant says bills once per period (the licence: a month) is paid once
+   * per period without asking. Another payment inside it, of any amount, waits for the owner.
+   */
+  private againThisPeriod(p: PaymentProposal, w: Warrant): string[] {
+    const payee = w.payees.find((x) => x.payeeId === p.payeeId && x.rail === p.rail);
+    const period = payee?.billingPeriod;
+    if (!payee || !period) return [];
+    const since = this.clock().getTime() - BILLING_PERIOD_MS[period];
+    const paid = this.ledger
+      .activeReservations(w.warrantId)
+      .some(
+        (r) => r.payeeId === p.payeeId && r.rail === p.rail && Date.parse(r.reservedAt) > since,
+      );
+    return paid
+      ? [`${payee.displayName} bills once a ${period} and was already paid this ${period}`]
+      : [];
   }
 
   private emit(e: ControlEvent): void {
