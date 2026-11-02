@@ -145,6 +145,6 @@ growing toward 150+.
 
 ## Not in this cut
 
-Both rails (`pnpm scene:earnings`: earnings to Airwallex, the EUR licence fee) runs on the mock
-only, and the virtual card is in progress (#19). Add a short beat if either lands on the sandbox
+Both rails (`pnpm scene:earnings --sandbox`: earnings into Airwallex, USD to EUR, the EUR licence
+fee by SWIFT) now runs on the real Airwallex sandbox; the virtual card is in progress (#19). Add a short beat if either lands on the sandbox
 before Nov 11 and there is time under 4 minutes.
