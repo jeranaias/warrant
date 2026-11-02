@@ -1,5 +1,5 @@
 /**
- * One calm tint per agent, in agent order, shared by the rings in the scene and the dots in
+ * One calm tint per agent, in agent order, shared by the streams in the gate and the dots in
  * the agent list. All cool and muted on purpose: red and amber are kept for state (blocked,
  * waiting, stopped) and never used as an agent's colour.
  */

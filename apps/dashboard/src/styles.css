@@ -598,19 +598,17 @@ select {
   box-shadow: inset 0 0 180px rgba(255, 122, 112, 0.14);
 }
 
-/* The rings (components/Rings.tsx): centred in the space between the side panels. */
-.rings-wrap {
+.gate-wrap {
   position: absolute;
-  inset: 64px 24px 72px 300px;
+  inset: 64px 24px 72px 290px;
   display: grid;
   transition: right 0.35s ease;
 }
-
-.rings-wrap.sheet-open {
-  right: 420px;
+.gate-wrap.sheet-open {
+  right: 410px;
 }
 
-.rings {
+.gt {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -618,245 +616,147 @@ select {
   overflow: visible;
   font-family: var(--num);
 }
-
-.rg-floor {
-  fill: rgba(159, 180, 200, 0.035);
-  transition: fill 0.5s;
+.gt-in {
+  opacity: 0.42;
 }
-
-.rg-bound {
-  fill: none;
-  stroke: rgba(159, 180, 200, 0.55);
-  stroke-width: 1.5;
-  transition:
-    stroke 0.4s,
-    stroke-width 0.4s;
+.gt-out {
+  opacity: 0.34;
 }
-
-.rg-ticks {
-  fill: none;
-  stroke: rgba(159, 180, 200, 0.22);
-  stroke-width: 6;
-  stroke-dasharray: 0.08 0.92;
-  stroke-dashoffset: 0.04;
-  transform: rotate(-90deg);
+.gt-out.blocked {
+  opacity: 0.42;
 }
-
-.rg-ticks.major {
-  stroke-width: 10;
-  stroke-dasharray: 0.03 0.97;
-  stroke-dashoffset: 0.015;
-  stroke: rgba(159, 180, 200, 0.35);
+.gt-lane,
+.gt-agent {
+  transition: opacity 0.25s;
 }
-
-.rg-link {
-  stroke: rgba(159, 180, 200, 0.16);
-  stroke-width: 1;
-  stroke-dasharray: 2 5;
+.gt-lane.dim,
+.gt-agent.dim {
+  opacity: 0.18;
 }
-
-.rg-port {
-  fill: var(--bg);
-  stroke: rgba(159, 180, 200, 0.6);
-  stroke-width: 1.5;
-}
-
-.rg-node {
-  fill: var(--panel);
-  stroke: rgba(159, 180, 200, 0.45);
-  stroke-width: 2;
-}
-
-.rg-gate.paid .rg-node {
-  stroke: var(--text);
-}
-
-.rg-gate text {
-  font-family: var(--ui);
-}
-
-.rg-name {
-  fill: var(--text);
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.rg-sub {
-  fill: var(--muted);
-  font-family: var(--num);
-  font-size: 14px;
-}
-
-.rg-ring {
-  transition: opacity 0.3s;
-}
-
-.rg-ring.dim {
-  opacity: 0.3;
-}
-
-.rg-track {
-  fill: none;
-  stroke: currentColor;
-  opacity: 0.13;
-}
-
-.rg-arc {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 45%, transparent));
-  transition:
-    stroke-dasharray 0.9s cubic-bezier(0.4, 0, 0.2, 1),
-    stroke 0.4s;
-}
-
-.rg-ring.on .rg-arc {
-  filter: drop-shadow(0 0 10px currentColor);
-}
-
-.rg-label {
-  fill: currentColor;
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.rg-label.on-arc {
-  fill: var(--bg);
-}
-
-.rg-hit {
-  fill: none;
-  stroke: transparent;
-  pointer-events: stroke;
+.gt-agent {
   cursor: pointer;
+  outline: none;
 }
-
-.rg-ring:hover .rg-track {
-  opacity: 0.22;
+.gt-agent.sel .gt-name,
+.gt-agent:focus-visible .gt-name {
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
-
-.rg-centre {
+.gt-name {
   fill: var(--text);
-  font-size: 22px;
-  font-weight: 600;
+  font: 600 17px var(--ui);
 }
-
-.rg-centre-k {
+.gt-sub {
   fill: var(--muted);
   font-size: 12px;
-  font-weight: 500;
 }
-
-.rg-wait {
+.gt-sub.stop {
+  fill: var(--stop);
+}
+.gt-gate rect:first-child {
+  fill: var(--panel);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+.gt-slot {
+  opacity: 0.55;
+}
+.gt-gate-k {
+  fill: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+}
+.gt.is-stopped .gt-gate rect:first-child {
+  stroke: var(--stop);
+  stroke-width: 2.5;
+}
+.gt.is-stopped .gt-gate-k {
+  fill: var(--stop);
+}
+.gt-node.paid rect {
+  fill: var(--ok);
+}
+.gt-node.asked rect {
   fill: var(--wait);
 }
-
-.rg-wait-glow {
-  opacity: 0.25;
+.gt-node.blocked rect {
+  fill: var(--stop);
 }
-
-.moving .rg-wait-glow {
-  animation: rg-breathe 1.8s ease-in-out infinite;
-  transform-box: fill-box;
-  transform-origin: center;
+.gt-head {
+  font: 600 18px var(--ui);
 }
-
-.rg-wait text {
-  font-size: 12px;
-  font-weight: 600;
+.gt-node.paid .gt-head {
+  fill: var(--ok);
 }
-
-.rg-trail path {
+.gt-node.asked .gt-head {
+  fill: var(--wait);
+}
+.gt-node.blocked .gt-head {
+  fill: var(--stop);
+}
+.gt-line {
+  fill: var(--text);
+  font-size: 12.5px;
+  white-space: pre;
+}
+.gt-line.muted {
+  fill: var(--muted);
+}
+.gt-trail path {
   fill: none;
   stroke: currentColor;
   stroke-width: 3;
   stroke-linecap: round;
   filter: drop-shadow(0 0 4px currentColor);
 }
-
-.rg-trail circle {
+.gt-trail circle {
   fill: currentColor;
   filter: drop-shadow(0 0 6px currentColor);
 }
 
-.rg-trail.landed path,
-.rg-trail.landed > circle:not(.rg-land) {
-  opacity: 0;
-  transition: opacity 0.3s;
+/* the phone's copy: one stacked bar */
+.gt-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-
-.rg-land {
-  fill: none !important;
-  stroke: currentColor;
-  stroke-width: 2;
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: rg-land 0.9s ease-out forwards;
+.gt-bar-k {
+  color: var(--muted);
+  font: 500 0.72rem var(--num);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
-
-.rg-trail.blocked .rg-land {
-  stroke-width: 3;
+.gt-bar.is-stopped .gt-bar-k {
+  color: var(--stop);
 }
-
-/* stopped: the rings go grey, the warrant circle turns red and closes */
-.rings.is-stopped .rg-ring {
-  color: #6b5656 !important;
+.gt-bar-track {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--sunk);
 }
-
-.rings.is-stopped .rg-bound {
-  stroke: var(--stop);
-  stroke-width: 4;
+.gt-bar-track span {
+  flex-basis: 0;
+  min-width: 4px;
 }
-
-.rings.is-stopped .rg-floor {
-  fill: rgba(255, 122, 112, 0.08);
+.gt-bar-track .paid {
+  background: var(--ok);
 }
-
-.rings.is-stopped .rg-ticks {
-  stroke: rgba(255, 122, 112, 0.4);
+.gt-bar-track .asked {
+  background: var(--wait);
 }
-
-/* the phone's small copy: rings and circle only */
-.rings.compact {
-  position: static;
-  display: block;
-  width: 100%;
-  max-width: 280px;
-  height: auto;
-  margin: 0 auto;
+.gt-bar-track .blocked {
+  background: var(--stop);
 }
-
-.rings.compact .rg-label {
-  font-size: 10px;
+.gt-bar-why {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
-
-@keyframes rg-breathe {
-  50% {
-    transform: scale(1.35);
-    opacity: 0.1;
-  }
-}
-
-@keyframes rg-land {
-  from {
-    transform: scale(0.4);
-    opacity: 1;
-  }
-  to {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .moving .rg-wait-glow,
-  .rg-land {
-    animation: none;
-  }
+.gt-bar-why b {
+  color: var(--text);
+  font-weight: 500;
 }
 
 .hud {
@@ -1353,13 +1253,6 @@ kbd {
     position: relative;
     min-height: 100%;
     overflow: visible;
-  }
-  .rings-wrap,
-  .rings-wrap.sheet-open {
-    position: relative;
-    inset: auto;
-    height: 52vh;
-    padding: 64px 16px 0;
   }
   .hud {
     position: relative;

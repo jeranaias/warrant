@@ -9,7 +9,7 @@ import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
 import { ApprovalCard, keyOf } from "./Approvals.js";
 import { Chain } from "./Chain.js";
-import { Rings } from "./Rings.js";
+import { Gate } from "./Gate.js";
 import { Scene } from "./Scene.js";
 import { StopButton } from "./StopButton.js";
 
@@ -22,7 +22,7 @@ import { StopButton } from "./StopButton.js";
  *            else the STOP receipt
  *   bottom   drawers (activity, mandates, scenarios), the latest payment, STOP (S, Enter)
  *
- * The rings (Rings.tsx) sit in the space between the side panels.
+ * The gate (Gate.tsx) sits in the space between the side panels.
  */
 
 type Engine = ReturnType<typeof useEngine>;
@@ -65,7 +65,7 @@ export function CommandPage({
   const stopped = engine.kill?.engaged ?? false;
   const payees = useMemo(() => payeeNodes(warrants), [warrants]);
   const passes = useMemo(() => passesOf(engine.events, warrants), [engine.events, warrants]);
-  const { total, lanes, paidTo } = useMemo(() => tally(passes), [passes]);
+  const { total, lanes } = useMemo(() => tally(passes), [passes]);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer | null>(null);
@@ -111,15 +111,12 @@ export function CommandPage({
   return (
     <div className={`cmdpage${stopped ? " is-stopped" : ""}`}>
       <div
-        className={`rings-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) ? " sheet-open" : ""}`}
+        className={`gate-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) ? " sheet-open" : ""}`}
       >
         {engine.world && (
-          <Rings
+          <Gate
             warrants={warrants}
-            payees={payees}
-            paidTo={paidTo}
             passes={passes}
-            approvals={engine.approvals}
             stopped={stopped}
             motion={motion}
             selected={selected}

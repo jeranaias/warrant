@@ -7,14 +7,14 @@ import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
 import type { EngineState } from "../useEngine.js";
 import { ApprovalCard } from "./Approvals.js";
-import { Rings } from "./Rings.js";
+import { GateBar } from "./Gate.js";
 import { StopButton } from "./StopButton.js";
 
 /**
  * The owner's phone (open the dashboard at #/m): only what needs a thumb.
  *
  *   top      state and counts
- *   rings    budget left per agent, the same picture as the desktop, small
+ *   gate     paid / waiting / blocked as one bar, the top block reason, budget left per agent
  *   waiting  one approval at a time, big Approve / Deny; the rest queue underneath
  *   recent   the last payments
  *   bottom   STOP, always in reach
@@ -76,7 +76,7 @@ export function Phone({
       </header>
 
       <section className="ph-gauge">
-        {warrants.length > 0 && <Rings warrants={warrants} stopped={stopped} compact />}
+        <GateBar passes={passes} stopped={stopped} />
         <dl className="counts ph-counts">
           <div>
             <dt>paid</dt>
