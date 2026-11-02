@@ -1,3 +1,4 @@
+import { isOwner } from "../api.js";
 import type { EngineState } from "../useEngine.js";
 import { Approvals } from "./Approvals.js";
 import { Activity } from "./Activity.js";
@@ -25,6 +26,11 @@ export function Phone({
           {stopped ? "everything stopped" : `${engine.approvals.length} waiting`}
         </span>
       </header>
+      {!isOwner() && (
+        <p className="muted small">
+          View only. Open the owner link the engine printed to approve or stop.
+        </p>
+      )}
       <Approvals approvals={engine.approvals} onDone={onDone} onError={onError} />
       <div className="phone-stop">
         <StopButton kill={engine.kill} onDone={onDone} onError={onError} big />

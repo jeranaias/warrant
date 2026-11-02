@@ -54,6 +54,8 @@ export class ScriptedBrain implements Brain {
         justification: why,
       }));
     }
+    // Sweeps and spend reviews get their treasury behaviour with the treasury agent (#26).
+    if (task.kind !== "invoice") return [];
     const one: ProposePaymentInput = {
       rail: "airwallex_transfer",
       payeeId: told.payeeId ?? told.address ?? task.payeeId,

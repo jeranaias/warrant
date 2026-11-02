@@ -66,6 +66,8 @@ export const RefundReason = z.enum([
   "not_customers_order", // the order's payer is not the disputing customer
   "already_refunded",
   "order_not_found",
+  "owner_authorized", // "my agent never agreed": the pass shows the customer's owner signed for it
+  "authorization_not_proven", // ...and nothing on file shows that they did
 ]);
 export type RefundReason = z.infer<typeof RefundReason>;
 

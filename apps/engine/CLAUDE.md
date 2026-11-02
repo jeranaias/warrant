@@ -19,7 +19,14 @@ read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 400
    the dashboard.
 
 **Owner side:** `GET /approvals` lists what waits; `POST /approvals/<proposalId>` with
-`{"decision":"approved"}` or `{"decision":"denied"}` answers it.
+`{"decision":"approved","shownHash":"<the shownHash you displayed>"}` (or `"denied"`) answers it.
+The hash is required (ADR-007): an answer is bound to exactly what the owner saw, so a missing hash
+is a 400 and a stale or different one is refused.
+
+**Owner's key:** `pnpm engine` makes a fresh owner key each start (or uses `OWNER_TOKEN`) and
+prints the owner link, `<dashboard>/#/m?owner=<key>`. Answering approvals and `POST /kill` need
+`Authorization: Bearer <key>` (401 otherwise); every read stays open. The dashboard moves the key
+from the link into the tab's session storage. `createEngine()` without `ownerToken` (tests) is open.
 
 **Owner controls:** `POST /kill` is the emergency stop (everything refused at once, approvals
 dropped, mock mandates revoked; the answer says how long it took). `POST /budget-changes` takes
@@ -30,6 +37,19 @@ replaced and the next warrant version signed.
 each mandate. `GET /chain` shows mandates, spend and on-chain refusals; `POST /upstream/price
 {"cents":4}` raises the provider's price; `POST /limits-only/pay` pays around Warrant (benchmark
 "limits only" mode). `pnpm scene` plays the Kit 11 price rise and limit change start to finish.
+
+**Airwallex (lane B base):** `pnpm scene:earnings` plays DEMO beat 6 on the mock chain and the
+Airwallex mock: the store's earnings move off Metal (`mandate pull`), land as an Airwallex deposit
+referenced by the tx hash, and treasury pays the EUR 50 licence fee through control (the adapter in
+`packages/rails/src/airwallex` converts USD to EUR when the wallet is short, then sends a LOCAL
+transfer; PAID is confirmed on `controller.reconcile()`). `mockAirwallexWorld()` builds that world;
+`pnpm engine` still uses the always-pays Airwallex stand-in.
+**Disputes (ADR-012):** `GET /orders` lists the store's signed orders with their passes.
+`POST /disputes {"orderIds":["ord_1","ord_2"],"claim":"wrong_data"}` (claims: `wrong_data`,
+`not_delivered`, `not_authorized`, `other`) answers with one decision per order and the evidence
+behind it: the settlement on chain, the signed order, the customer's pass, the data batch. It
+moves no money; support then refunds through `POST /proposals` (`refundOfOrderId`), paid by
+`mandate pull`. `pnpm scene:dispute` plays the dispute beat start to finish (mock chain).
 
 **Scenarios:** `POST /scenario {"name":"normal|price_rise|dispute|attacks|all"}` replaces the queue
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is

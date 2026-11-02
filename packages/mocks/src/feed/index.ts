@@ -174,9 +174,21 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
 export class TaskFeed {
   private queue: FeedItem[] = [];
   private readonly served: FeedItem[] = [];
+  private loads = 0;
 
+  /**
+   * Queue a scenario. Reloading one gives its tasks fresh task ids and sourceRefs (`_2`, `_3`...):
+   * each load is new work, and control pays each offer or invoice once.
+   */
   load(items: FeedItem[]): number {
-    this.queue.push(...items);
+    const k = ++this.loads;
+    const fresh = (id: string) => (k === 1 ? id : `${id}_${k}`);
+    this.queue.push(
+      ...items.map((it) => ({
+        ...it,
+        task: { ...it.task, taskId: fresh(it.task.taskId), sourceRef: fresh(it.task.sourceRef) },
+      })),
+    );
     return this.queue.length;
   }
 

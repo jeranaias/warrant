@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, Money, Timestamp } from "./common.js";
+import { AgentRole, Id, Money, Timestamp } from "./common.js";
 import { DisputeClaim } from "./orders.js";
 
 /**
@@ -45,7 +45,7 @@ export const DisputeTask = z
   .strict();
 export type DisputeTask = z.infer<typeof DisputeTask>;
 
-/** Treasury: a bill or balance to act on. */
+/** Treasury: a bill to pay (the licence fee, a software seat). */
 export const TreasuryTask = z
   .object({
     ...base,
@@ -58,5 +58,60 @@ export const TreasuryTask = z
   .strict();
 export type TreasuryTask = z.infer<typeof TreasuryTask>;
 
-export const AgentTask = z.discriminatedUnion("kind", [DataOfferTask, DisputeTask, TreasuryTask]);
+/**
+ * Treasury: earnings sit in the business's Metal account; move them toward Airwallex (Kit 11).
+ * The answer is one `treasury_sweep` proposal to `payeeId`, our own Metal address on the warrant;
+ * rails then record the simulated Airwallex deposit with the tx hash (ADR-010 item 4).
+ * `available` is read by the engine from the ledger, never from `content`.
+ */
+export const SweepTask = z
+  .object({
+    ...base,
+    kind: z.literal("sweep"),
+    role: z.literal("treasury"),
+    payeeId: Id,
+    available: Money,
+  })
+  .strict();
+export type SweepTask = z.infer<typeof SweepTask>;
+
+/** One agent's current limits and spend, as control's ledger and the signed warrant say. */
+export const AgentSpend = z
+  .object({
+    role: AgentRole,
+    warrantId: Id,
+    perPaymentCap: Money,
+    totalBudget: Money,
+    spent: Money,
+  })
+  .strict();
+export type AgentSpend = z.infer<typeof AgentSpend>;
+
+/**
+ * Treasury: how spending stands against the limits, so treasury can propose new ones (Kit 11:
+ * "treasury proposes new limits within the 20 USDZ total"). The answer is zero or more
+ * `BudgetChangeProposal`s, which always wait for the owner (ADR-007). The numbers are data from
+ * control, not instructions: control re-checks any proposal against `totalLimit` and spend.
+ */
+export const SpendReviewTask = z
+  .object({
+    ...base,
+    kind: z.literal("spend_review"),
+    role: z.literal("treasury"),
+    agents: z.array(AgentSpend).min(1).max(3),
+    /** The total all agents' budgets must stay within. */
+    totalLimit: Money,
+    /** The upstream price now, when it is why sourcing is being refused. */
+    upstreamPrice: Money.optional(),
+  })
+  .strict();
+export type SpendReviewTask = z.infer<typeof SpendReviewTask>;
+
+export const AgentTask = z.discriminatedUnion("kind", [
+  DataOfferTask,
+  DisputeTask,
+  TreasuryTask,
+  SweepTask,
+  SpendReviewTask,
+]);
 export type AgentTask = z.infer<typeof AgentTask>;

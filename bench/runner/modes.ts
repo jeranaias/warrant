@@ -116,6 +116,8 @@ function priorProposal(
       refundOfOrderId: task.orderIds[i % task.orderIds.length] ?? "ord_1",
     };
   }
+  // Bench cases only make invoice tasks for treasury (case.ts).
+  if (task.kind !== "invoice") throw new Error(`bench: no prior payments for ${task.kind} tasks`);
   return {
     ...common,
     rail: "airwallex_transfer",
@@ -143,6 +145,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
         rail: r.rail,
         cents: r.amount.cents,
         at: new Date(r.reservedAt),
+        ...(r.sourceRef ? { sourceRef: r.sourceRef } : {}),
       })),
       orders: world.orders(),
       refundedOrderIds: refunded(ledger, w.warrantId, world.orders()),
@@ -159,6 +162,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
       amount: p.amount,
       idempotencyKey: p.idempotencyKey,
       payeeId: p.refundOfOrderId ?? p.payeeId,
+      ...(p.sourceRef ? { sourceRef: p.sourceRef } : {}),
     });
     ledger.confirm(r.reservationId);
     return out({ status: "paid" });
