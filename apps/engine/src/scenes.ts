@@ -1,6 +1,8 @@
 import type { PaymentProposal } from "@warrant/contracts";
 import { UPSTREAM_PRICE_AFTER, UPSTREAM_PRICE_BEFORE } from "@warrant/control";
+import type { DisputeFile } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
+import { answerDispute } from "./disputes.js";
 import { createEngine } from "./server.js";
 import type { Engine } from "./server.js";
 import { AGENTS, OWNER_ID } from "./world.js";
@@ -187,6 +189,99 @@ export async function limitChangeScene(
     step: "old credential tries to pay",
     outcome: old.kind === "refused" ? `chain refused: ${old.reason}` : old.kind,
     moneyMoved: old.kind === "paid",
+  });
+  return steps;
+}
+
+const said = (f: DisputeFile) =>
+  f.findings
+    .map((x) =>
+      x.decision.refund.cents > 0
+        ? `${x.orderId} refund ${x.decision.refund.cents}c (${x.decision.reason})`
+        : `${x.orderId} no refund (${x.decision.reason})`,
+    )
+    .join("; ");
+
+/**
+ * Kit 11 beat, Metal's ask (ADR-012): a customer disputes. The store decides from evidence alone
+ * and refunds by `mandate pull` only what the evidence supports:
+ *   1. "the data was wrong" on two orders: one came from a bad batch (refund), one did not (stands)
+ *   2. support refunds the bad one: 5 cents back to the order's payer, no owner tap (ADR-013)
+ *   3. a follow-up ticket asks again, plus an order that never existed: nothing to refund
+ *   4. support tries the same refund anyway: our rules refuse it (one refund per order)
+ *   5. "my agent never agreed to this one": the customer's own owner signed the pass, so it stands
+ */
+export async function disputeScene(
+  now = () => new Date(),
+  engine = createEngine({ scenario: "none", clock: now }),
+): Promise<SceneStep[]> {
+  const { controller, world } = engine;
+  const steps: SceneStep[] = [];
+
+  const first = await answerDispute(
+    engine,
+    { disputeId: "dsp_scene_1", orderIds: ["ord_1", "ord_2"], claim: "wrong_data" },
+    now(),
+  );
+  steps.push({ step: "customer: the data was wrong", outcome: said(first), moneyMoved: false });
+
+  let n = 0;
+  const refund = (orderId: string, cents: number): PaymentProposal => ({
+    proposalId: `prop_refund_${++n}`,
+    warrantId: AGENTS.support.warrantId,
+    agentId: AGENTS.support.agentId,
+    agentRole: "support",
+    rail: "metal_x402",
+    payeeId: "customer",
+    amount: { currency: "USDZ", cents },
+    category: "customer_refund",
+    recurrence: "one_off",
+    refundOfOrderId: orderId,
+    idempotencyKey: `scene-dispute-refund-${n}`,
+    justification: "the store's dispute file says refund",
+    createdAt: now().toISOString(),
+  });
+
+  for (const f of first.findings.filter((x) => x.decision.refund.cents > 0)) {
+    const before = world.settled().length;
+    const r = await controller.submit(refund(f.orderId, f.decision.refund.cents));
+    steps.push({
+      step: `support refunds ${f.orderId} (mandate pull)`,
+      outcome: r.execution?.status ?? r.blockedBy ?? (r.approval ? "waiting for the owner" : "?"),
+      ...moved(engine, before),
+    });
+  }
+
+  const again = await answerDispute(
+    engine,
+    { disputeId: "dsp_scene_2", orderIds: ["ord_1", "ord_404"], claim: "wrong_data" },
+    now(),
+  );
+  steps.push({
+    step: "customer asks again, adds ord_404",
+    outcome: said(again),
+    moneyMoved: false,
+  });
+
+  const before = world.settled().length;
+  const twice = await controller.submit(refund("ord_1", 5));
+  const failedRules = twice.decision?.rules.checks.filter((c) => !c.pass).map((c) => c.rule);
+  steps.push({
+    step: "support tries to refund ord_1 again",
+    outcome: `${twice.blockedBy ?? "not blocked"} (${(failedRules ?? []).join(", ")})`,
+    ...moved(engine, before),
+  });
+
+  const denied = await answerDispute(
+    engine,
+    { disputeId: "dsp_scene_3", orderIds: ["ord_3"], claim: "not_authorized" },
+    now(),
+  );
+  const ev = denied.findings[0]?.evidence ?? [];
+  steps.push({
+    step: "customer: my agent never agreed",
+    outcome: `${said(denied)}: ${ev.filter((e) => e.ok).length} of ${ev.length} checks hold`,
+    moneyMoved: false,
   });
   return steps;
 }

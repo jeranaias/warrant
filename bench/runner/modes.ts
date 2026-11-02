@@ -143,6 +143,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
         rail: r.rail,
         cents: r.amount.cents,
         at: new Date(r.reservedAt),
+        ...(r.sourceRef ? { sourceRef: r.sourceRef } : {}),
       })),
       orders: world.orders(),
       refundedOrderIds: refunded(ledger, w.warrantId, world.orders()),
@@ -159,6 +160,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
       amount: p.amount,
       idempotencyKey: p.idempotencyKey,
       payeeId: p.refundOfOrderId ?? p.payeeId,
+      ...(p.sourceRef ? { sourceRef: p.sourceRef } : {}),
     });
     ledger.confirm(r.reservationId);
     return out({ status: "paid" });

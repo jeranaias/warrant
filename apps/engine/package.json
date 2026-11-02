@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "scene": "tsx src/scene.ts",
     "scene:earnings": "tsx src/scene-earnings.ts",
+    "scene:dispute": "tsx src/scene-dispute.ts",
     "setup:testnet": "tsx src/setup-testnet.ts",
     "reset:live": "tsx src/reset-live.ts"
   },

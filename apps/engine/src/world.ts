@@ -11,7 +11,17 @@ import type {
   Warrant,
   WarrantBody,
 } from "@warrant/contracts";
-import { AGENT_BUDGETS, QUERY_PRICE, TOTAL_BUDGET, signWarrant } from "@warrant/control";
+import {
+  AGENT_BUDGETS,
+  QUERY_PRICE,
+  TOTAL_BUDGET,
+  canonicalHash,
+  encodePass,
+  issueGrant,
+  issuePass,
+  keyB64,
+  signWarrant,
+} from "@warrant/control";
 import type { PurposeChecker } from "@warrant/control";
 import { MetalAdapter, classifyPay, classifyPull } from "@warrant/rails";
 import type {
@@ -25,7 +35,7 @@ import type { Rail } from "@warrant/contracts";
 import { MockMetalChain, UPSTREAM_PAY_TO, UPSTREAM_URL, addUpstream } from "@warrant/mocks/metal";
 
 /**
- * The engine's pretend world: an owner, three signed warrants, two stored orders, a mock Metal
+ * The engine's pretend world: an owner, three signed warrants, three stored orders, a mock Metal
  * chain that enforces each agent's mandate (with the upstream provider selling on it) and an
  * Airwallex rail that always succeeds. Everything is in memory and made fresh at startup. Nothing
  * here touches a real key, account or network. `live.ts` builds the same World on the real Metal
@@ -156,8 +166,61 @@ export function bodies(
   ];
 }
 
-function order(orderId: string, at: Date): SignedOrderRecord {
+/** The upstream batch that went out stale: data we sold from it was wrong (the dispute beat). */
+export const BAD_BATCH = "bat_stale";
+const ORDER_BATCHES: Record<string, string> = {
+  ord_1: BAD_BATCH,
+  ord_2: "bat_good",
+  ord_3: "bat_good",
+};
+const STORE_QUERY_URL = "http://127.0.0.1:4021/query/fx-eurusd";
+
+/**
+ * The customer's own warrant: their owner signed a grant for data purchases from our store, and
+ * their control signed a pass for each purchase. The store kept each pass with the order.
+ */
+function customerPasses(at: Date) {
+  const owner = generateKeyPairSync("ed25519");
+  const control = generateKeyPairSync("ed25519");
+  const grant = issueGrant(
+    {
+      grantId: "grt_customer",
+      warrantId: "wrt_customer",
+      warrantVersion: 1,
+      ownerId: "own_customer",
+      payer: CUSTOMER_ADDRESS,
+      categories: ["data_purchase"],
+      perPaymentCap: QUERY_PRICE,
+      sellers: [STORE_ADDRESS],
+      delegateKey: keyB64(control.publicKey),
+      ownerKeyId: "customer-owner-1",
+      ownerKey: keyB64(owner.publicKey),
+      notAfter: DEMO_EXPIRY,
+    },
+    owner.privateKey,
+  );
+  return (orderId: string) =>
+    encodePass(
+      issuePass(
+        grant,
+        {
+          grantId: grant.grantId,
+          nonce: `nonce_${orderId}`,
+          url: STORE_QUERY_URL,
+          payTo: STORE_ADDRESS,
+          amount: QUERY_PRICE,
+          category: "data_purchase",
+          proposalHash: canonicalHash({ orderId }),
+          at: at.toISOString(),
+        },
+        control.privateKey,
+      ),
+    );
+}
+
+function order(orderId: string, at: Date, passFor: (orderId: string) => string): SignedOrderRecord {
   const h = createHash("sha256").update(orderId).digest("hex");
+  const batch = ORDER_BATCHES[orderId];
   return {
     orderId,
     resource: "GET /query/fx-eurusd",
@@ -169,6 +232,8 @@ function order(orderId: string, at: Date): SignedOrderRecord {
     settlementId: `stl_${orderId}`,
     signedOffer: "{}",
     deliveredSha256: h,
+    ...(batch ? { upstreamBatchId: batch } : {}),
+    buyerPass: passFor(orderId),
     at: at.toISOString(),
   };
 }
@@ -233,6 +298,13 @@ export interface World {
   warrants: Map<string, Warrant>;
   /** Stored signed orders: three made-up ones in mock mode, our store's real ones in sandbox. */
   orders: () => ReadonlyMap<string, SignedOrderRecord>;
+  /** Upstream batches known to be bad (the store refunds what it sold from them). */
+  badBatches: ReadonlySet<string>;
+  /**
+   * The order's settlement is on chain as recorded. Mock: the order's tx is one the world sold.
+   * Sandbox: not wired yet (metal-pay's `verifyMandatePayment`); disputes run in mock mode.
+   */
+  verifySettlement?: (order: SignedOrderRecord) => Promise<{ ok: boolean; detail: string }>;
   /** Mock mode only: the in-memory chain behind `GET /chain`. */
   chain?: MockMetalChain;
   upstream: UpstreamSeller;
@@ -326,7 +398,9 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
       signWarrant(b, privateKey, "owner-demo"),
     ]),
   );
-  const orders = new Map(["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now)]));
+  const passFor = customerPasses(now);
+  const orders = new Map(["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now, passFor)]));
+  const sold = new Set([...orders.values()].map((o) => o.txHash));
 
   // One mandate per Metal agent, same limits as its warrant (ADR-009 #2).
   const chain = new MockMetalChain();
@@ -378,6 +452,13 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
     budgetCheck: totalBudgetCheck(warrants),
     warrants,
     orders: () => orders,
+    badBatches: new Set([BAD_BATCH]),
+    verifySettlement: (o) =>
+      Promise.resolve(
+        sold.has(o.txHash)
+          ? { ok: true, detail: `settlement ${o.txHash.slice(0, 10)}... is on chain as recorded` }
+          : { ok: false, detail: "no settlement on chain matches this order" },
+      ),
     chain,
     upstream,
     payAround: (cred) => chain.runner()(["pay", UPSTREAM_URL, "--mandate", cred], 60_000),
