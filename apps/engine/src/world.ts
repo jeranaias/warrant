@@ -585,6 +585,13 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
         metalHome: "mock-metal-home",
         rpcUrl: "mock",
         quote: (url) => Promise.resolve(url === UPSTREAM_URL ? upstream.price() : undefined),
+        // The facilitator's /settlements lookup: settles a pay whose answer was lost (ADR-019).
+        lookupSettlement: (_url, nonce) => {
+          const tx = chain.settlementByNonce(nonce);
+          return Promise.resolve(
+            tx ? { status: "succeeded", railRef: tx.hash, detail: "paid" } : undefined,
+          );
+        },
       }),
       airwallex_transfer: opts.airwallex?.transfers ?? new AlwaysPaysRail("airwallex_transfer"),
       ...(card ? { airwallex_card: card } : {}),
