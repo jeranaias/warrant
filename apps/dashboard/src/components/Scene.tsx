@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api.js";
 import type { ChainView, WarrantRow } from "../api.js";
-import { cents } from "../format.js";
+import { SCENARIOS, cents, scenarioLabel } from "../format.js";
 
 /**
- * Demo controls, not owner controls: change the world the agents live in. Raise the upstream
- * price, load a scenario (the queue of offers, tickets and invoices), or have treasury ask for
- * a cap that fits the new price (it lands in "Waiting for you").
+ * Demo controls, not owner controls: change the world the agents live in. Raise the data
+ * supplier's price, load a scenario (the queue of offers, tickets and invoices), or have treasury
+ * ask for a sourcing cap that fits the new price (it lands in "Waiting for you").
  */
 export function Scene({
   chain,
@@ -46,10 +46,10 @@ export function Scene({
 
   return (
     <section className="panel">
-      <h2>Scene control</h2>
+      <h2>Scenarios</h2>
       <p className="muted small">For the demo. These change the world, not your rules.</p>
       <div className="row">
-        <span>Upstream price: {cents(price)}</span>
+        <span>Data supplier's price: {cents(price)}</span>
         {[2, 4].map((c) => (
           <button
             key={c}
@@ -58,7 +58,7 @@ export function Scene({
             onClick={() =>
               void run(async () => {
                 const r = await api.setUpstreamPrice(c);
-                return `Upstream now charges ${cents(r.upstreamPriceCents)} per call.`;
+                return `The data supplier now charges ${cents(r.upstreamPriceCents)} per call.`;
               })
             }
           >
@@ -72,7 +72,7 @@ export function Scene({
           <select value={picked} onChange={(e) => setPicked(e.target.value)}>
             {(scenarios.length ? scenarios : ["all"]).map((s) => (
               <option key={s} value={s}>
-                {s}
+                {scenarioLabel(s)}
               </option>
             ))}
           </select>
@@ -82,13 +82,14 @@ export function Scene({
           onClick={() =>
             void run(async () => {
               const r = await api.loadScenario(picked);
-              return `Loaded "${picked}": ${r.queued} task(s) queued for the agents.`;
+              return `${scenarioLabel(picked)}: ${r.queued} task(s) queued for the agents.`;
             })
           }
         >
-          Load
+          Run
         </button>
       </div>
+      {SCENARIOS[picked] && <p className="muted small">{SCENARIOS[picked].what}</p>}
       {sourcing && treasury && price !== undefined && (
         <div className="row">
           <button
@@ -106,11 +107,11 @@ export function Scene({
                   createdAt: new Date().toISOString(),
                 });
                 if (!r.ok) throw new Error(r.error ?? "budget change refused");
-                return "Treasury asked for a new cap. See Waiting for you.";
+                return "Treasury asked for a new sourcing cap. It is waiting for you.";
               })
             }
           >
-            Treasury asks for a {cents(price)} cap
+            Treasury asks to set the sourcing cap to {cents(price)}
           </button>
         </div>
       )}

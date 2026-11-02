@@ -1351,9 +1351,9 @@ kbd {
 
 .ph-agents li {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 2px 10px;
   padding: 10px 0;
   font-size: 0.86rem;
 }
@@ -1369,11 +1369,81 @@ kbd {
   white-space: nowrap;
 }
 
-.ph-pct,
 .ph-n {
+  grid-column: 2 / -1;
   font-size: 0.74rem;
-  min-width: 3ch;
-  text-align: right;
+}
+
+/* First visit: three steps along the bottom (components/FirstRun.tsx). */
+.firstrun {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0;
+  padding: 6px 8px 6px 16px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--solid);
+  font-size: 0.82rem;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.firstrun li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.firstrun .btn.link {
+  padding: 0;
+  font-weight: 600;
+}
+
+.firstrun .done {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.fr-n {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font: 600 0.7rem var(--num);
+}
+
+.firstrun .done .fr-n {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.firstrun .drawer-x {
+  width: 24px;
+  height: 24px;
+}
+
+.ask-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 900px) {
+  .firstrun {
+    position: static;
+    transform: none;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
 }
 
 .ph-note {

@@ -101,11 +101,10 @@ export function Phone({
                 <span className="mono">
                   {cents(Math.max(0, w.totalBudget.cents - w.spentCents), w.totalBudget.currency)}
                 </span>
-                <span className="mono muted ph-pct">
-                  {Math.round(leftFraction(w.spentCents, w.totalBudget.cents) * 100)}%
-                </span>
                 <span className="mono muted ph-n">
-                  {n.paid} · <span className={n.blocked ? "fate blocked" : ""}>{n.blocked}</span>
+                  {Math.round(leftFraction(w.spentCents, w.totalBudget.cents) * 100)}% left ·{" "}
+                  {n.paid} paid ·{" "}
+                  <span className={n.blocked ? "fate blocked" : ""}>{n.blocked} blocked</span>
                 </span>
               </li>
             );

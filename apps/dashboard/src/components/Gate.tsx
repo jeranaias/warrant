@@ -64,6 +64,7 @@ export function Gate({
   motion,
   selected,
   onSelect,
+  limits = 0,
 }: {
   warrants: WarrantRow[];
   passes: Pass[];
@@ -71,6 +72,8 @@ export function Gate({
   motion: boolean;
   selected: string | null;
   onSelect: (warrantId: string | null) => void;
+  /** New limits waiting for the owner: not payments, but held for them all the same. */
+  limits?: number;
 }) {
   // Draw at the box's real pixel size so text stays the same size however wide the box is.
   const box = useRef<SVGSVGElement>(null);
@@ -126,7 +129,7 @@ export function Gate({
   // Right: three outcome nodes; each agent's band splits into its share of each.
   const outN: Record<Fate, number> = {
     paid: total.paid,
-    asked: total.asked,
+    asked: total.asked + limits,
     blocked: total.blocked,
   };
   const outSlot = PLOT / 3;
@@ -195,7 +198,7 @@ export function Gate({
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={`${count} payment requests: ${total.paid} paid, ${total.asked} waiting for you, ${total.blocked} blocked`}
+      aria-label={`${count} payment requests: ${total.paid} paid, ${total.asked + limits} waiting for you, ${total.blocked} blocked`}
     >
       {agents.map((a, i) => (
         <g key={a.w.warrantId} className={`gt-lane${dim(a.w.warrantId) ? " dim" : ""}`}>
@@ -288,7 +291,10 @@ export function Gate({
           fate === "paid"
             ? paid.map((m) => money(m))
             : fate === "asked"
-              ? held.slice(0, 2).map((g) => `${g.n} × ${g.text}`)
+              ? [
+                  ...(limits > 0 ? [`${limits} × new limits`] : []),
+                  ...held.slice(0, limits > 0 ? 1 : 2).map((g) => `${g.n} × ${g.text}`),
+                ]
               : reasons.slice(0, 4).map((r) => `${r.n}  ${r.reason}`);
         const more =
           fate === "blocked" && reasons.length > 4
@@ -317,7 +323,7 @@ export function Gate({
       })}
 
       {count === 0 && (
-        <text className="gt-sub" x={(GX0 + GX1) / 2} y={H / 2 + 4} textAnchor="middle">
+        <text className="gt-sub" x={(GX0 + GX1) / 2} y={gateY + gateH + 40} textAnchor="middle">
           no requests yet
         </text>
       )}
