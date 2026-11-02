@@ -10,6 +10,7 @@ import { ApprovalCard } from "./Approvals.js";
 import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { GateBar } from "./Gate.js";
+import { Seller } from "./Seller.js";
 import { StopButton } from "./StopButton.js";
 
 /**
@@ -162,6 +163,8 @@ export function Phone({
       </section>
 
       <FirstRun events={engine.events} stopped={stopped} onDone={onDone} onError={onError} />
+
+      <Seller events={engine.events} max={2} />
 
       {!owner && (
         <p className="ph-note">

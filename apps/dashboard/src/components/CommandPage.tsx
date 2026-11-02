@@ -15,6 +15,7 @@ import {
 } from "../format.js";
 import { OTHER, leftFraction, limitRequests, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
+import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
@@ -23,7 +24,9 @@ import { Chain } from "./Chain.js";
 import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { Gate } from "./Gate.js";
+import { LiveRuns } from "./LiveRuns.js";
 import { Scene } from "./Scene.js";
+import { Seller } from "./Seller.js";
 import { StopButton } from "./StopButton.js";
 
 /**
@@ -40,7 +43,7 @@ import { StopButton } from "./StopButton.js";
  */
 
 type Engine = ReturnType<typeof useEngine>;
-type Drawer = "activity" | "mandates" | "scenarios";
+type Drawer = "activity" | "mandates" | "scenarios" | "live";
 
 /** Committed with the corpus; `pnpm bench` rewrites it and CI fails when it is stale. */
 const BENCH_LINE = benchLine(bench);
@@ -88,6 +91,7 @@ export function CommandPage({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer | null>(null);
+  const atStore = useMemo(() => sellerMoments(engine.events).length > 0, [engine.events]);
   const motion = useMotion();
   const clock = useUtcClock();
 
@@ -125,7 +129,7 @@ export function CommandPage({
   return (
     <div className={`cmdpage${stopped ? " is-stopped" : ""}`}>
       <div
-        className={`gate-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) ? " sheet-open" : ""}`}
+        className={`gate-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) || atStore ? " sheet-open" : ""}`}
       >
         {engine.world && (
           <Gate
@@ -198,7 +202,9 @@ export function CommandPage({
               stopped={stopped}
               onClose={() => setSelected(null)}
             />
-          ) : null}
+          ) : (
+            <Seller events={engine.events} />
+          )}
         </aside>
 
         {drawer && (
@@ -217,6 +223,7 @@ export function CommandPage({
                 onError={onError}
               />
             )}
+            {drawer === "live" && <LiveRuns />}
           </section>
         )}
 
@@ -236,6 +243,7 @@ export function CommandPage({
                 ["activity", "Activity", "L"],
                 ["mandates", "Mandates", null],
                 ["scenarios", "Scenarios", null],
+                ["live", "Live runs", null],
               ] as const
             ).map(([id, label, key]) => (
               <button
