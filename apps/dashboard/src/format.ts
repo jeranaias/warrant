@@ -308,7 +308,10 @@ export function benchLine(h: BenchHeadline | null | undefined): string | null {
 
 /** Plain names for the engine's scenario ids, and one line on what each does. */
 export const SCENARIOS: Record<string, { label: string; what: string }> = {
-  normal: { label: "Normal day", what: "Routine data purchases and the monthly licence fee." },
+  normal: {
+    label: "Normal day",
+    what: "Routine data purchases, the monthly licence fee, and a second licence bill that waits for you.",
+  },
   price_rise: {
     label: "Supplier raises the price",
     what: "The data supplier raises its price above the sourcing agent's cap.",

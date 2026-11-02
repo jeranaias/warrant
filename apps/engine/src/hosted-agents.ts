@@ -8,6 +8,8 @@ import {
   counterIds,
   runTask,
 } from "@warrant/agents/offline";
+import { deterministicPurpose } from "@warrant/control";
+import { createEngine } from "./server.js";
 import type { Engine } from "./server.js";
 
 /**
@@ -19,6 +21,14 @@ import type { Engine } from "./server.js";
  * loopback port. One task at a time, round robin across the roles, `paceMs` apart, so a person can
  * watch each payment reach the gate. STOP needs nothing here: control refuses everything after it.
  */
+
+/**
+ * One visitor's engine: the deterministic purpose check, and an empty queue. The agents wait
+ * until the visitor loads a scenario, so nothing is paid before they have done anything.
+ */
+export function hostedEngine(ownerToken: string): Engine {
+  return createEngine({ purpose: deterministicPurpose, ownerToken, scenario: "none" });
+}
 
 export interface AgentDriver {
   stop: () => void;
