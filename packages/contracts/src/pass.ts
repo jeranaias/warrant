@@ -21,6 +21,11 @@ export const WarrantGrantBody = z
     ownerId: Id,
     /** The account the seller sees paying (the warrant's Metal mandate principal). */
     payer: Address,
+    /**
+     * The Metal mandate the payer pays under (`MandateRef.mandateId`), when the warrant has one.
+     * A seller can check the settlement on chain names this mandate. Public: it is on chain.
+     */
+    mandateId: z.string().min(1).max(256).optional(),
     categories: z.array(SpendCategory).min(1),
     perPaymentCap: Money,
     /** Seller addresses the grant covers; empty means any seller (categories and cap still apply). */

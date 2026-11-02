@@ -61,3 +61,7 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 - A recurring payee carries its period (#87): `Payee.billingPeriod` (`day`, `week`, `month`),
   optional and signed with the warrant. The licensor is `month`. Control makes a second payment to
   that payee inside one period wait for the owner; the period lengths are control constants.
+- `WarrantGrant.mandateId` (optional): the Metal mandate the grant's payer pays under, the
+  warrant's `MandateRef.mandateId`. A seller can match it to the mandate the settlement names on
+  chain (metal-pay's `verifyMandatePayment`), and show which mandate a pass sits on. Optional, so
+  grants signed before it still verify.

@@ -172,6 +172,9 @@ describe("contracts", () => {
     };
     expect(WarrantPass.parse({ grant, pass, sig: "AAAA" }).pass.nonce).toBe("n1");
     expect(() => WarrantGrant.parse({ ...grant, totalBudget: usd(5000) })).toThrow();
+    const onMandate = { ...grant, mandateId: "0x" + "ab".repeat(32) };
+    expect(WarrantGrant.parse(onMandate).mandateId).toBe(onMandate.mandateId);
+    expect(() => WarrantGrant.parse({ ...grant, mandateId: "" })).toThrow();
     expect(() =>
       WarrantPass.parse({ grant, pass: { ...pass, payTo: "me" }, sig: "AAAA" }),
     ).toThrow();
