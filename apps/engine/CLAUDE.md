@@ -19,7 +19,9 @@ read its event log. Start it with `pnpm engine` (port `ENGINE_PORT`, default 400
    the dashboard.
 
 **Owner side:** `GET /approvals` lists what waits; `POST /approvals/<proposalId>` with
-`{"decision":"approved"}` or `{"decision":"denied"}` answers it.
+`{"decision":"approved","shownHash":"<the shownHash you displayed>"}` (or `"denied"`) answers it.
+The hash is required (ADR-007): an answer is bound to exactly what the owner saw, so a missing hash
+is a 400 and a stale or different one is refused.
 
 **Owner controls:** `POST /kill` is the emergency stop (everything refused at once, approvals
 dropped, mock mandates revoked; the answer says how long it took). `POST /budget-changes` takes

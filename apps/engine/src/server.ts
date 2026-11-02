@@ -149,7 +149,8 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   app.post("/approvals/:proposalId", async (req, res) => {
     const proposalId = req.params["proposalId"] ?? "";
-    const decision = (req.body as { decision?: string } | undefined)?.decision;
+    const body = req.body as { decision?: string; shownHash?: unknown } | undefined;
+    const decision = body?.decision;
     const pending = controller.approvals.get(proposalId);
     if (!pending) {
       res.status(404).json({ error: "nothing pending for this proposal" });
@@ -159,10 +160,16 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       res.status(400).json({ error: "decision must be approved or denied" });
       return;
     }
+    // ADR-007: the answer is bound to exactly what the owner was shown. The client sends back the
+    // shownHash it displayed (from GET /approvals); control refuses a stale or different view.
+    if (typeof body?.shownHash !== "string" || body.shownHash === "") {
+      res.status(400).json({ error: "send the shownHash of the approval you were shown" });
+      return;
+    }
     const result = await controller.decideApproval({
       approvalId: `apr_${proposalId}`,
       proposalId,
-      shownHash: pending.shownHash,
+      shownHash: body.shownHash,
       decision,
       ownerId: OWNER_ID,
       decidedAt: clock().toISOString(),
