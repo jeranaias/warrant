@@ -91,6 +91,19 @@ describe("contracts", () => {
     );
   });
 
+  it("a payee may carry its billing period, and only a known one", () => {
+    const [payee] = warrant.payees;
+    const monthly = { ...warrant, payees: [{ ...payee, billingPeriod: "month" }] };
+    expect(Warrant.parse(monthly).payees[0]?.billingPeriod).toBe("month");
+    expect(Warrant.parse(warrant).payees[0]?.billingPeriod).toBeUndefined();
+    expect(() =>
+      Warrant.parse({ ...warrant, payees: [{ ...payee, billingPeriod: "fortnight" }] }),
+    ).toThrow();
+    expect(() =>
+      Warrant.parse({ ...warrant, payees: [{ ...payee, billingPeriod: 30 }] }),
+    ).toThrow();
+  });
+
   it("a metal warrant can name its mandate, but never a key or path", () => {
     const mandate = {
       network: "eip155:63825",

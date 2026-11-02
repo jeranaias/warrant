@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { AgentRole, Currency, Id, Money, Rail, Timestamp } from "./common.js";
 
+/**
+ * How often a recurring payee bills, as the owner signed it (the licensor: once a month). A
+ * second payment to the payee inside one period waits for the owner (control sets the lengths).
+ */
+export const BillingPeriod = z.enum(["day", "week", "month"]);
+export type BillingPeriod = z.infer<typeof BillingPeriod>;
+
 /** A payee the owner pre-approved. Holds routing refs only, never card numbers or keys. */
 export const Payee = z
   .object({
@@ -10,6 +17,8 @@ export const Payee = z
     /** Metal: payTo address. Airwallex: beneficiary id or card merchant ref. */
     routingRef: z.string().min(1).max(256),
     currency: Currency,
+    /** Set for a payee that bills once per period. Absent: no period, paid as often as allowed. */
+    billingPeriod: BillingPeriod.optional(),
   })
   .strict();
 export type Payee = z.infer<typeof Payee>;
