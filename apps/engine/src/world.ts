@@ -17,12 +17,13 @@ import {
   TOTAL_BUDGET,
   canonicalHash,
   encodePass,
+  PassChecker,
   issueGrant,
   issuePass,
   keyB64,
   signWarrant,
 } from "@warrant/control";
-import type { ControlEvent, PurposeChecker } from "@warrant/control";
+import type { ControlEvent, PassCheckedEvent, PurposeChecker } from "@warrant/control";
 import { MetalAdapter, classifyPay, classifyPull } from "@warrant/rails";
 import type {
   CardControls,
@@ -241,27 +242,63 @@ function customerPasses(at: Date) {
       delegateKey: keyB64(control.publicKey),
       ownerKeyId: "customer-owner-1",
       ownerKey: keyB64(owner.publicKey),
+      mandateId: CUSTOMER_MANDATE,
       notAfter: DEMO_EXPIRY,
     },
     owner.privateKey,
   );
-  return (orderId: string) =>
+  const passAt = (nonce: string, when: Date, proposalHash: string) =>
     encodePass(
       issuePass(
         grant,
         {
           grantId: grant.grantId,
-          nonce: `nonce_${orderId}`,
+          nonce,
           url: STORE_QUERY_URL,
           payTo: STORE_ADDRESS,
           amount: QUERY_PRICE,
           category: "data_purchase",
-          proposalHash: canonicalHash({ orderId }),
-          at: at.toISOString(),
+          proposalHash,
+          at: when.toISOString(),
         },
         control.privateKey,
       ),
     );
+  return {
+    /** The pass the store kept with a stored order. */
+    forOrder: (orderId: string) => passAt(`nonce_${orderId}`, at, canonicalHash({ orderId })),
+    /** A new purchase's pass, signed now by the customer's control. */
+    fresh: (n: number, when: Date) =>
+      passAt(`nonce_buy_${n}`, when, canonicalHash({ purchase: n })),
+  };
+}
+
+/** The Metal mandate the customer's agent pays under (mock): named in the customer's grant. */
+const CUSTOMER_MANDATE = "0x" + createHash("sha256").update("mandate_customer").digest("hex");
+
+/**
+ * The store's door in mock mode: a buyer asks for a forecast and the store checks their warrant
+ * pass with the same checker our real store runs (control's `PassChecker`). With a pass, it is the
+ * customer's agent buying under its owner's grant; without one, a buyer no owner authorized.
+ */
+function storeDoor(
+  passes: ReturnType<typeof customerPasses>,
+  clock: () => Date,
+): (withPass: boolean) => PassCheckedEvent {
+  let event: PassCheckedEvent | undefined;
+  const checker = new PassChecker({
+    payTo: STORE_ADDRESS,
+    category: "data_purchase",
+    clock,
+    onCheck: (e) => (event = e),
+  });
+  let n = 0;
+  return (withPass) => {
+    const header = withPass ? passes.fresh(++n, clock()) : undefined;
+    checker.check(header, STORE_QUERY_URL, QUERY_PRICE.cents);
+    if (!event) throw new Error("the pass checker reported nothing");
+    return event;
+  };
 }
 
 function order(orderId: string, at: Date, passFor: (orderId: string) => string): SignedOrderRecord {
@@ -356,6 +393,11 @@ export interface World {
    * world runs no store.
    */
   watch?: (listener: (e: ControlEvent) => void) => void;
+  /**
+   * Mock mode only: a buyer asks our store for a forecast and the store checks their warrant pass
+   * (with a pass: the customer's agent under its owner's grant; without: nobody authorized it).
+   */
+  storeSale?: (withPass: boolean) => PassCheckedEvent;
   /** Mock mode only: the in-memory chain behind `GET /chain`. */
   chain?: MockMetalChain;
   upstream: UpstreamSeller;
@@ -463,8 +505,10 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
       signWarrant(b, privateKey, "owner-demo"),
     ]),
   );
-  const passFor = customerPasses(now);
-  const orders = new Map(["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now, passFor)]));
+  const passes = customerPasses(now);
+  const orders = new Map(
+    ["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now, passes.forOrder)]),
+  );
   const sold = new Set([...orders.values()].map((o) => o.txHash));
 
   // One mandate per Metal agent, same limits as its warrant (ADR-009 #2).
@@ -511,6 +555,7 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
 
   return {
     mode: "mock",
+    storeSale: storeDoor(passes, () => new Date()),
     ownerPublicKey: publicKey,
     credentials,
     applyBudgetChange,

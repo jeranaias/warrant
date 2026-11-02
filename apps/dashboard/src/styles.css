@@ -1628,3 +1628,78 @@ kbd {
   font: inherit;
   padding: 0;
 }
+
+/* our store's side: pass checks and disputes, as they happen */
+.sheet-seller {
+  border-color: var(--seal);
+}
+
+.sheet-seller > .sheet-k {
+  color: var(--seal);
+}
+
+.moment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.sheet-k + .moment {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.moment > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.moment-title {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.moment-sum {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.moment.refused .moment-sum {
+  color: var(--stop);
+}
+
+.facts-row {
+  display: contents;
+}
+
+.ph .sheet-seller {
+  border: 1px solid var(--seal);
+  border-radius: 12px;
+}
+
+.live-runs .live-run h3 {
+  margin: 14px 0 6px;
+  font-size: 0.9rem;
+}
+
+.live-runs ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.live-runs li > span:first-child {
+  margin-right: 6px;
+}
+
+.live-runs a {
+  color: var(--seal);
+}
