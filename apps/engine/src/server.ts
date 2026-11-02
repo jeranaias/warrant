@@ -5,7 +5,7 @@ import { AgentRole, DisputeCase } from "@warrant/contracts";
 import type { AgentTask } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
-import type { ControlEvent, PurposeChecker } from "@warrant/control";
+import type { ControlEvent, KillSwitchHooks, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
 import { answerDispute } from "./disputes.js";
@@ -54,6 +54,14 @@ export interface Engine {
    * dispute its `sourceRef` names, whatever the ticket text adds.
    */
   disputes: Map<string, DisputeCase>;
+}
+
+/** What the emergency stop does outside control: revoke mandates, and freeze cards if any. */
+export function killHooks(world: World): KillSwitchHooks {
+  return {
+    revokeMandates: world.revokeMandates,
+    ...(world.freezeCards ? { freezeCards: world.freezeCards } : {}),
+  };
 }
 
 export function createEngine(opts: EngineOptions = {}): Engine {
@@ -208,7 +216,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     );
     const result = await controller.engageKillSwitch(
       { ownerId: OWNER_ID, reason, warrantIds: [...world.warrants.keys()] },
-      { revokeMandates: world.revokeMandates },
+      killHooks(world),
     );
     for (const [id, w] of world.warrants) world.warrants.set(id, { ...w, status: "revoked" });
     res.json(result);
