@@ -1,4 +1,5 @@
 import type {
+  DisputeCase,
   PaymentProposal,
   Rail,
   RuleCheck,
@@ -10,6 +11,17 @@ import type {
 
 /** ADR-006 / ADR-011: same payee + amount + rail inside this window is a duplicate (inclusive). */
 export const DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * ADR-014: amounts within this share of the larger one count as "the same amount" for the
+ * duplicate window (inclusive), so EUR 49.99 after EUR 50.00 is caught. In basis points.
+ */
+export const DUPLICATE_TOLERANCE_BPS = 100;
+
+/** |a - b| <= 1% of the larger amount, in integer math. Equal amounts always match. */
+export function nearlySameAmount(a: number, b: number): boolean {
+  return Math.abs(a - b) * 10_000 <= Math.max(a, b) * DUPLICATE_TOLERANCE_BPS;
+}
 
 export interface RecentPayment {
   payeeId: string;
@@ -36,6 +48,11 @@ export interface RulesContext {
   orders?: ReadonlyMap<string, SignedOrderRecord>;
   /** Orders already refunded or with a refund reserved. */
   refundedOrderIds?: ReadonlySet<string>;
+  /**
+   * Stored disputes by `ticketRef` (refunds only). A refund's `sourceRef` names the ticket it
+   * answers. When set, a refund must answer a stored dispute and cover only its orders.
+   */
+  disputes?: ReadonlyMap<string, DisputeCase>;
 }
 
 /**
@@ -150,12 +167,15 @@ export function checkRules(
         (r) =>
           r.payeeId === proposal.payeeId &&
           r.rail === proposal.rail &&
-          r.cents === cents &&
+          nearlySameAmount(r.cents, cents) &&
           now - r.at.getTime() <= DUPLICATE_WINDOW_MS,
       );
       if (dup) {
         ok = false;
-        detail = "same payee, amount and rail within 10 minutes";
+        detail =
+          dup.cents === cents
+            ? "same payee, amount and rail within 10 minutes"
+            : `same payee and rail within 10 minutes, ${dup.cents} vs ${cents} is within 1%`;
       }
     }
     // One offer or invoice is paid once. "Buy 200 now" in a single offer is a flood, not 200
@@ -174,10 +194,15 @@ export function checkRules(
   } else {
     const id = proposal.refundOfOrderId;
     const order = id === undefined ? undefined : ctx.orders?.get(id);
+    // The ticket text may name more orders than the customer disputed; only the stored dispute counts.
+    const src = proposal.sourceRef;
+    const dispute = src === undefined ? undefined : ctx.disputes?.get(src);
     let why = "";
     if (proposal.category !== "customer_refund") why = "order refund must be customer_refund";
     else if (id === undefined) why = "refund names no order";
     else if (!order) why = "order not found";
+    else if (ctx.disputes && !dispute) why = "refund answers no stored dispute";
+    else if (dispute && !dispute.orderIds.includes(id)) why = `${id} is not in the dispute`;
     else if (ctx.refundedOrderIds?.has(id)) why = "order already refunded";
     else if (order.price.currency !== proposal.amount.currency) why = "currency differs from order";
     else if (cents > order.price.cents) why = `refund ${cents} exceeds order price`;

@@ -230,3 +230,20 @@ Decision:
    Consequences: the normal demo run needs the owner only for the budget change and anything
    unusual. A later "always allow this" choice on the approval screen would turn a repeated
    approval into a new signed warrant version; it is not built yet.
+
+## ADR-014: The duplicate window matches amounts within 1%
+
+Date: 2026-11-02 Status: accepted (amends ADR-006)
+
+Context: the bench found that EUR 49.99 eight minutes after EUR 50.00, same payee and rail,
+passed the duplicate guard because it compared exact amounts (#86, `duplicate-charge-005`). A
+re-issued invoice one cent off is the cheapest way round an exact match.
+Decision: inside the 10-minute window, two payments to the same payee on the same rail are
+duplicates when the amounts are within 1% of the larger one, inclusive
+(`DUPLICATE_TOLERANCE_BPS` = 100 in `packages/control/rules`, integer math). A percentage, not a
+fixed number of cents: a fixed few cents would make every small payment a "duplicate" of any other
+and still let a large one through by moving it a few cents more. At 1%, amounts under 100 cents
+only match exactly, so small repeat payments are unaffected. x402 purchases and refunds stay
+outside the window (ADR-011), so the 2-cent repeat buys never meet this check.
+Consequences: a legitimate second payment to the same Airwallex payee within 10 minutes needs an
+amount more than 1% different or waits for the window to pass.
