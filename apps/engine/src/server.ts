@@ -1,11 +1,12 @@
 import express from "express";
 import type { Express, Request } from "express";
-import { AgentRole } from "@warrant/contracts";
+import { AgentRole, DisputeCase } from "@warrant/contracts";
 import { Controller } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
 import type { ControlEvent, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
+import { answerDispute } from "./disputes.js";
 import { AGENTS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
 import type { World } from "./world.js";
 
@@ -234,6 +235,29 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ outcome: classifyPay(r) });
   });
 
+  // The store's stored sales, for support and the dashboard. Passes and signed offers included:
+  // they are the evidence a dispute is decided on.
+  app.get("/orders", (_req, res) => {
+    res.json({ orders: [...world.orders().values()] });
+  });
+
+  // A customer disputes orders. The store answers from its records alone (ADR-012): one decision
+  // per order, with the evidence behind it. Refunds then go through POST /proposals as usual.
+  let disputes = 0;
+  app.post("/disputes", async (req, res) => {
+    const body = DisputeRequest.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "send { orderIds: string[], claim, customer? }" });
+      return;
+    }
+    const file = await answerDispute(
+      { world, controller },
+      { disputeId: `dsp_${++disputes}`, ...body.data },
+      clock(),
+    );
+    res.json(file);
+  });
+
   // For the analyzer only: what each task was (benign or which attack) and what should happen.
   app.get("/labels", (_req, res) => {
     res.json({ labels: feed.labels() });
@@ -241,6 +265,11 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   return { app, controller, world };
 }
+
+/** What a customer sends: the orders and the claim. The store fills in the rest. */
+const DisputeRequest = DisputeCase.pick({ orderIds: true, claim: true, customer: true })
+  .partial({ customer: true })
+  .strict();
 
 function roleOf(req: Request): AgentRole | undefined | null {
   const raw = req.query["role"];

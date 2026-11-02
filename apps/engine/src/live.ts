@@ -155,6 +155,8 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
     budgetCheck: totalBudgetCheck(warrants),
     warrants,
     orders: () => orders.asMap(),
+    // Nothing is marked bad on testnet yet; verifySettlement comes with metal-pay (follow-up).
+    badBatches: new Set(),
     upstream,
     payAround: (cred) =>
       run(

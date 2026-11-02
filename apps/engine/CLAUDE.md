@@ -31,6 +31,13 @@ each mandate. `GET /chain` shows mandates, spend and on-chain refusals; `POST /u
 {"cents":4}` raises the provider's price; `POST /limits-only/pay` pays around Warrant (benchmark
 "limits only" mode). `pnpm scene` plays the Kit 11 price rise and limit change start to finish.
 
+**Disputes (ADR-012):** `GET /orders` lists the store's signed orders with their passes.
+`POST /disputes {"orderIds":["ord_1","ord_2"],"claim":"wrong_data"}` (claims: `wrong_data`,
+`not_delivered`, `not_authorized`, `other`) answers with one decision per order and the evidence
+behind it: the settlement on chain, the signed order, the customer's pass, the data batch. It
+moves no money; support then refunds through `POST /proposals` (`refundOfOrderId`), paid by
+`mandate pull`. `pnpm scene:dispute` plays the dispute beat start to finish (mock chain).
+
 **Scenarios:** `POST /scenario {"name":"normal|price_rise|dispute|attacks|all"}` replaces the queue
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is
 for the analyzer only: never show labels to an agent.
