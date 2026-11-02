@@ -24,7 +24,9 @@
     "dashboard": "pnpm --filter @warrant/dashboard dev",
     "store": "pnpm --filter @warrant/store dev",
     "agents": "pnpm --filter @warrant/agents start",
-    "bench": "pnpm --filter @warrant/bench start"
+    "bench": "pnpm --filter @warrant/bench start",
+    "build:hosted": "pnpm --filter @warrant/dashboard build --mode hosted && pnpm --filter @warrant/engine build:hosted",
+    "start:hosted": "node apps/engine/dist/hosted.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

@@ -14,7 +14,8 @@
     "scene:dispute": "tsx src/scene-dispute.ts",
     "scene:card": "tsx src/scene-card.ts",
     "setup:testnet": "tsx src/setup-testnet.ts",
-    "reset:live": "tsx src/reset-live.ts"
+    "reset:live": "tsx src/reset-live.ts",
+    "build:hosted": "node build-hosted.mjs"
   },
   "dependencies": {
     "@metalntwx/metal-pay": "^0.3.3",
@@ -28,6 +29,7 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0"
+    "@types/express": "^5.0.0",
+    "esbuild": "0.28.2"
   }
 }

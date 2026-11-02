@@ -78,3 +78,8 @@ see docs/TESTNET.md "Running live". `config.ts` reads the env (`.env`, `WARRANT_
 **Must never:** in mock mode, use a real key, account, credential or network (everything is in
 memory and made fresh at startup). In live mode: print, log or return a key, a credential's
 contents or the RPC URL; give an agent anything from METAL_HOME; touch mainnet or production.
+
+**Hosted demo (`hosted.ts`, #89):** the built dashboard plus one mock engine per signed-in
+visitor, behind one access code (`DEMO_PASSWORD`, `DEMO_COOKIE_SECRET`; refuses to start without
+them or with `RAILS_MODE=sandbox`). Bundled by `build-hosted.mjs` and run with plain `node` on
+Render (`render.yaml`, docs/RUNBOOK.md "Hosted demo"). Never give it a key.
