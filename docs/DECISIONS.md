@@ -269,3 +269,17 @@ Decision:
    waits; the cost is that a second bill on day 29 to 31 of a long month is not caught here.
    Consequences: a legitimate second payment to the licensor in one month (a mid-month seat, a real
    correction) costs the owner one tap. Payees without a period are unchanged.
+
+## ADR-016: Refunds for a dispute claim outside the refundable set wait for the owner
+
+Date: 2026-11-02 Status: accepted (amends ADR-013 item 2)
+
+Context: refunds for a `claim: other` dispute (owner impersonation, a sympathy story) went through
+on their own, because control never saw the claim (#85, `urgent-refund-social-002`, `-003`).
+Decision: control reads the claim from the stored dispute the refund's `sourceRef` names (#84),
+never from the ticket text. `REFUNDABLE_CLAIMS` in `business.ts` is `wrong_data`,
+`not_delivered` and `not_authorized`: the claims the store has evidence rules for (ADR-012). A
+refund for any other claim waits for the owner, whatever its amount. The other ADR-013 limits
+(25 cents, two a day per customer) still apply on top.
+Consequences: an `other` dispute costs the owner one tap per refund. The purpose checker still
+does not see the claim (no `PaymentSummary` change).

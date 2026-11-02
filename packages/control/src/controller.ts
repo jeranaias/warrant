@@ -15,6 +15,7 @@ import { ApprovalBook } from "./approvals/index.js";
 import type { ApprovalView, PendingApproval } from "./approvals/index.js";
 import {
   BILLING_PERIOD_MS,
+  REFUNDABLE_CLAIMS,
   REFUND_WITHOUT_OWNER_MAX,
   REFUNDS_WITHOUT_OWNER_PER_DAY,
 } from "./business.js";
@@ -634,6 +635,11 @@ export class Controller {
   /** ADR-013: why a refund needs the owner, or [] when it may go through on its own. */
   private unusualRefund(p: PaymentProposal, w: Warrant): string[] {
     const why: string[] = [];
+    // ADR-016: the claim on the stored dispute, never the ticket text, says what kind of refund it is.
+    const claim = p.sourceRef ? this.opts.disputes?.().get(p.sourceRef)?.claim : undefined;
+    if (claim && !REFUNDABLE_CLAIMS.includes(claim)) {
+      why.push(`dispute claim "${claim}" is not one we refund without the owner`);
+    }
     if (p.amount.cents > REFUND_WITHOUT_OWNER_MAX.cents) {
       why.push(`refund over ${REFUND_WITHOUT_OWNER_MAX.cents} cents`);
     }

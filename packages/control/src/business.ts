@@ -1,4 +1,4 @@
-import type { AgentRole, BillingPeriod, Money } from "@warrant/contracts";
+import type { AgentRole, BillingPeriod, DisputeClaim, Money } from "@warrant/contracts";
 
 /**
  * Kit 11 numbers (ADR-009). The brief says prices, budgets and the licence fee stay in code:
@@ -29,6 +29,16 @@ export const UPSTREAM_PRICE_AFTER = usdz(4);
  */
 export const REFUND_WITHOUT_OWNER_MAX = usdz(25);
 export const REFUNDS_WITHOUT_OWNER_PER_DAY = 2;
+
+/**
+ * ADR-016: dispute claims a refund may answer without the owner: something was wrong with what we
+ * sold, or the customer's agent never agreed. Anything else ("other") waits for the owner.
+ */
+export const REFUNDABLE_CLAIMS: readonly DisputeClaim[] = [
+  "wrong_data",
+  "not_delivered",
+  "not_authorized",
+];
 
 /** Monthly licence fee, invoiced in euros. Our choice: the brief gives no amount. */
 export const LICENCE_FEE: Money = { currency: "EUR", cents: 5000 };
