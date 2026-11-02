@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HOSTED, api } from "./api.js";
+import { HOSTED, SessionEnded, api } from "./api.js";
 import type { ChainView, KillState, LoggedEvent, PendingApproval, World } from "./api.js";
+import { recoverSession } from "./recover.js";
 
 /** How often the dashboard asks the engine for news. Lower is livelier, higher is quieter. */
 export const POLL_MS = 1_000;
@@ -58,6 +59,8 @@ export function useEngine(): EngineState & { refresh: () => void } {
         error: null,
       }));
     } catch (e) {
+      // Hosted: the session ended (redeploy, idle). Go back to "/" for a fresh one, once.
+      if (e instanceof SessionEnded && recoverSession(storage(), Date.now())) return;
       // The engine went away. When it comes back it starts a fresh log, so start over too.
       since.current = 0;
       setState((s) => ({
@@ -80,4 +83,12 @@ export function useEngine(): EngineState & { refresh: () => void } {
   }, [poll]);
 
   return { ...state, refresh: () => void poll() };
+}
+
+function storage(): Storage | undefined {
+  try {
+    return typeof sessionStorage === "undefined" ? undefined : sessionStorage;
+  } catch {
+    return undefined;
+  }
 }

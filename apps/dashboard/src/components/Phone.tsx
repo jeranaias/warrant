@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { isOwner } from "../api.js";
+import { HOSTED, isOwner } from "../api.js";
 import { agentName, cents, field, foldRepeats, isMoney, money, time } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
 import type { EngineState } from "../useEngine.js";
 import { ApprovalCard } from "./Approvals.js";
+import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { GateBar } from "./Gate.js";
 import { StopButton } from "./StopButton.js";
@@ -14,9 +15,10 @@ import { StopButton } from "./StopButton.js";
 /**
  * The owner's phone (open the dashboard at #/m): only what needs a thumb.
  *
- *   top      state and counts
- *   gate     paid / waiting / blocked as one bar, the top block reason, budget left per agent
+ *   top      state and counts (the waiting chip jumps to the approval)
+ *   gate     paid / waiting / blocked as one bar and the counts
  *   waiting  one approval at a time, big Approve / Deny; the rest queue underneath
+ *   agents   budget left per agent, then the first-visit steps
  *   recent   the last payments
  *   bottom   STOP, always in reach
  */
@@ -74,14 +76,28 @@ export function Phone({
           W
         </span>
         <span className="ph-name">Warrant</span>
-        <span className={`chip ${stopped ? "stop" : waiting.length ? "wait" : ""}`}>
-          {stopped ? "stopped" : waiting.length ? `${waiting.length} waiting` : "running"}
-        </span>
+        {!stopped && waiting.length > 0 ? (
+          <button
+            className="chip wait"
+            onClick={() =>
+              document.getElementById("ph-wait")?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
+            {waiting.length} waiting
+          </button>
+        ) : (
+          <span className={`chip ${stopped ? "stop" : ""}`}>{stopped ? "stopped" : "running"}</span>
+        )}
         <span className="spacer" />
         <a className="ph-desk" href="#/desk">
           Desktop
         </a>
       </header>
+      {HOSTED && (
+        <p className="ph-demo">
+          <DemoLine onError={onError} />
+        </p>
+      )}
 
       <section className="ph-gauge">
         <GateBar passes={passes} stopped={stopped} />
@@ -99,6 +115,31 @@ export function Phone({
             <dd>{waiting.length}</dd>
           </div>
         </dl>
+      </section>
+
+      {focus && (
+        <section className="ph-wait" id="ph-wait">
+          <div className="sheet-k">
+            waiting · {waiting.length > 1 ? `1 of ${waiting.length}` : "1"}
+          </div>
+          <ApprovalCard key={focus.proposalId} a={focus} onDone={onDone} onError={onError} />
+          {queue.length > 0 && (
+            <ol className="ph-queue">
+              {queue.map((q) => (
+                <li key={q.first}>
+                  <button onClick={() => setPick(q.first)}>
+                    <span className="ph-q-who">{q.who}</span>
+                    {q.n > 1 && <span className="ph-q-n mono">×{q.n}</span>}
+                    <span className="mono">{q.amount}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+      )}
+
+      <section className="ph-gauge">
         <ul className="ph-agents">
           {warrants.map((w, i) => {
             const n = lanes.get(w.warrantId) ?? { paid: 0, blocked: 0, asked: 0 };
@@ -126,28 +167,6 @@ export function Phone({
         <p className="ph-note">
           View only. Open the owner link the engine printed to approve or stop.
         </p>
-      )}
-
-      {focus && (
-        <section className="ph-wait">
-          <div className="sheet-k">
-            waiting · {waiting.length > 1 ? `1 of ${waiting.length}` : "1"}
-          </div>
-          <ApprovalCard key={focus.proposalId} a={focus} onDone={onDone} onError={onError} />
-          {queue.length > 0 && (
-            <ol className="ph-queue">
-              {queue.map((q) => (
-                <li key={q.first}>
-                  <button onClick={() => setPick(q.first)}>
-                    <span className="ph-q-who">{q.who}</span>
-                    {q.n > 1 && <span className="ph-q-n mono">×{q.n}</span>}
-                    <span className="mono">{q.amount}</span>
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
       )}
 
       <section className="ph-recent">

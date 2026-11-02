@@ -287,7 +287,7 @@ export function Gate({
       {FATES.map((fate, j) => {
         const c = TOP + (j + 0.5) * outSlot;
         const h = Math.max(outH[fate], 4);
-        const lines =
+        const lines = (
           fate === "paid"
             ? paid.map((m) => money(m))
             : fate === "asked"
@@ -295,7 +295,8 @@ export function Gate({
                   ...(limits > 0 ? [`${limits} × new limits`] : []),
                   ...held.slice(0, limits > 0 ? 1 : 2).map((g) => `${g.n} × ${g.text}`),
                 ]
-              : reasons.slice(0, 4).map((r) => `${r.n}  ${r.reason}`);
+              : reasons.slice(0, 4).map((r) => `${r.n}  ${r.reason}`)
+        ).flatMap(wrap);
         const more =
           fate === "blocked" && reasons.length > 4
             ? reasons.slice(4).reduce((s, r) => s + r.n, 0)
@@ -310,7 +311,7 @@ export function Gate({
             </text>
             {lines.map((l, n) => (
               <text key={n} className="gt-line" x={OX + 22} y={ty + 20 + n * 17}>
-                {clip(l)}
+                {l}
               </text>
             ))}
             {more > 0 && (
@@ -343,6 +344,15 @@ export function Gate({
 
 function clip(s: string): string {
   return s.length > LINE_CHARS ? `${s.slice(0, LINE_CHARS - 1)}…` : s;
+}
+
+/** A long label on two lines, split at " · " (or the last space) before it would be cut. */
+function wrap(s: string): string[] {
+  if (s.length <= LINE_CHARS) return [s];
+  const dot = s.lastIndexOf(" · ", LINE_CHARS);
+  const at = dot > 0 ? dot : s.lastIndexOf(" ", LINE_CHARS);
+  if (at <= 0) return [clip(s)];
+  return [s.slice(0, at), clip(`  ${s.slice(at + (dot > 0 ? 3 : 1))}`)];
 }
 
 function sumOf(t: { paid: number; asked: number; blocked: number } | undefined): number {

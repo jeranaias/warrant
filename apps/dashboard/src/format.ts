@@ -409,6 +409,7 @@ export function ownerLine(
     const le = events[i];
     if (!le || le.seq <= afterSeq) return null;
     const e = le.event;
+    if (e.type === "kill_switch") return "You pressed STOP: every payment is refused.";
     if (e.type === "budget_changed")
       return `You signed new limits for the ${agentName(roleOf(e.warrantId))}.`;
     if (e.type === "approval_decided" && e.ok) {
@@ -424,6 +425,14 @@ export function ownerLine(
     }
   }
   return null;
+}
+
+/** Agents by name, one phrase: "Sourcing, Support and Treasury agents". */
+export function agentsLine(roles: (string | undefined)[]): string {
+  const names = [...new Set(roles.map((r) => agentName(r).replace(/ agent$/, "")))];
+  if (names.length === 0) return "";
+  if (names.length === 1) return `${names[0] ?? ""} agent`;
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1) ?? ""} agents`;
 }
 
 /**

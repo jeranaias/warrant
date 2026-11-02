@@ -15,6 +15,9 @@ const BASE = (import.meta.env["VITE_API_BASE"] as string | undefined) || "/api";
  */
 export const HOSTED = import.meta.env.MODE === "hosted";
 
+/** Hosted demo: this visitor's engine is gone (redeploy, idle) or the sign-in lapsed (HTTP 401). */
+export class SessionEnded extends Error {}
+
 /**
  * The owner's key from the owner link (`#/m?owner=<key>` or `#/?owner=<key>`). It is moved out of
  * the address bar into this tab's session storage, and sent only on the owner's actions.
@@ -201,7 +204,10 @@ async function call<T>(
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(data.error ?? `engine answered HTTP ${res.status}`);
+  if (!res.ok) {
+    const message = data.error ?? `engine answered HTTP ${res.status}`;
+    throw HOSTED && res.status === 401 ? new SessionEnded(message) : new Error(message);
+  }
   return data;
 }
 
