@@ -141,3 +141,12 @@ account's first ACTIVE card, else a new virtual card; its controls are set to th
 USD 12.00 seat, shows an over-cap purchase blocked by control and declined by the card, then STOP
 freezes the card. Unfreeze it (set it ACTIVE) in the Airwallex web app before the next run
 (ADR-018).
+
+| Step                       | Result (first live run, 2026-11-02, card `9820a87c…`, VISA) |
+| -------------------------- | ----------------------------------------------------------- |
+| USD 12.00 design tool seat | approved by control, authorised by the card                 |
+| USD 40.00 purchase         | blocked by control (`per_payment_cap`)                      |
+| Same purchase at the card  | declined by Airwallex (`LIMIT_EXCEEDED`)                    |
+| STOP                       | card frozen in 627 ms                                       |
+| Purchase after STOP        | declined (`CARD_INACTIVE`)                                  |
+| After the run              | card set back to ACTIVE                                     |
