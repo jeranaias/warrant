@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import type { KillState } from "../api.js";
+import { keyOf } from "./Approvals.js";
 
 /**
  * The emergency stop: one click, then one confirm (apps/dashboard/CLAUDE.md: never more).
@@ -11,11 +12,17 @@ export function StopButton({
   onDone,
   onError,
   big = false,
+  hotkeys = false,
+  terse = false,
 }: {
   kill: KillState | null;
   onDone: () => void;
   onError: (e: string) => void;
   big?: boolean;
+  /** S arms, Enter confirms, Esc cancels. */
+  hotkeys?: boolean;
+  /** Once stopped, show one word: the page shows the receipt elsewhere. */
+  terse?: boolean;
 }) {
   const [arming, setArming] = useState(false);
   const [sending, setSending] = useState(false);
@@ -33,6 +40,28 @@ export function StopButton({
       onDone();
     }
   };
+
+  const keys = useRef({ arming, stop });
+  keys.current = { arming, stop };
+  useEffect(() => {
+    if (!hotkeys) return;
+    const on = (e: KeyboardEvent) => {
+      const k = keyOf(e);
+      if (k === "s") setArming(true);
+      else if (k === "Enter" && keys.current.arming) void keys.current.stop();
+      else if (k === "Escape") setArming(false);
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [hotkeys]);
+
+  if (kill?.engaged && terse) {
+    return (
+      <div className={`stopped ${size}`} role="status">
+        <strong>Stopped</strong>
+      </div>
+    );
+  }
 
   if (kill?.engaged) {
     return (
@@ -52,7 +81,7 @@ export function StopButton({
   return arming ? (
     <div className={`stop-confirm ${size}`}>
       <button className={`btn kill ${size}`} onClick={() => void stop()}>
-        Yes, stop all money now
+        Yes, stop all money now{hotkeys && <kbd>Enter</kbd>}
       </button>
       <button className={`btn ${size}`} onClick={() => setArming(false)}>
         Cancel
@@ -65,7 +94,7 @@ export function StopButton({
       onClick={() => setArming(true)}
       title="Refuse every payment, drop what is waiting, revoke the mandates"
     >
-      STOP
+      STOP{hotkeys && <kbd>S</kbd>}
     </button>
   );
 }
