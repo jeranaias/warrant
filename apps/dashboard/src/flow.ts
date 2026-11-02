@@ -155,3 +155,11 @@ export function leftFraction(spentCents: number, budgetCents: number): number {
   if (budgetCents <= 0) return 0;
   return Math.min(1, Math.max(0, (budgetCents - spentCents) / budgetCents));
 }
+
+/**
+ * Owner decisions waiting that are not payments (new limits an agent asked for). The gate adds
+ * them to "Held for you" so it agrees with the WAITING count at the top.
+ */
+export function limitRequests(approvals: { view: Record<string, unknown> }[]): number {
+  return approvals.filter((a) => a.view["kind"] === "budget_change").length;
+}

@@ -1,5 +1,5 @@
 import type { ChainView } from "../api.js";
-import { cents, time } from "../format.js";
+import { cents, mandateName, time } from "../format.js";
 
 /**
  * The (mock) Metal chain: each mandate's on-chain limits and spend, and every payment the chain
@@ -10,8 +10,8 @@ export function Chain({ chain }: { chain: ChainView }) {
     <section className="panel">
       <h2>On-chain mandates</h2>
       <p className="muted small">
-        Upstream price {cents(chain.upstreamPriceCents)} per call. {chain.payments} payment(s) on
-        chain.
+        Data supplier's price {cents(chain.upstreamPriceCents)} per call. {chain.payments}{" "}
+        payment(s) on chain. Treasury pays through Airwallex, so it has no mandate here.
       </p>
       <table className="grid">
         <thead>
@@ -26,7 +26,7 @@ export function Chain({ chain }: { chain: ChainView }) {
         <tbody>
           {chain.mandates.map((m) => (
             <tr key={m.credential}>
-              <td className="mono">{m.credential}</td>
+              <td title={m.credential}>{mandateName(m.credential)}</td>
               <td>{cents(m.capCents)}</td>
               <td>{cents(m.budgetCents)}</td>
               <td>{cents(m.spentCents)}</td>

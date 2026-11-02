@@ -6,7 +6,8 @@ import { agentName, approveLabel, field, isMoney, money, time, viewRows } from "
 /**
  * "Waiting for you": each card shows every field of the view control stored, and Approve / Deny
  * sends back that view's hash. Never add, hide or reorder-by-meaning fields here: the owner must
- * approve exactly what control will hold them to. Labels live in format.ts (FIELD_LABELS).
+ * approve exactly what control will hold them to. Labels live in format.ts (FIELD_LABELS). The
+ * summary and the buttons come first; the full table follows them, always shown, never folded.
  */
 export function Approvals({
   approvals,
@@ -41,17 +42,22 @@ export function keyOf(e: KeyboardEvent): string | null {
   return e.key.length === 1 ? e.key.toLowerCase() : e.key;
 }
 
-/** One approval. With `hotkeys`, A approves and D denies. */
+/**
+ * One approval. With `hotkeys`, A approves and D denies. `roleOf` names the agent that asked
+ * (by agent id), so a budget change one agent asks for on another's warrant says so.
+ */
 export function ApprovalCard({
   a,
   onDone,
   onError,
   hotkeys = false,
+  roleOf,
 }: {
   a: PendingApproval;
   onDone: () => void;
   onError: (e: string) => void;
   hotkeys?: boolean;
+  roleOf?: (agentId: string) => string | undefined;
 }) {
   const [sending, setSending] = useState(false);
   const decideRef = useRef<(d: "approved" | "denied") => Promise<void>>(async () => {});
@@ -88,6 +94,15 @@ export function ApprovalCard({
       : field(a.view, "payee.payeeId"));
   const newCap = field(a.view, "to.perPaymentCap");
   const newBudget = field(a.view, "to.totalBudget");
+  const oldCap = field(a.view, "from.perPaymentCap");
+  const oldBudget = field(a.view, "from.totalBudget");
+  const by = field(a.view, "proposedBy");
+  const byRole = typeof by === "string" ? roleOf?.(by) : undefined;
+  const forName = agentName(typeof role === "string" ? role : undefined);
+  const who =
+    isBudget && byRole && byRole !== role
+      ? `${agentName(byRole)} asks to change the ${forName.toLowerCase()}'s limits`
+      : `${forName} ${isBudget ? "asks for new limits" : "wants to pay"}`;
   return (
     <article className="approval">
       <header className="card-head">
@@ -95,14 +110,11 @@ export function ApprovalCard({
         <span className="muted small">asked at {time(a.requestedAt)}</span>
       </header>
       <div className="ask">
-        <span className="ask-who">
-          {agentName(typeof role === "string" ? role : undefined)}{" "}
-          {isBudget ? "proposes new limits" : "wants to pay"}
-        </span>
+        <span className="ask-who">{who}</span>
         {isBudget ? (
-          <span className="ask-amount">
-            {isMoney(newCap) ? `${money(newCap)} a payment` : ""}
-            {isMoney(newBudget) && <span className="ask-sub"> · {money(newBudget)} in total</span>}
+          <span className="ask-change mono">
+            {limitChange("Per payment", oldCap, newCap)}
+            {limitChange("In total", oldBudget, newBudget)}
           </span>
         ) : (
           isMoney(amount) && <span className="ask-amount">{money(amount)}</span>
@@ -119,16 +131,6 @@ export function ApprovalCard({
           </ul>
         </div>
       )}
-      <table className="kv" aria-label="Details">
-        <tbody>
-          {viewRows(a.view).map((r) => (
-            <tr key={r.key}>
-              <th>{r.label}</th>
-              <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
       <footer className="approval-foot">
         <span className="mono muted small" title={a.shownHash}>
           shown {a.shownHash.slice(0, 12)}
@@ -142,6 +144,38 @@ export function ApprovalCard({
           {hotkeys && <kbd>A</kbd>}
         </button>
       </footer>
+      <table className="kv" aria-label="Everything you sign">
+        <tbody>
+          {viewRows(a.view).map((r) => (
+            <tr key={r.key}>
+              <th>{r.label}</th>
+              <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </article>
+  );
+}
+
+/** "Per payment 0.03 USDZ → 0.02 USDZ", or "In total 10.00 USDZ, unchanged". */
+function limitChange(label: string, from: unknown, to: unknown) {
+  if (!isMoney(to)) return null;
+  const same = isMoney(from) && from.cents === to.cents && from.currency === to.currency;
+  return (
+    <span>
+      {label}{" "}
+      {same ? (
+        <>
+          {money(to)}
+          <span className="muted">, unchanged</span>
+        </>
+      ) : (
+        <>
+          {isMoney(from) && <span className="muted">{money(from)} → </span>}
+          <strong>{money(to)}</strong>
+        </>
+      )}
+    </span>
   );
 }

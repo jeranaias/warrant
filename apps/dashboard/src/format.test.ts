@@ -5,8 +5,11 @@ import {
   benchLine,
   describe,
   laneName,
+  mandateName,
   money,
+  ownerLine,
   percentUsed,
+  scenarioLabel,
   viewRows,
   whyOf,
 } from "./format.js";
@@ -283,5 +286,46 @@ group("store events: the warrant pass check and the dispute decision", () => {
         "ord_2: kept (data was correct, on chain 0xdddddddd...); " +
         "ord_404: kept (order not found)",
     );
+  });
+});
+
+group("first-visit wording", () => {
+  it("names scenarios and mandates in plain words, raw ids pass through", () => {
+    expect(scenarioLabel("price_rise")).toBe("Supplier raises the price");
+    expect(scenarioLabel("new_one")).toBe("new_one");
+    expect(mandateName("sourcing.json")).toBe("Sourcing agent · v1");
+    expect(mandateName("sourcing-v2.json")).toBe("Sourcing agent · v2");
+    expect(mandateName("other.json")).toBe("other.json");
+  });
+
+  it("the owner's latest action, only when it came after the latest payment", () => {
+    const ev = (seq: number, event: unknown) => ({ seq, at, event }) as LoggedEvent;
+    const roleOf = (id: string) => (id === "wrt_sourcing" ? "sourcing" : undefined);
+    const events = [
+      ev(1, {
+        type: "proposal",
+        proposal: {
+          proposalId: "p1",
+          warrantId: "wrt_sourcing",
+          amount: { currency: "USDZ", cents: 2 },
+        },
+        result: {},
+      }),
+      ev(2, { type: "approval_decided", proposalId: "p1", ok: true, decision: "approved" }),
+      ev(3, { type: "approval_decided", proposalId: "bud_1", ok: true, decision: "approved" }),
+      ev(4, {
+        type: "budget_changed",
+        proposalId: "bud_1",
+        warrantId: "wrt_sourcing",
+        fromVersion: 1,
+        toVersion: 2,
+      }),
+    ];
+    expect(ownerLine(events, roleOf, 1)).toBe("You signed new limits for the Sourcing agent.");
+    expect(ownerLine(events.slice(0, 2), roleOf, 1)).toBe(
+      "You approved 0.02 USDZ from the Sourcing agent.",
+    );
+    expect(ownerLine(events.slice(0, 3), roleOf, 1)).toBe("You approved new limits.");
+    expect(ownerLine(events, roleOf, 4)).toBeNull();
   });
 });

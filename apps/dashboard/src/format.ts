@@ -305,3 +305,62 @@ export function benchLine(h: BenchHeadline | null | undefined): string | null {
     `${w.falseBlocks} of ${h.benign} normal payments held`
   );
 }
+
+/** Plain names for the engine's scenario ids, and one line on what each does. */
+export const SCENARIOS: Record<string, { label: string; what: string }> = {
+  normal: { label: "Normal day", what: "Routine data purchases and the monthly licence fee." },
+  price_rise: {
+    label: "Supplier raises the price",
+    what: "The data supplier raises its price above the sourcing agent's cap.",
+  },
+  dispute: {
+    label: "Customer disputes a charge",
+    what: "A customer says the data was wrong and asks for a refund.",
+  },
+  attacks: {
+    label: "Attacks on the agents",
+    what: "A changed payment address, hidden instructions, a fake invoice, refund fraud.",
+  },
+  all: { label: "Everything", what: "All of the above in one run." },
+};
+
+export function scenarioLabel(id: string): string {
+  return SCENARIOS[id]?.label ?? id;
+}
+
+/** A mandate credential file ("sourcing.json", "sourcing-v2.json") as "Sourcing agent · v2". */
+export function mandateName(credential: string): string {
+  const m = /^([a-z]+)(?:-v(\d+))?\.json$/.exec(credential);
+  if (!m?.[1] || !AGENT_NAMES[m[1]]) return credential;
+  return `${agentName(m[1])} · v${m[2] ?? "1"}`;
+}
+
+/**
+ * The owner's latest action after event `afterSeq`, as one line for the bottom bar, or null:
+ * "You signed new limits for the Sourcing agent."
+ */
+export function ownerLine(
+  events: LoggedEvent[],
+  roleOf: (warrantId: string) => string | undefined,
+  afterSeq: number,
+): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const le = events[i];
+    if (!le || le.seq <= afterSeq) return null;
+    const e = le.event;
+    if (e.type === "budget_changed")
+      return `You signed new limits for the ${agentName(roleOf(e.warrantId))}.`;
+    if (e.type === "approval_decided" && e.ok) {
+      const asked = events.find(
+        (x) => x.event.type === "proposal" && x.event.proposal.proposalId === e.proposalId,
+      )?.event;
+      const verb = e.decision === "denied" ? "denied" : "approved";
+      if (asked?.type === "proposal") {
+        const p = asked.proposal;
+        return `You ${verb} ${money(p.amount)} from the ${agentName(roleOf(p.warrantId))}.`;
+      }
+      return `You ${verb} new limits.`;
+    }
+  }
+  return null;
+}

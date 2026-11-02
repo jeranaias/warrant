@@ -3,14 +3,15 @@ import type { CSSProperties, ReactNode } from "react";
 import { HOSTED, api } from "../api.js";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
 import bench from "../../../../bench/results.json";
-import { agentName, benchLine, cents, money, time, whyOf } from "../format.js";
-import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
+import { agentName, benchLine, cents, money, ownerLine, time, whyOf } from "../format.js";
+import { OTHER, leftFraction, limitRequests, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
 import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
 import { Activity } from "./Activity.js";
 import { ApprovalCard, keyOf } from "./Approvals.js";
 import { Chain } from "./Chain.js";
+import { FirstRun } from "./FirstRun.js";
 import { Gate } from "./Gate.js";
 import { Scene } from "./Scene.js";
 import { StopButton } from "./StopButton.js";
@@ -113,6 +114,9 @@ export function CommandPage({
   const lastEvent = last && engine.events.find((e) => e.seq === last.seq);
   const focus = engine.approvals[0];
   const agent = warrants.find((w) => w.warrantId === selected);
+  const roleOfWarrant = (id: string) => warrants.find((w) => w.warrantId === id)?.agentRole;
+  const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
+  const owned = ownerLine(engine.events, roleOfWarrant, last?.seq ?? 0);
 
   return (
     <div className={`cmdpage${stopped ? " is-stopped" : ""}`}>
@@ -127,6 +131,7 @@ export function CommandPage({
             motion={motion}
             selected={selected}
             onSelect={(id) => setSelected(id === null || id === selected ? null : id)}
+            limits={limitRequests(engine.approvals)}
           />
         )}
       </div>
@@ -187,6 +192,7 @@ export function CommandPage({
                 onDone={engine.refresh}
                 onError={onError}
                 hotkeys
+                roleOf={roleOfAgent}
               />
             </section>
           ) : agent ? (
@@ -219,6 +225,15 @@ export function CommandPage({
           </section>
         )}
 
+        {!drawer && (
+          <FirstRun
+            events={engine.events}
+            stopped={stopped}
+            onDone={engine.refresh}
+            onError={onError}
+          />
+        )}
+
         <footer className="hud-bottom">
           <div className="hud-tabs">
             {(
@@ -240,6 +255,7 @@ export function CommandPage({
             ))}
           </div>
           <Ticker
+            owner={owned}
             pass={last}
             event={lastEvent}
             agent={agentName(warrants.find((w) => w.warrantId === last?.warrantId)?.agentRole)}
@@ -410,7 +426,10 @@ function StopReceipt({ kill }: { kill: KillState }) {
   return (
     <section className="sheet sheet-stop" role="status">
       <div className="sheet-k">stopped · {time(r.event.at)}</div>
-      <p className="sheet-big mono">{r.durationMs} ms</p>
+      <p className="sheet-big mono">
+        <span className="muted">Stopped in </span>
+        {r.durationMs} ms
+      </p>
       <dl className="facts">
         <dt>Warrants revoked</dt>
         <dd className="mono">{r.event.revokedWarrantIds.join(", ") || "none"}</dd>
@@ -430,16 +449,25 @@ function StopReceipt({ kill }: { kill: KillState }) {
 }
 
 function Ticker({
+  owner,
   pass,
   event,
   agent,
   payee,
 }: {
+  /** The owner's latest action, when it came after the latest payment. */
+  owner: string | null;
   pass: Pass | undefined;
   event: LoggedEvent | undefined;
   agent: string;
   payee: string;
 }) {
+  if (owner)
+    return (
+      <div className="ticker" aria-live="polite">
+        <span className="ticker-who">{owner}</span>
+      </div>
+    );
   if (!pass) return <div className="ticker muted">No payments yet.</div>;
   const why = event ? whyOf(event.event) : undefined;
   return (

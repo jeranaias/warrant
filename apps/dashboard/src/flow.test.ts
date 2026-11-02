@@ -4,6 +4,7 @@ import {
   OTHER,
   REASONS,
   leftFraction,
+  limitRequests,
   paidByCurrency,
   passesOf,
   payeeNodes,
@@ -161,5 +162,17 @@ group("gate reasons and owner outcomes", () => {
       warrants,
     );
     expect(passes.map((p) => [p.fate, p.reason])).toEqual([["blocked", "declined by the card"]]);
+  });
+});
+
+group("held for you", () => {
+  it("counts new limits waiting for the owner, not payments waiting", () => {
+    const approvals = [
+      { view: { kind: "budget_change" } },
+      { view: { amount: usd(5) } },
+      { view: { kind: "budget_change" } },
+    ];
+    expect(limitRequests(approvals)).toBe(2);
+    expect(limitRequests([])).toBe(0);
   });
 });
