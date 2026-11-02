@@ -1,12 +1,13 @@
 import { resolve } from "node:path";
 import { deterministicPurpose } from "@warrant/control";
 import { railsMode } from "./config.js";
+import { startAgents } from "./hosted-agents.js";
 import { hostedApp } from "./hosted-app.js";
 import { createEngine } from "./server.js";
 
 /**
  * The hosted demo (issue #89, docs/RUNBOOK.md "Hosted demo"): the built dashboard plus one mock
- * engine per signed-in visitor, on PORT. Mock rails and the deterministic purpose check only: no
+ * engine per signed-in visitor, on PORT, with that visitor's three agents running inside it. Mock rails and the deterministic purpose check only: no
  * keys, no network. Needs DEMO_PASSWORD and DEMO_COOKIE_SECRET; refuses to start without them.
  * `pnpm engine` (main.ts) stays the local way to run.
  */
@@ -30,6 +31,7 @@ const hosted = hostedApp({
   cookieSecret,
   distDir,
   makeEngine: (ownerToken) => createEngine({ purpose: deterministicPurpose, ownerToken }),
+  startAgents: (engine) => startAgents(engine),
 });
 
 const server = hosted.app.listen(port, "0.0.0.0", () => {
