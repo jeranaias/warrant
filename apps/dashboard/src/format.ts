@@ -78,9 +78,64 @@ export interface FeedLine {
   why?: string;
 }
 
+/** What the feed needs to name things instead of showing ids. Every lookup may miss. */
+export interface Names {
+  /** A warrant id to its agent's role. */
+  role: (warrantId: string) => string | undefined;
+  /** A payee id to its display name. */
+  payee: (payeeId: string) => string | undefined;
+  /** A request id to what it asks: "new limits for the Sourcing agent". */
+  request: (proposalId: string) => string | undefined;
+}
+
+const NO_NAMES: Names = { role: () => undefined, payee: () => undefined, request: () => undefined };
+
+/** What an approval view asks, in a few words: "new limits for the Sourcing agent". */
+export function subjectOf(view: Record<string, unknown>): string {
+  const role = field(view, "agent.role") ?? field(view, "warrant.role");
+  const who = agentName(typeof role === "string" ? role : undefined);
+  if (view["kind"] === "budget_change") return `new limits for the ${who}`;
+  const amount = field(view, "amount");
+  const payee = field(view, "payee.displayName");
+  const to = typeof payee === "string" ? ` to ${payee}` : "";
+  return `${isMoney(amount) ? money(amount) : "a payment"} from the ${who}${to}`;
+}
+
+/** Names for the feed, from the warrants and what the events themselves say. */
+export function namesOf(
+  events: LoggedEvent[],
+  warrants: {
+    warrantId: string;
+    agentRole: string;
+    payees: { payeeId: string; displayName: string }[];
+  }[],
+): Names {
+  const payees = new Map<string, string>();
+  for (const w of warrants) for (const p of w.payees) payees.set(p.payeeId, p.displayName);
+  const roles = new Map(warrants.map((w) => [w.warrantId, w.agentRole]));
+  const requests = new Map<string, string>();
+  for (const { event: e } of events) {
+    if (e.type === "proposal") {
+      const p = e.proposal;
+      const to = payees.get(p.payeeId);
+      requests.set(
+        p.proposalId,
+        `${money(p.amount)} from the ${agentName(p.agentRole)}${to ? ` to ${to}` : ""}`,
+      );
+    } else if (e.type === "approval_requested") {
+      requests.set(e.pending.proposalId, subjectOf(e.pending.view));
+    }
+  }
+  return {
+    role: (id) => roles.get(id),
+    payee: (id) => payees.get(id),
+    request: (id) => requests.get(id),
+  };
+}
+
 /** One event from GET /events as one plain-language line for the activity feed. */
-export function describe(e: LoggedEvent): FeedLine {
-  const d = describeEvent(e.event);
+export function describe(e: LoggedEvent, names: Names = NO_NAMES): FeedLine {
+  const d = describeEvent(e.event, names);
   const why = d.why ?? whyOf(e.event);
   return { seq: e.seq, at: e.at, tone: d.tone, text: d.text, ...(why ? { why } : {}) };
 }
@@ -138,12 +193,15 @@ export function field(view: Record<string, unknown>, path: string): unknown {
 const frozen = (ids: string[] | undefined) =>
   ids?.length ? `, ${ids.length} ${ids.length === 1 ? "card" : "cards"} frozen` : "";
 
-function describeEvent(e: ControlEvent): { tone: Tone; text: string; why?: string } {
+function describeEvent(e: ControlEvent, names: Names): { tone: Tone; text: string; why?: string } {
+  const what = (id: string) => names.request(id) ?? id;
   switch (e.type) {
     case "proposal": {
       const p = e.proposal;
       const who = agentName(p.agentRole);
-      const to = p.refundOfOrderId ? `a refund on order ${p.refundOfOrderId}` : p.payeeId;
+      const to = p.refundOfOrderId
+        ? `a refund on order ${p.refundOfOrderId}`
+        : (names.payee(p.payeeId) ?? p.payeeId);
       const ask = `${who} asked to pay ${money(p.amount)} to ${to}`;
       if (e.result.blockedBy) {
         const by = BLOCKED_BY[e.result.blockedBy] ?? e.result.blockedBy;
@@ -156,25 +214,25 @@ function describeEvent(e: ControlEvent): { tone: Tone; text: string; why?: strin
     }
     case "approval_requested": {
       const why = e.pending.reasons.length ? ` (${e.pending.reasons.join("; ")})` : "";
-      return { tone: "wait", text: `Needs your decision: ${e.pending.proposalId}${why}` };
+      return { tone: "wait", text: `Needs your decision: ${subjectOf(e.pending.view)}${why}` };
     }
     case "approval_decided":
       return e.ok
-        ? { tone: "owner", text: `You ${e.decision ?? "decided"}: ${e.proposalId}` }
+        ? { tone: "owner", text: `You ${e.decision ?? "decided"} ${what(e.proposalId)}.` }
         : {
             tone: "stop",
-            text: `Your decision on ${e.proposalId} did not count (it changed or was no longer waiting).`,
+            text: `Your decision on ${what(e.proposalId)} did not count (it changed or was no longer waiting).`,
           };
     case "execution": {
       const s = e.execution.status;
-      if (s === "succeeded") return { tone: "ok", text: `Money moved for ${e.proposalId}.` };
+      if (s === "succeeded") return { tone: "ok", text: `Money moved: ${what(e.proposalId)}.` };
       if (s === "failed") {
         const why = e.execution.detail ? `: ${e.execution.detail}` : ".";
-        return { tone: "stop", text: `Payment ${e.proposalId} failed${why}` };
+        return { tone: "stop", text: `Payment of ${what(e.proposalId)} failed${why}` };
       }
       return {
         tone: "wait",
-        text: `Payment ${e.proposalId} is not confirmed yet (${s}). Nothing is retried blind.`,
+        text: `Payment of ${what(e.proposalId)} is not confirmed yet (${s}). Nothing is retried blind.`,
       };
     }
     case "kill_switch":
@@ -182,11 +240,11 @@ function describeEvent(e: ControlEvent): { tone: Tone; text: string; why?: strin
         tone: "stop",
         text: `STOP pressed. Every payment refused, mandates revoked${frozen(e.result.event.frozenCardIds)} (took ${e.result.durationMs} ms).`,
       };
-    case "budget_changed":
-      return {
-        tone: "owner",
-        text: `New limits signed for ${e.warrantId} (version ${e.fromVersion} to ${e.toVersion}).`,
-      };
+    case "budget_changed": {
+      const role = names.role(e.warrantId);
+      const whose = role ? `the ${agentName(role)}` : e.warrantId;
+      return { tone: "owner", text: `You signed new limits for ${whose} (v${e.toVersion}).` };
+    }
     case "pass_checked": {
       const b = e.buyer;
       const what = pathOf(e.url);
@@ -321,7 +379,7 @@ export const SCENARIOS: Record<string, { label: string; what: string }> = {
     label: "Attacks on the agents",
     what: "A changed payment address, hidden instructions, a fake invoice, refund fraud.",
   },
-  all: { label: "Everything", what: "All of the above in one run." },
+  all: { label: "Everything", what: "Every scenario in one run." },
 };
 
 export function scenarioLabel(id: string): string {
@@ -363,4 +421,21 @@ export function ownerLine(
     }
   }
   return null;
+}
+
+/**
+ * Runs of alike items folded into one, oldest first: twenty identical blocked payments become one
+ * row with n = 20. Only neighbours fold, so the order of what happened stays true.
+ */
+export function foldRepeats<T>(items: T[], keyOf: (t: T) => string): { item: T; n: number }[] {
+  const out: { item: T; n: number; key: string }[] = [];
+  for (const item of items) {
+    const key = keyOf(item);
+    const prev = out[out.length - 1];
+    if (prev && prev.key === key) {
+      prev.n += 1;
+      prev.item = item;
+    } else out.push({ item, n: 1, key });
+  }
+  return out.map(({ item, n }) => ({ item, n }));
 }

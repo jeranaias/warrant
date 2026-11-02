@@ -12,6 +12,8 @@ export function Chain({ chain }: { chain: ChainView }) {
       <p className="muted small">
         Data supplier's price {cents(chain.upstreamPriceCents)} per call. {chain.payments}{" "}
         payment(s) on chain. Treasury pays through Airwallex, so it has no mandate here.
+        {chain.mandates.some((m) => /-v\d+\.json$/.test(m.credential)) &&
+          " A new version keeps the spend of the one it replaces, so its budget still counts it."}
       </p>
       <table className="grid">
         <thead>

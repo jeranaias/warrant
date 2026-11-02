@@ -132,17 +132,19 @@ export function ApprovalCard({
         </div>
       )}
       <footer className="approval-foot">
-        <span className="mono muted small" title={a.shownHash}>
-          shown {a.shownHash.slice(0, 12)}
-        </span>
-        <span className="spacer" />
-        <button className="btn" disabled={sending} onClick={() => void decide("denied")}>
-          Deny{hotkeys && <kbd>D</kbd>}
-        </button>
         <button className="btn primary" disabled={sending} onClick={() => void decide("approved")}>
           {isBudget ? "Sign new limits" : approveLabel(a.view)}
           {hotkeys && <kbd>A</kbd>}
         </button>
+        <button className="btn" disabled={sending} onClick={() => void decide("denied")}>
+          Deny{hotkeys && <kbd>D</kbd>}
+        </button>
+        <span
+          className="fp mono muted small"
+          title={`Your approval is bound to exactly what is shown here (${a.shownHash})`}
+        >
+          Fingerprint {fingerprint(a.shownHash)}
+        </span>
       </footer>
       <table className="kv" aria-label="Everything you sign">
         <tbody>
@@ -156,6 +158,11 @@ export function ApprovalCard({
       </table>
     </article>
   );
+}
+
+/** "6338…5189": enough of the shown-view hash to compare, not enough to clutter. */
+function fingerprint(hash: string): string {
+  return hash.length > 10 ? `${hash.slice(0, 4)}…${hash.slice(-4)}` : hash;
 }
 
 /** "Per payment 0.03 USDZ → 0.02 USDZ", or "In total 10.00 USDZ, unchanged". */
