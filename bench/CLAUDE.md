@@ -3,7 +3,7 @@
 **Purpose:** the attack benchmark. 150+ attack cases plus benign cases, each run against
 `unprotected`, `limits_only` and `warrant`. Scoring rules are in `SCORING.md`.
 
-**May import:** `@warrant/contracts`, `@warrant/control`, `@warrant/agents`, `@warrant/mocks`
+**May import:** `@warrant/contracts`, `@warrant/control`, `@warrant/agents`, `@warrant/mocks`, `@warrant/engine`
 (the bench is the one place that wires everything together).
 
 **Must never:**

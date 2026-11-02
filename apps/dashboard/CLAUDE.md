@@ -3,7 +3,7 @@
 **Purpose:** the owner's UI: balances, pending proposals with Approve / Deny, kill switch, and
 the replay log (ledger + decisions, step by step). Vite + React.
 
-**May import:** `@warrant/contracts`, React, and control's HTTP API (to be defined).
+**May import:** `@warrant/contracts`, React, and the engine's HTTP API (typed in `src/api.ts`, see `README.md`).
 
 **Must never:**
 

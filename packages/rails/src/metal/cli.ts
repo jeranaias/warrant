@@ -16,16 +16,22 @@ export interface CliResult {
 
 export type CliRunner = (args: readonly string[], timeoutMs: number) => Promise<CliResult>;
 
-/** Runs the CLI with execFile (no shell, so no injection through arguments). */
+/**
+ * Runs the CLI with execFile (no shell, so no injection through arguments). A `.js` bin (the
+ * CLI's `dist/index.js`) runs under this Node: on Windows the `.cmd` shim needs a shell.
+ */
 export function execCliRunner(
   bin = "metal-agent",
   env: NodeJS.ProcessEnv = process.env,
 ): CliRunner {
+  const viaNode = /\.[cm]?js$/.test(bin);
+  const file = viaNode ? process.execPath : bin;
+  const pre = viaNode ? [bin] : [];
   return (args, timeoutMs) =>
     new Promise((resolve) => {
       execFile(
-        bin,
-        [...args],
+        file,
+        [...pre, ...args],
         { timeout: timeoutMs, env, windowsHide: true, maxBuffer: 1024 * 1024 },
         (err, stdout, stderr) => {
           resolve({

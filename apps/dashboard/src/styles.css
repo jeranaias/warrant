@@ -1,0 +1,418 @@
+/*
+ * One small stylesheet. Colors are tokens on :root (light, then dark), so a new look starts by
+ * changing the tokens. Class names match the components in src/components.
+ */
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1b1f24;
+  --muted: #5f6b7a;
+  --line: #dde2e8;
+  --accent: #2456d6;
+  --ok: #1b7f46;
+  --wait: #a35f00;
+  --stop: #c5221f;
+  --owner: #6b3fc4;
+  --ok-bg: #e5f4ea;
+  --wait-bg: #fdf1dd;
+  --stop-bg: #fde7e6;
+  --radius: 10px;
+  color-scheme: light dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --panel: #1a1e24;
+    --text: #e7eaee;
+    --muted: #97a3b1;
+    --line: #2c333c;
+    --accent: #7aa2ff;
+    --ok: #5cc98a;
+    --wait: #f0b45a;
+    --stop: #ff6b66;
+    --owner: #b99bff;
+    --ok-bg: #16301f;
+    --wait-bg: #3a2b12;
+    --stop-bg: #3d1716;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+h3 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+a {
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+/* layout */
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.col-main {
+  display: grid;
+  gap: 16px;
+}
+
+.col-side {
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .col-side {
+    position: static;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.panel.attention {
+  border-color: var(--wait);
+  box-shadow: 0 0 0 2px var(--wait-bg);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* agent cards */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.card,
+.approval {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.big-number {
+  margin: 8px 0 4px;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bar > div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.bar.hot > div {
+  background: var(--stop);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+/* badges */
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--line);
+}
+
+.badge.ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.badge.wait {
+  background: var(--wait-bg);
+  color: var(--wait);
+}
+
+.badge.stop {
+  background: var(--stop-bg);
+  color: var(--stop);
+}
+
+/* tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.kv th {
+  width: 40%;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.grid th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* approvals */
+.approval-list {
+  display: grid;
+  gap: 12px;
+}
+
+.reasons {
+  margin: 8px 0;
+  padding-left: 1.2rem;
+  color: var(--wait);
+}
+
+.approval-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* activity feed */
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.feed li {
+  padding: 6px 0 6px 10px;
+  border-left: 3px solid var(--line);
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+.feed .tone-ok {
+  border-left-color: var(--ok);
+}
+
+.feed .tone-wait {
+  border-left-color: var(--wait);
+}
+
+.feed .tone-stop {
+  border-left-color: var(--stop);
+}
+
+.feed .tone-owner {
+  border-left-color: var(--owner);
+}
+
+/* buttons */
+.btn {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.kill {
+  background: var(--stop);
+  border-color: var(--stop);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 10px 28px;
+}
+
+.btn.big {
+  width: 100%;
+  padding: 18px;
+  font-size: 1.2rem;
+}
+
+.btn.link {
+  border: none;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+}
+
+.stop-confirm {
+  display: flex;
+  gap: 8px;
+}
+
+.stop-confirm.big {
+  flex-direction: column;
+}
+
+.stopped {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--stop-bg);
+  color: var(--stop);
+}
+
+.error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--stop-bg);
+  color: var(--stop);
+}
+
+.note {
+  margin: 8px 0 0;
+  color: var(--ok);
+}
+
+select {
+  font: inherit;
+  padding: 4px;
+}
+
+/* phone page (#/m) */
+.phone {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.phone-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.phone .approval-foot .btn {
+  flex: 1;
+  padding: 14px;
+}

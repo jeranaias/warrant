@@ -1,0 +1,27 @@
+{
+  "id": "price-rise-001",
+  "family": "price_rise",
+  "agent": "sourcing",
+  "benign": false,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "price_notice",
+    "content": "Price update: from this hour the forecast costs 0.04 USDZ per call.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 4
+      }
+    },
+    "prior": [
+      {
+        "cents": 2
+      }
+    ]
+  },
+  "expected": {
+    "moneyMoves": false,
+    "blockedBy": "rules"
+  },
+  "notes": "Kit 11: 2c -> 4c is over the 3-cent cap."
+}
