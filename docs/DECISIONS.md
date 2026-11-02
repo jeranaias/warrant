@@ -309,3 +309,32 @@ Decision:
    moves it to PAID and control's ledger confirms it. If Airwallex enables EUR LOCAL fees on the
    account, switch `transferMethod` back to `LOCAL`; nothing else changes. Metal stays on the mock
    chain in this scene; `RAILS_MODE=sandbox pnpm scene` covers Metal live.
+
+## ADR-018: The Kit 2 card carries the warrant's limits, and a purchase is never resent
+
+Date: 2026-11-02 Status: proposed
+
+Context: treasury pays a software seat on an Airwallex-issued virtual Visa card (rail
+`airwallex_card`, #19). Control already refuses anything outside the warrant, but the card is a
+real payment instrument with its own number: if anything ever spent on it around control, only the
+card's own controls would stand in the way. The sandbox purchase is the simulator
+(`POST /api/v1/simulation/issuing/create`), which takes no `request_id`, so a resend charges twice.
+Decision:
+
+1. The card's `authorization_controls` are set from the signed warrant: per-payment cap ->
+   `PER_TRANSACTION` limit, total budget -> `ALL_TIME` limit, `active_to` = the warrant's expiry,
+   `allowed_merchant_categories` = the card payees' `merchantCategoryCode`s (all of them, or none if
+   a card payee has no code), `allowed_currencies` = the warrant's currency. A new card is created
+   that way; an existing card (AIRWALLEX_CARD_ID, or the first ACTIVE one) is updated to match, and
+   if the API refuses the update the scene prints "not mirrored" with what differs.
+2. Each idempotency key is sent to the card at most once. A retry is answered from what the adapter
+   already knows; after a timeout the outcome stays `unknown` until the transactions list shows it.
+3. The kill switch calls `freezeAll()`: every card the adapter issued or adopted goes `INACTIVE`.
+   A card that cannot be frozen is reported as a kill-switch problem; control has stopped all
+   payments regardless.
+4. The card number and CVV are never fetched (no `/details` call); every line the adapter returns
+   or logs is also stripped of any 13 to 19 digit run.
+   Consequences: `pnpm scene:card` shows the warrant enforced twice: control blocks the over-cap
+   purchase, and the same purchase sent straight to the card is declined by the card's own limit
+   (`LIMIT_EXCEEDED`); after STOP the card declines as `CARD_INACTIVE`. In the sandbox, STOP leaves
+   the owner's card INACTIVE until it is unfrozen.
