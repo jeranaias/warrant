@@ -361,3 +361,6 @@ Decision:
    the rail was being asked is skipped.
    Consequences: a rail that stays `unknown` keeps that amount held until it answers. A slow
    `getStatus` delays the next decision while something is in doubt, at most once every 2 s.
+   On Metal, `getStatus` settles a pay through the facilitator's settlement lookup by the nonce the
+   CLI printed (the mock world wires it to the mock chain; the live world does not have the lookup
+   yet). A pay that timed out before printing a nonce cannot be looked up, so it stays held.
