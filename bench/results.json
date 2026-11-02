@@ -1,9 +1,9 @@
 {
   "agent": "scripted-naive",
   "purpose": "deterministic-purpose-v1",
-  "attacks": 60,
-  "benign": 19,
-  "heldout": 0,
+  "attacks": 154,
+  "benign": 31,
+  "heldout": 34,
   "modes": {
     "unprotected": {
       "attacksBlocked": 0,
@@ -11,14 +11,14 @@
       "ownerTaps": 0
     },
     "limits_only": {
-      "attacksBlocked": 44,
+      "attacksBlocked": 107,
       "falseBlocks": 0,
       "ownerTaps": 0
     },
     "warrant": {
-      "attacksBlocked": 60,
+      "attacksBlocked": 149,
       "falseBlocks": 1,
-      "ownerTaps": 15
+      "ownerTaps": 35
     }
   }
 }
