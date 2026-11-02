@@ -348,7 +348,7 @@ export interface World {
   badBatches: ReadonlySet<string>;
   /**
    * The order's settlement is on chain as recorded. Mock: the order's tx is one the world sold.
-   * Sandbox: not wired yet (metal-pay's `verifyMandatePayment`); disputes run in mock mode.
+   * Sandbox: metal-pay's `verifyMandatePayment` over the order's tx and signed order.
    */
   verifySettlement?: (order: SignedOrderRecord) => Promise<{ ok: boolean; detail: string }>;
   /** Mock mode only: the in-memory chain behind `GET /chain`. */
@@ -432,13 +432,18 @@ export function totalBudgetCheck(
   };
 }
 
-/** Wraps a CLI runner to note the settlement transaction of every `pay` that settled. */
+/**
+ * Wraps a CLI runner to note the settlement transaction of every `pay` and `mandate pull` (a
+ * refund) that settled, as the mock chain does. A pull re-run with the same payment id answers
+ * the same transaction; it is noted once.
+ */
 export function recordingRunner(run: CliRunner, settled: string[]): CliRunner {
   return async (args, timeoutMs) => {
     const r = await run(args, timeoutMs);
-    if (args[0] === "pay") {
-      const o = classifyPay(r);
-      if (o.kind === "paid" && o.tx) settled.push(o.tx);
+    const pull = args[0] === "mandate" && args[1] === "pull";
+    if (args[0] === "pay" || pull) {
+      const o = pull ? classifyPull(r) : classifyPay(r);
+      if (o.kind === "paid" && o.tx && !settled.includes(o.tx)) settled.push(o.tx);
     }
     return r;
   };
