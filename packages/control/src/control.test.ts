@@ -14,7 +14,7 @@ import {
 } from "./business.js";
 import { canonicalHash, canonicalize, signWarrant, verifyWarrant } from "./crypto.js";
 import { Ledger, verifyChain } from "./ledger/index.js";
-import { checkRules, mandateProblems } from "./rules/index.js";
+import { checkRules, mandateProblems, nearlySameAmount } from "./rules/index.js";
 import type { RulesContext } from "./rules/index.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
@@ -298,6 +298,42 @@ describe("rules: Airwallex duplicate window and refunds", () => {
       "duplicate_guard",
     ]);
     expect(checkRules(treasury, fee(), ctx({ recentPayments: at(600_001) })).pass).toBe(true);
+  });
+
+  it("an amount within 1% of a payment 8 minutes ago is a duplicate too (ADR-014)", () => {
+    const paid = (cents: number) => [
+      {
+        payeeId: "pay_licensor",
+        rail: "airwallex_transfer" as const,
+        cents,
+        at: new Date(NOW.getTime() - 8 * 60_000),
+      },
+    ];
+    const eurFee = (cents: number) => fee({ amount: { currency: "EUR", cents } });
+    // duplicate-charge-005: EUR 49.99 after EUR 50.00
+    const r = checkRules(treasury, eurFee(4999), ctx({ recentPayments: paid(5000) }));
+    expect(failed(r)).toEqual(["duplicate_guard"]);
+    expect(r.checks.find((c) => c.rule === "duplicate_guard")?.detail).toBe(
+      "same payee and rail within 10 minutes, 5000 vs 4999 is within 1%",
+    );
+    // 1% of the larger amount, inclusive: 50 cents off 50.00 matches, 51 does not
+    expect(failed(checkRules(treasury, eurFee(4950), ctx({ recentPayments: paid(5000) })))).toEqual(
+      ["duplicate_guard"],
+    );
+    expect(checkRules(treasury, eurFee(4949), ctx({ recentPayments: paid(5000) })).pass).toBe(true);
+    // small amounts: 1% of a few cents rounds to nothing, so only the exact amount matches
+    expect(checkRules(treasury, eurFee(3), ctx({ recentPayments: paid(2) })).pass).toBe(true);
+    expect(failed(checkRules(treasury, eurFee(2), ctx({ recentPayments: paid(2) })))).toEqual([
+      "duplicate_guard",
+    ]);
+  });
+
+  it("nearlySameAmount is 1% of the larger amount, either way round", () => {
+    expect(nearlySameAmount(10_000, 9_900)).toBe(true);
+    expect(nearlySameAmount(9_900, 10_000)).toBe(true);
+    expect(nearlySameAmount(10_000, 9_899)).toBe(false);
+    expect(nearlySameAmount(2, 2)).toBe(true);
+    expect(nearlySameAmount(2, 3)).toBe(false);
   });
 
   const support: Warrant = signWarrant(
