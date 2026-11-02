@@ -1,0 +1,23 @@
+# Hosted demo (issue #89): one Render web service, mock rails only. See docs/RUNBOOK.md
+# "Hosted demo (Render)". The access code is typed into the Render dashboard; it is never in git.
+services:
+  - type: web
+    name: warrant-demo
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:hosted
+    # Plain node on the bundled server: no pnpm or tsx process at runtime (512 MB on the free plan).
+    startCommand: node apps/engine/dist/hosted.mjs
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: RAILS_MODE
+        value: mock
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: DEMO_COOKIE_SECRET
+        generateValue: true

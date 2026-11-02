@@ -1500,3 +1500,14 @@ kbd {
   flex: 1;
   min-height: 56px;
 }
+
+/* Hosted demo only (issue #89): one quiet line in the top bar. */
+.hud-demo {
+  font: 500 0.74rem var(--num);
+  color: var(--muted);
+}
+
+.hud-demo .btn.link {
+  font: inherit;
+  padding: 0;
+}

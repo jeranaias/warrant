@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { HOSTED, api } from "../api.js";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
 import { agentName, cents, money, time, whyOf } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
@@ -138,6 +139,7 @@ export function CommandPage({
           </div>
           <StateChip stopped={stopped} waiting={engine.approvals.length} />
           <span className="spacer" />
+          {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
           <span className="hud-clock mono">{clock} UTC</span>
           <button
@@ -444,5 +446,23 @@ function Ticker({
       <span className={`fate ${pass.fate}`}>{FATE_WORD[pass.fate]}</span>
       {why && <span className="ticker-why">{why}</span>}
     </div>
+  );
+}
+
+/** Hosted demo only: what this is, and a way to start over with a fresh engine. */
+function DemoLine({ onError }: { onError: (e: string) => void }) {
+  const reset = () => {
+    api.reset().then(
+      () => location.assign("/"),
+      (e: Error) => onError(e.message),
+    );
+  };
+  return (
+    <span className="hud-demo">
+      Demo · simulated money ·{" "}
+      <button className="btn link" onClick={reset}>
+        Reset
+      </button>
+    </span>
   );
 }

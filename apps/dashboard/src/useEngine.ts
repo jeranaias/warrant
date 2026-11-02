@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api.js";
+import { HOSTED, api } from "./api.js";
 import type { ChainView, KillState, LoggedEvent, PendingApproval, World } from "./api.js";
 
 /** How often the dashboard asks the engine for news. Lower is livelier, higher is quieter. */
@@ -64,7 +64,9 @@ export function useEngine(): EngineState & { refresh: () => void } {
         ...s,
         events: [],
         connected: false,
-        error: `Cannot reach the engine (${(e as Error).message}). Is \`pnpm engine\` running?`,
+        error: HOSTED
+          ? `Cannot reach the engine (${(e as Error).message}).`
+          : `Cannot reach the engine (${(e as Error).message}). Is \`pnpm engine\` running?`,
       }));
     } finally {
       busy.current = false;
