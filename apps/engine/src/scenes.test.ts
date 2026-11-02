@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { limitChangeScene, priceRiseScene } from "./scenes.js";
+import { disputeScene, limitChangeScene, priceRiseScene } from "./scenes.js";
 
 describe("price rise scene (Kit 11: 2 cents, then 4)", () => {
   it("pays at 2, then refuses 4 in our rules, at the rail, and on chain", async () => {
@@ -21,5 +21,28 @@ describe("price rise scene (Kit 11: 2 cents, then 4)", () => {
       "chain refused: mandate_revoked",
     ]);
     expect(steps.map((s) => s.moneyMoved)).toEqual([false, false, true, false]);
+  });
+});
+
+describe("dispute scene (Metal's ask: the seller proves, then decides)", () => {
+  it("refunds only the bad batch, by mandate pull, and stands by the rest", async () => {
+    const steps = await disputeScene(() => new Date("2026-11-01T12:00:00Z"));
+    expect(steps.map((s) => [s.step, s.outcome])).toEqual([
+      [
+        "customer: the data was wrong",
+        "ord_1 refund 5c (data_was_wrong); ord_2 no refund (data_was_correct)",
+      ],
+      ["support refunds ord_1 (mandate pull)", "succeeded"],
+      [
+        "customer asks again, adds ord_404",
+        "ord_1 no refund (already_refunded); ord_404 no refund (order_not_found)",
+      ],
+      ["support tries to refund ord_1 again", "rules (refund_matches_order)"],
+      [
+        "customer: my agent never agreed",
+        "ord_3 no refund (owner_authorized): 11 of 11 checks hold",
+      ],
+    ]);
+    expect(steps.map((s) => s.moneyMoved)).toEqual([false, true, false, false, false]);
   });
 });

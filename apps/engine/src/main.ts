@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { purposeFromEnv } from "@warrant/control";
 import { liveConfigFromEnv, loadEnv, railsMode } from "./config.js";
 import { makeLiveWorld } from "./live.js";
@@ -14,10 +15,19 @@ const live = railsMode() === "sandbox";
 const world = live ? await makeLiveWorld(liveConfigFromEnv()) : undefined;
 if (world) await world.listen();
 // Lane A's purpose check: the model when ANTHROPIC_API_KEY is set, else the deterministic one.
-const { app } = createEngine({ purpose: purposeFromEnv(), ...(world ? { world } : {}) });
+// The owner's key for this run: approving and the emergency stop need it. A fresh one each start
+// unless OWNER_TOKEN is set (e.g. for a hosted demo).
+const ownerToken = process.env["OWNER_TOKEN"] || randomBytes(18).toString("base64url");
+const { app } = createEngine({
+  purpose: purposeFromEnv(),
+  ownerToken,
+  ...(world ? { world } : {}),
+});
 app.listen(port, "127.0.0.1", () => {
   const mode = live ? "Metal testnet, Airwallex mock" : "mock rails";
   console.log(
     `engine on http://127.0.0.1:${port}, ${mode} (GET /tasks?role=sourcing, POST /proposals)`,
   );
+  const dash = process.env["DASHBOARD_URL"] ?? "http://127.0.0.1:5173";
+  console.log(`owner link (keep it to yourself): ${dash}/#/m?owner=${ownerToken}`);
 });

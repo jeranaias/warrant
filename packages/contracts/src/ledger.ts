@@ -31,6 +31,8 @@ export const LedgerEntry = z
     rail: Rail.optional(),
     /** reserve: the warrant payee (or refunded order id) the money is for. Duplicate guard keys on it. */
     payeeId: Id.optional(),
+    /** reserve: the offer, invoice or ticket the payment answers. One payment per source. */
+    sourceRef: Id.optional(),
     amount: Money,
     /** Rail-side reference (tx hash, Airwallex transfer id). Never a card PAN or CVV. */
     railRef: z.string().max(256).optional(),
