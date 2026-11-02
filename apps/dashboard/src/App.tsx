@@ -3,7 +3,10 @@ import { CommandPage } from "./components/CommandPage.js";
 import { Phone } from "./components/Phone.js";
 import { useEngine } from "./useEngine.js";
 
-/** "#/m" is the phone page; anything else is the desktop dashboard. */
+/**
+ * "#/m" is the phone page and "#/desk" the desktop dashboard. Anything else picks by width: a
+ * narrow screen gets the phone page, since the gate needs room to read.
+ */
 function useHash(): string {
   const [hash, setHash] = useState(location.hash);
   useEffect(() => {
@@ -14,9 +17,26 @@ function useHash(): string {
   return hash;
 }
 
+const NARROW = "(max-width: 700px)";
+
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(
+    () => typeof matchMedia !== "undefined" && matchMedia(NARROW).matches,
+  );
+  useEffect(() => {
+    if (typeof matchMedia === "undefined") return;
+    const q = matchMedia(NARROW);
+    const on = () => setNarrow(q.matches);
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return narrow;
+}
+
 export function App() {
   const engine = useEngine();
   const hash = useHash();
+  const narrow = useNarrow();
   const [actionError, setActionError] = useState<string | null>(null);
   const error = actionError ?? engine.error;
 
@@ -31,7 +51,8 @@ export function App() {
     </div>
   );
 
-  if (hash.startsWith("#/m")) {
+  const phone = hash.startsWith("#/m") || (narrow && !hash.startsWith("#/desk"));
+  if (phone) {
     return (
       <>
         {banner}

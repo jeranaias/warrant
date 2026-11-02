@@ -36,20 +36,22 @@ type Drawer = "activity" | "mandates" | "scenarios";
 const BENCH_LINE = benchLine(bench);
 
 const FATE_WORD: Record<Fate, string> = { paid: "paid", blocked: "blocked", asked: "waiting" };
-const MOTION_KEY = "warrant.motion";
+const REDUCED = "(prefers-reduced-motion: reduce)";
 
-function initialMotion(): boolean {
-  try {
-    const saved = localStorage.getItem(MOTION_KEY);
-    if (saved === "on" || saved === "off") return saved === "on";
-  } catch {
-    // storage blocked: fall through to the system setting
-  }
-  return !(
-    typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches
+/** Animation follows the system setting: off when the viewer asks for reduced motion. */
+function useMotion(): boolean {
+  const [motion, setMotion] = useState(
+    () => !(typeof matchMedia !== "undefined" && matchMedia(REDUCED).matches),
   );
+  useEffect(() => {
+    if (typeof matchMedia === "undefined") return;
+    const q = matchMedia(REDUCED);
+    const on = () => setMotion(!q.matches);
+    q.addEventListener("change", on);
+    return () => q.removeEventListener("change", on);
+  }, []);
+  return motion;
 }
-
 function useUtcClock(): string {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -76,16 +78,9 @@ export function CommandPage({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer | null>(null);
-  const [motion, setMotion] = useState(initialMotion);
+  const motion = useMotion();
   const clock = useUtcClock();
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(MOTION_KEY, motion ? "on" : "off");
-    } catch {
-      // per-viewer convenience only
-    }
-  }, [motion]);
   useEffect(() => {
     if (selected && !warrants.some((w) => w.warrantId === selected)) setSelected(null);
   }, [selected, warrants]);
@@ -104,7 +99,6 @@ export function CommandPage({
         if (d) setDrawer(null);
         else setSelected(null);
       } else if (k === "l") setDrawer(d === "activity" ? null : "activity");
-      else if (k === "m") setMotion((m) => !m);
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -152,15 +146,6 @@ export function CommandPage({
           {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
           <span className="hud-clock mono">{clock} UTC</span>
-          <button
-            className="hud-btn"
-            aria-pressed={motion}
-            onClick={() => setMotion((m) => !m)}
-            title="Animation"
-          >
-            Motion {motion ? "on" : "off"}
-            <kbd>M</kbd>
-          </button>
           <a className="hud-btn" href="#/m">
             Phone
           </a>
@@ -211,7 +196,7 @@ export function CommandPage({
             <button className="drawer-x" onClick={() => setDrawer(null)} aria-label="Close">
               ×
             </button>
-            {drawer === "activity" && <Activity events={engine.events} />}
+            {drawer === "activity" && <Activity events={engine.events} warrants={warrants} />}
             {drawer === "mandates" &&
               (engine.chain ? <Chain chain={engine.chain} /> : <p className="muted">No chain.</p>)}
             {drawer === "scenarios" && (

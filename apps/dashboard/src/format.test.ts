@@ -4,9 +4,11 @@ import {
   approveLabel,
   benchLine,
   describe,
+  foldRepeats,
   laneName,
   mandateName,
   money,
+  namesOf,
   ownerLine,
   percentUsed,
   scenarioLabel,
@@ -327,5 +329,113 @@ group("first-visit wording", () => {
     );
     expect(ownerLine(events.slice(0, 3), roleOf, 1)).toBe("You approved new limits.");
     expect(ownerLine(events, roleOf, 4)).toBeNull();
+  });
+});
+
+group("names in the feed, not ids", () => {
+  const warrants = [
+    {
+      warrantId: "wrt_sourcing",
+      agentRole: "sourcing",
+      payees: [{ payeeId: "pay_upstream", displayName: "Upstream data provider" }],
+    },
+  ];
+  const proposal = {
+    proposalId: "prp_9",
+    warrantId: "wrt_sourcing",
+    agentId: "agt_sourcing",
+    agentRole: "sourcing",
+    rail: "metal_x402",
+    payeeId: "pay_upstream",
+    amount: { currency: "USDZ", cents: 2 },
+    category: "data_purchase",
+    recurrence: "one_off",
+    idempotencyKey: "idem_00009",
+    justification: "",
+    createdAt: at,
+  } as const;
+  const budgetView = {
+    proposalId: "bud_1793656132174",
+    kind: "budget_change",
+    warrant: { warrantId: "wrt_sourcing", version: 1, role: "sourcing" },
+    proposedBy: "agt_treasury",
+  };
+  const events: LoggedEvent[] = [
+    { seq: 1, at, event: { type: "proposal", proposal, result: { blockedBy: "rules" } } },
+    {
+      seq: 2,
+      at,
+      event: {
+        type: "approval_requested",
+        pending: {
+          proposalId: "bud_1793656132174",
+          view: budgetView,
+          shownHash: "63385189bde8",
+          reasons: ["budget change: always the owner's decision"],
+          requestedAt: at,
+        },
+      },
+    },
+    {
+      seq: 3,
+      at,
+      event: {
+        type: "approval_decided",
+        proposalId: "bud_1793656132174",
+        ok: true,
+        decision: "approved",
+      },
+    },
+    {
+      seq: 4,
+      at,
+      event: {
+        type: "budget_changed",
+        proposalId: "bud_1793656132174",
+        warrantId: "wrt_sourcing",
+        fromVersion: 1,
+        toVersion: 2,
+      },
+    },
+  ];
+  const names = namesOf(events, warrants);
+  const text = (i: number) => describe(events[i] as LoggedEvent, names).text;
+
+  it("payees by name", () => {
+    expect(text(0)).toBe(
+      "Sourcing agent asked to pay 0.02 USDZ to Upstream data provider. Blocked by the rules in its warrant.",
+    );
+  });
+
+  it("a budget change by what it asks, from request to signature", () => {
+    expect(text(1)).toBe(
+      "Needs your decision: new limits for the Sourcing agent (budget change: always the owner's decision)",
+    );
+    expect(text(2)).toBe("You approved new limits for the Sourcing agent.");
+    expect(text(3)).toBe("You signed new limits for the Sourcing agent (v2).");
+  });
+
+  it("without names it still says something true", () => {
+    expect(describe(events[3] as LoggedEvent).text).toBe(
+      "You signed new limits for wrt_sourcing (v2).",
+    );
+  });
+});
+
+group("foldRepeats", () => {
+  it("folds neighbours only, keeping the latest of each run", () => {
+    const rows = [
+      { k: "a", t: 1 },
+      { k: "b", t: 2 },
+      { k: "b", t: 3 },
+      { k: "b", t: 4 },
+      { k: "a", t: 5 },
+    ];
+    expect(foldRepeats(rows, (r) => r.k)).toEqual([
+      { item: { k: "a", t: 1 }, n: 1 },
+      { item: { k: "b", t: 4 }, n: 3 },
+      { item: { k: "a", t: 5 }, n: 1 },
+    ]);
+    expect(foldRepeats([], String)).toEqual([]);
   });
 });

@@ -8,6 +8,9 @@ import { SCENARIOS, cents, scenarioLabel } from "../format.js";
  * supplier's price, load a scenario (the queue of offers, tickets and invoices), or have treasury
  * ask for a sourcing cap that fits the new price (it lands in "Waiting for you").
  */
+/** The prices the demo can set the data supplier to, in cents. */
+const PRICES = [2, 4];
+
 export function Scene({
   chain,
   warrants,
@@ -43,6 +46,8 @@ export function Scene({
   const price = chain?.upstreamPriceCents;
   const sourcing = warrants.find((w) => w.agentRole === "sourcing");
   const treasury = warrants.find((w) => w.agentRole === "treasury");
+  const cap = sourcing?.perPaymentCap;
+  const overCap = cap ? PRICES.filter((c) => c > cap.cents) : [];
 
   return (
     <section className="panel">
@@ -50,7 +55,7 @@ export function Scene({
       <p className="muted small">For the demo. These change the world, not your rules.</p>
       <div className="row">
         <span>Data supplier's price: {cents(price)}</span>
-        {[2, 4].map((c) => (
+        {PRICES.map((c) => (
           <button
             key={c}
             className="btn"
@@ -62,10 +67,18 @@ export function Scene({
               })
             }
           >
-            Set {c} cents
+            {price === undefined || price === c
+              ? `${c} cents`
+              : `${c > price ? "Raise" : "Lower"} to ${c} cents`}
           </button>
         ))}
       </div>
+      {cap && overCap.length > 0 && (
+        <p className="muted small">
+          {overCap.map((c) => `${c} cents`).join(", ")} is over the sourcing agent's{" "}
+          {cents(cap.cents, cap.currency)} cap.
+        </p>
+      )}
       <div className="row">
         <label>
           Scenario{" "}

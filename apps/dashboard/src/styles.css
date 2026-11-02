@@ -404,6 +404,10 @@ td {
   flex-wrap: wrap;
 }
 
+.approval-foot .fp {
+  flex-basis: 100%;
+}
+
 /* activity */
 .feed {
   list-style: none;
@@ -1510,9 +1514,19 @@ kbd {
 }
 
 .ph-wait .approval-foot .mono {
-  flex-basis: 100%;
-  order: 3;
   text-align: center;
+}
+
+.ph .firstrun {
+  position: static;
+  transform: none;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  white-space: normal;
+}
+
+.ph .recent-to {
+  white-space: normal;
 }
 
 .ph-queue {

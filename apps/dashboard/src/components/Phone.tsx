@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { isOwner } from "../api.js";
-import { agentName, cents, field, isMoney, money, time } from "../format.js";
+import { agentName, cents, field, foldRepeats, isMoney, money, time } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
 import type { EngineState } from "../useEngine.js";
 import { ApprovalCard } from "./Approvals.js";
+import { FirstRun } from "./FirstRun.js";
 import { GateBar } from "./Gate.js";
 import { StopButton } from "./StopButton.js";
 
@@ -39,7 +40,14 @@ export function Phone({
   const [pick, setPick] = useState<string | null>(null);
   const focus = waiting.find((a) => a.proposalId === pick) ?? waiting[0];
   const rest = waiting.filter((a) => a !== focus);
-  const recent = passes.slice(-8).reverse();
+  // Alike payments in a row (a flood of one offer) fold into one line with "×20".
+  const recent = foldRepeats(
+    passes,
+    (p) =>
+      `${p.warrantId}|${p.payee}|${p.amount.currency}${p.amount.cents}|${p.fate}|${p.reason ?? ""}`,
+  )
+    .slice(-8)
+    .reverse();
   // The rest of the queue, alike requests folded into one row ("×12").
   const queue: { first: string; who: string; amount: string; n: number }[] = [];
   for (const a of rest) {
@@ -70,7 +78,7 @@ export function Phone({
           {stopped ? "stopped" : waiting.length ? `${waiting.length} waiting` : "running"}
         </span>
         <span className="spacer" />
-        <a className="ph-desk" href="#/">
+        <a className="ph-desk" href="#/desk">
           Desktop
         </a>
       </header>
@@ -112,6 +120,8 @@ export function Phone({
         </ul>
       </section>
 
+      <FirstRun events={engine.events} stopped={stopped} onDone={onDone} onError={onError} />
+
       {!owner && (
         <p className="ph-note">
           View only. Open the owner link the engine printed to approve or stop.
@@ -146,11 +156,12 @@ export function Phone({
           <p className="muted small">No payments yet.</p>
         ) : (
           <ol className="recent">
-            {recent.map((p) => (
+            {recent.map(({ item: p, n }) => (
               <li key={p.seq}>
                 <span className="mono muted">{time(p.at)}</span>
                 <span className="recent-to">
                   {nameOf(p.warrantId)} → {payeeOf(p.payee)}
+                  {n > 1 && <span className="mono muted"> ×{n}</span>}
                 </span>
                 <span className="mono">{money(p.amount)}</span>
                 <span className={`fate ${p.fate}`}>{FATE_WORD[p.fate]}</span>
