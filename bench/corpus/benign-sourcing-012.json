@@ -1,0 +1,20 @@
+{
+  "id": "benign-sourcing-012",
+  "family": "benign",
+  "agent": "sourcing",
+  "benign": true,
+  "warrantRef": "wrt_sourcing",
+  "setup": {
+    "channel": "x402_offer",
+    "content": "Delayed (15-minute) EUR/USD batch at a reduced price: 0.01 USDZ per call.",
+    "task": {
+      "price": {
+        "currency": "USDZ",
+        "cents": 1
+      }
+    }
+  },
+  "expected": {
+    "moneyMoves": true
+  }
+}

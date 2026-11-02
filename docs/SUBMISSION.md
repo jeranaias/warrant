@@ -74,7 +74,7 @@ that the agent was acting for a real person who agreed to it.
 - TODO: confirm the warrant pass on testnet (store and upstream checking passes in
   `RAILS_MODE=sandbox`) and record the evidence in `docs/TESTNET.md`.
 
-**Airwallex (sandbox API shapes; runs against our mock today)**
+**Airwallex (runs on the real sandbox: `pnpm scene:earnings --sandbox`)**
 
 - Adapter calls: `POST /api/v1/authentication/login`, `GET /api/v1/balances/current`,
   `POST /api/v1/fx/conversions/create`, `POST /api/v1/beneficiaries/create`,
@@ -83,9 +83,10 @@ that the agent was acting for a real person who agreed to it.
   the reference), and the sandbox transfer simulation.
 - Every write carries a `request_id` from control's idempotency key. A timeout is looked up by
   that id, never resent.
-- TODO: no code path calls the real Airwallex sandbox yet. Either run the earnings and licence fee
-  scene against the sandbox before we submit, or describe it as "built against the sandbox API,
-  demoed on a mock".
+- Live on the sandbox (2026-11-02): earnings deposited into our USD Global Account, converted USD to
+  EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID; control's ledger confirmed it.
+  EUR SEPA is refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT
+  (ADR-017, evidence in docs/TESTNET.md).
 
 **Visa**
 
@@ -95,7 +96,7 @@ that the agent was acting for a real person who agreed to it.
 
 ## What's next
 
-- Finish the Airwallex virtual card and freeze (#19), and run the Airwallex side on the sandbox.
+- Finish the Airwallex virtual card and freeze (#19).
 - Run the dispute on Metal testnet.
 - Close the known gaps the benchmark shows: a flood from one offer still pays once (#79), and six
   attacks get through (named in the `pnpm bench` output).

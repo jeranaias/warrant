@@ -115,18 +115,18 @@ requests flowing to Paid, Held for you or Blocked with reasons.
 
 ## What is real and what is mocked
 
-| Part                                      | Local demo (`RAILS_MODE=mock`, default)    | Live run (`RAILS_MODE=sandbox`)                                         |
-| ----------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
-| Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI               |
-| Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports       |
-| Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                            |
-| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | Mock chain only for now                                                 |
-| Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | Still the in-memory rail. No code path calls the Airwallex sandbox yet. |
-| Airwallex virtual card and freeze (Kit 2) | Mock endpoints exist; no adapter yet (#19) | Not built yet (#19)                                                     |
-| Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                    |
+| Part                                      | Local demo (`RAILS_MODE=mock`, default)    | Live run (`RAILS_MODE=sandbox`)                                                    |
+| ----------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI                          |
+| Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports                  |
+| Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                                       |
+| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | Mock chain only for now                                                            |
+| Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | **Airwallex sandbox** with `pnpm scene:earnings --sandbox` (EUR by SWIFT, ADR-017) |
+| Airwallex virtual card and freeze (Kit 2) | Mock endpoints exist; no adapter yet (#19) | Not built yet (#19)                                                                |
+| Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                               |
 
-The Airwallex adapter (`packages/rails/src/airwallex`) is written against the sandbox API shapes
-and tested against the mock. The live price-rise run and its transaction hashes are recorded in
+The Airwallex adapter (`packages/rails/src/airwallex`) runs against the mock by default and against
+the real Airwallex sandbox with `pnpm scene:earnings --sandbox` (keys from `.env`). The live price-rise run and its transaction hashes are recorded in
 [docs/TESTNET.md](docs/TESTNET.md). To run it:
 
 ```sh
