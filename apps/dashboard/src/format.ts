@@ -64,12 +64,50 @@ export interface FeedLine {
   at: string;
   tone: Tone;
   text: string;
+  /** Why it was blocked or held: the rule that failed or the purpose check's words. */
+  why?: string;
 }
 
 /** One event from GET /events as one plain-language line for the activity feed. */
 export function describe(e: LoggedEvent): FeedLine {
   const { tone, text } = describeEvent(e.event);
-  return { seq: e.seq, at: e.at, tone, text };
+  const why = whyOf(e.event);
+  return { seq: e.seq, at: e.at, tone, text, ...(why ? { why } : {}) };
+}
+
+/** Short state word for a feed line's pill. */
+export const TONE_WORDS: Record<Tone, string> = {
+  ok: "allowed",
+  wait: "waiting",
+  stop: "blocked",
+  owner: "you",
+  info: "note",
+};
+
+/** The reason behind a block or a hold, in control's own words. Never the agent's text. */
+export function whyOf(e: ControlEvent): string | undefined {
+  if (e.type !== "proposal" || !e.result.decision) return undefined;
+  const d = e.result.decision;
+  const failed = d.rules?.checks.filter((c) => !c.pass).map((c) => c.detail) ?? [];
+  if (failed.length) return failed.join("; ");
+  if (d.outcome !== "execute" && d.purpose?.explanation) return d.purpose.explanation;
+  return undefined;
+}
+
+/** "Approve EUR 50.00": the button repeats the amount, so the thumb confirms the number. */
+export function approveLabel(view: Record<string, unknown>): string {
+  const amount = view["amount"];
+  return isMoney(amount) ? `Approve ${money(amount)}` : "Approve";
+}
+
+/** A dotted field of an approval view, e.g. field(view, "payee.displayName"). */
+export function field(view: Record<string, unknown>, path: string): unknown {
+  let v: unknown = view;
+  for (const k of path.split(".")) {
+    if (v === null || typeof v !== "object") return undefined;
+    v = (v as Record<string, unknown>)[k];
+  }
+  return v;
 }
 
 function describeEvent(e: ControlEvent): { tone: Tone; text: string } {
