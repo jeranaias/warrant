@@ -107,7 +107,8 @@ export function toProposal(
     ...pick("targetCurrency"),
     justification: String(i["justification"] ?? "").slice(0, 2000),
     proposalId: ids.proposalId(),
-    warrantId: ctx.warrantId,
+    // A sweep goes under treasury's sweep warrant (ADR-022); everything else under the main one.
+    warrantId: task.kind === "sweep" && ctx.sweepWarrantId ? ctx.sweepWarrantId : ctx.warrantId,
     agentId: ctx.agentId,
     agentRole: ctx.role,
     idempotencyKey: ids.idempotencyKey(),

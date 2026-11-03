@@ -478,6 +478,11 @@ export class Controller {
     if (isRefund(p)) reasons.push(...this.unusualRefund(p, w));
     else reasons.push(...this.againThisPeriod(p, w));
     if (p.recurrence === "recurring") reasons.push("recurring payment");
+    // ADR-022: the owner signed this payee as "ask me every time" (treasury's earnings sweep).
+    const payee = w.payees.find((x) => x.payeeId === p.payeeId && x.rail === p.rail);
+    if (payee?.ownerApprovesEach) {
+      reasons.push(`every payment to ${payee.displayName} waits for the owner`);
+    }
     if (
       (p.rail === "airwallex_transfer" || p.rail === "airwallex_fx") &&
       p.amount.cents >= OWNER_REVIEW_THRESHOLD_CENTS

@@ -11,6 +11,8 @@ export interface AgentContext {
   role: AgentRole;
   agentId: string;
   warrantId: string;
+  /** Treasury: the warrant a sweep task is proposed under (ADR-022), when the world has one. */
+  sweepWarrantId?: string;
   /** The owner's plain-language purpose from the signed warrant. */
   purpose: string;
   allowedRails: Rail[];
@@ -20,7 +22,10 @@ export interface AgentContext {
 
 /** The subset of the engine's `GET /world` answer the agents read. */
 export interface WorldView {
-  agents: Record<AgentRole, { role: AgentRole; agentId: string; warrantId: string }>;
+  agents: Record<
+    AgentRole,
+    { role: AgentRole; agentId: string; warrantId: string; sweepWarrantId?: string }
+  >;
   warrants: {
     warrantId: string;
     agentId: string;
@@ -36,10 +41,12 @@ export function contextFor(world: WorldView, role: AgentRole): AgentContext {
   const who = world.agents[role];
   const w = world.warrants.find((x) => x.warrantId === who.warrantId);
   if (!w) throw new Error(`world has no warrant ${who.warrantId} for ${role}`);
+  const sweep = world.warrants.find((x) => x.warrantId === who.sweepWarrantId);
   return {
     role,
     agentId: who.agentId,
     warrantId: w.warrantId,
+    ...(sweep ? { sweepWarrantId: sweep.warrantId } : {}),
     purpose: w.purpose,
     allowedRails: w.allowedRails,
     payees: w.payees,

@@ -99,8 +99,20 @@ export class ScriptedBrain implements Brain {
         justification: why,
       }));
     }
-    // A spend review answers with limit changes (planLimits), never a payment. Sweeps are not
-    // wired yet (#26).
+    if (task.kind === "sweep") {
+      // ADR-022: everything available, to the address the task names (or the text says).
+      return [
+        {
+          rail: "metal_x402",
+          payeeId: told.address ?? told.payeeId ?? task.payeeId,
+          amount: { currency: task.available.currency, cents: told.cents ?? task.available.cents },
+          category: "treasury_sweep",
+          recurrence: told.recurring ? "recurring" : "one_off",
+          justification: why,
+        },
+      ];
+    }
+    // A spend review answers with limit changes (planLimits), never a payment.
     if (task.kind !== "invoice") return [];
     const one: ProposePaymentInput = {
       rail: "airwallex_transfer",

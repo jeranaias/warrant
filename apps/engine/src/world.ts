@@ -37,7 +37,7 @@ import type { Rail } from "@warrant/contracts";
 import { MockMetalChain, UPSTREAM_PAY_TO, UPSTREAM_URL, addUpstream } from "@warrant/mocks/metal";
 
 /**
- * The engine's pretend world: an owner, three signed warrants, three stored orders, a mock Metal
+ * The engine's pretend world: an owner, four signed warrants, three stored orders, a mock Metal
  * chain that enforces each agent's mandate (with the upstream provider selling on it) and an
  * Airwallex rail that always succeeds. Everything is in memory and made fresh at startup. Nothing
  * here touches a real key, account or network. `live.ts` builds the same World on the real Metal
@@ -59,12 +59,19 @@ export interface AgentIdentity {
   role: AgentRole;
   agentId: string;
   warrantId: string;
+  /** Treasury: the warrant its sweeps go under (ADR-022). */
+  sweepWarrantId?: string;
 }
 
 export const AGENTS: Record<AgentRole, AgentIdentity> = {
   sourcing: { role: "sourcing", agentId: "agt_sourcing", warrantId: "wrt_sourcing" },
   support: { role: "support", agentId: "agt_support", warrantId: "wrt_support" },
-  treasury: { role: "treasury", agentId: "agt_treasury", warrantId: "wrt_treasury" },
+  treasury: {
+    role: "treasury",
+    agentId: "agt_treasury",
+    warrantId: "wrt_treasury",
+    sweepWarrantId: "wrt_treasury_sweep",
+  },
 };
 
 /**
@@ -83,6 +90,14 @@ export const CARD_SEAT = {
 const CARD_CAP = usd(1500);
 const CARD_BUDGET = usd(5000);
 
+/**
+ * Treasury's third warrant (ADR-022): move the store's earnings from Metal toward Airwallex. One
+ * payee, our own treasury address; every sweep waits for the owner. Its mandate pays from the
+ * store's account, which holds the earnings.
+ */
+export const SWEEP_WARRANT_ID = AGENTS.treasury.sweepWarrantId ?? "wrt_treasury_sweep";
+export const SWEEP_PAYEE_ID = "pay_treasury";
+
 /** The two agents that pay on Metal, each through its own mandate. */
 export type MetalRole = "sourcing" | "support";
 export const METAL_ROLES: readonly MetalRole[] = ["sourcing", "support"];
@@ -92,6 +107,8 @@ export interface MetalTerms {
   /** The upstream provider's x402 URL (sourcing's one payee). */
   upstreamUrl: string;
   mandates: Record<MetalRole, { version: number; mandate: MandateRef }>;
+  /** Treasury's sweep mandate (ADR-022). Mock only for now: the sandbox world has none yet. */
+  sweep?: { version: number; mandate: MandateRef };
 }
 
 const DEMO_EXPIRY = "2026-11-20T00:00:00Z";
@@ -111,11 +128,20 @@ function demoTerms(): MetalTerms {
   return {
     upstreamUrl: UPSTREAM_URL,
     mandates: { sourcing: on("sourcing"), support: on("support") },
+    sweep: {
+      version: 1,
+      mandate: {
+        ...on("sourcing").mandate,
+        principal: STORE_ADDRESS,
+        cap: AGENT_BUDGETS.treasury.perPaymentCap,
+        budget: AGENT_BUDGETS.treasury.budget,
+      },
+    },
   };
 }
 
 /** A Metal warrant's limits and expiry are its mandate's (ADR-009 #2). */
-function onMandate(t: MetalTerms["mandates"][MetalRole]) {
+function onMandate(t: { version: number; mandate: MandateRef }) {
   const { mandate } = t;
   return {
     version: t.version,
@@ -164,7 +190,7 @@ export function bodies(
       ...onMandate(terms.mandates.support),
     },
     {
-      // The engine's treasury pays the EUR licence fee only. The earnings sweep is the owner's side.
+      // Treasury's bills: the EUR licence fee. Its sweep has its own Metal warrant (ADR-022).
       ...common,
       agentId: AGENTS.treasury.agentId,
       warrantId: AGENTS.treasury.warrantId,
@@ -185,6 +211,29 @@ export function bodies(
       totalBudget: eur(10000),
     },
     ...(card ? [cardBody(common)] : []),
+    ...(terms.sweep
+      ? [
+          {
+            ...common,
+            agentId: AGENTS.treasury.agentId,
+            warrantId: SWEEP_WARRANT_ID,
+            agentRole: "treasury" as const,
+            purpose: "Move the store's earnings to our own treasury address, then to Airwallex.",
+            allowedRails: ["metal_x402" as const],
+            payees: [
+              {
+                payeeId: SWEEP_PAYEE_ID,
+                displayName: "Our treasury (to Airwallex)",
+                rail: "metal_x402" as const,
+                routingRef: TREASURY_ADDRESS,
+                currency: "USDZ" as const,
+                ownerApprovesEach: true as const,
+              },
+            ],
+            ...onMandate(terms.sweep),
+          },
+        ]
+      : []),
   ];
 }
 
@@ -532,9 +581,24 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
     expiresAt: expires,
   });
 
+  // ADR-022: treasury's sweep mandate pays from the store's account, only to our treasury
+  // address. The store's account holds what the stored orders earned.
+  const earned = [...orders.values()].reduce((n, o) => n + o.price.cents, 0);
+  chain.fund(STORE_ADDRESS, earned);
+  chain.addMandate({
+    credential: "treasury-sweep.json",
+    principal: STORE_ADDRESS,
+    capCents: AGENT_BUDGETS.treasury.perPaymentCap.cents,
+    budgetCents: AGENT_BUDGETS.treasury.budget.cents,
+    payees: [TREASURY_ADDRESS],
+    expiresAt: expires,
+  });
+
+  // One credential per role: treasury's only Metal warrant is the sweep.
   const credentials = new Map<AgentRole, string>([
     ["sourcing", "sourcing.json"],
     ["support", "support.json"],
+    ["treasury", "treasury-sweep.json"],
   ]);
 
   const applyBudgetChange = ownerSigner(privateKey, warrants, (w, cap, budget) => {
@@ -543,7 +607,7 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
     const next = `${w.agentRole}-v${w.version + 1}.json`;
     const m = chain.replaceMandate(old, {
       credential: next,
-      principal: PRINCIPAL,
+      principal: chain.mandate(old).principal,
       capCents: cap.cents,
       budgetCents: budget.cents,
       ...(chain.mandate(old).payees ? { payees: chain.mandate(old).payees } : {}),

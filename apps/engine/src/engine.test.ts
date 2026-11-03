@@ -71,6 +71,16 @@ function proposalFor(t: AgentTask): PaymentProposal {
       refundOfOrderId: t.orderIds[0],
     };
   }
+  if (t.kind === "sweep") {
+    return {
+      ...common,
+      warrantId: "wrt_treasury_sweep",
+      rail: "metal_x402",
+      payeeId: t.payeeId,
+      amount: t.available,
+      category: "treasury_sweep",
+    };
+  }
   if (t.kind !== "invoice") throw new Error(`no test proposal for ${t.kind} tasks yet`);
   return {
     ...common,
@@ -89,6 +99,7 @@ describe("engine: tasks in, decisions out", () => {
       "wrt_sourcing",
       "wrt_support",
       "wrt_treasury",
+      "wrt_treasury_sweep",
     ]);
     const { tasks } = await get<{ tasks: Record<string, unknown>[] }>(
       "/tasks?role=sourcing&limit=3",
@@ -131,6 +142,46 @@ describe("engine: tasks in, decisions out", () => {
 
     const ok = await post<Result>(`/approvals/${id}`, { decision: "approved", shownHash: shown });
     expect(ok.body.execution?.status).toBe("succeeded");
+  });
+
+  it("treasury's sweep always waits for the owner: denied, nothing moves; approved, it settles (ADR-022)", async () => {
+    await post("/scenario", { name: "normal" });
+    const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=treasury");
+    const sweep = tasks.find((t) => t.kind === "sweep") as AgentTask;
+    expect(sweep).toBeDefined();
+    type Held = Result & { approval?: { reasons: string[] } };
+    const shownFor = async (id: string) =>
+      (
+        await get<{ pending: { proposalId: string; shownHash: string }[] }>("/approvals")
+      ).pending.find((a) => a.proposalId === id)?.shownHash ?? "";
+
+    // Small, to our own address, on the warrant: still the owner's call.
+    const first = await post<Held>("/proposals", proposalFor(sweep));
+    expect(first.body.decision?.outcome).toBe("needs_owner_approval");
+    expect(first.body.approval?.reasons).toContain(
+      "every payment to Our treasury (to Airwallex) waits for the owner",
+    );
+    const denyId = first.body.decision?.proposalId ?? "";
+    const denied = await post<Result>(`/approvals/${denyId}`, {
+      decision: "denied",
+      shownHash: await shownFor(denyId),
+    });
+    expect(denied.body.blockedBy).toBe("owner");
+    expect(denied.body.execution).toBeUndefined();
+
+    const again = await post<Held>("/proposals", proposalFor(sweep));
+    const id = again.body.decision?.proposalId ?? "";
+    const ok = await post<Result>(`/approvals/${id}`, {
+      decision: "approved",
+      shownHash: await shownFor(id),
+    });
+    expect(ok.body.execution?.status).toBe("succeeded");
+
+    // Over the warrant's per-payment limit, or to another address: the rules refuse it.
+    const big = { ...proposalFor(sweep), amount: { currency: "USDZ" as const, cents: 601 } };
+    expect((await post<Result>("/proposals", big)).body.blockedBy).toBe("rules");
+    const elsewhere = { ...proposalFor(sweep), payeeId: "0x" + "d".repeat(40) };
+    expect((await post<Result>("/proposals", elsewhere)).body.blockedBy).toBe("rules");
   });
 
   it("price rise, payee swap and a fake vendor are refused by the rules", async () => {
@@ -232,8 +283,12 @@ describe("engine: tasks in, decisions out", () => {
       problems: string[];
       durationMs: number;
     }>("/kill", { reason: "test" });
-    expect(kill.body.event.revokedWarrantIds).toHaveLength(3);
-    expect(kill.body.revokedMandates.sort()).toEqual(["sourcing.json", "support.json"]);
+    expect(kill.body.event.revokedWarrantIds).toHaveLength(4);
+    expect(kill.body.revokedMandates.sort()).toEqual([
+      "sourcing.json",
+      "support.json",
+      "treasury-sweep.json",
+    ]);
     expect(kill.body.problems).toEqual([]);
     expect((await get<{ pending: unknown[] }>("/approvals")).pending).toHaveLength(0);
 
