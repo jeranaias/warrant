@@ -298,7 +298,7 @@ describe("hosted demo: hardening", () => {
       expect(r.headers.get("content-security-policy")).toBe(CSP);
       expect(r.headers.get("x-content-type-options")).toBe("nosniff");
       expect(r.headers.get("x-frame-options")).toBe("SAMEORIGIN");
-      expect(r.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(r.headers.get("referrer-policy")).toBe("same-origin");
       expect(r.headers.get("x-powered-by")).toBeNull();
       expect(r.headers.get("strict-transport-security")).toBeNull(); // plain http here
     }
@@ -330,6 +330,18 @@ describe("hosted demo: hardening", () => {
     // Same origin, and no Origin at all (curl, scripts), still work.
     expect((await post("/api/reset", { origin: `http://${host}` })).status).toBe(200);
     expect((await post("/api/kill", { "sec-fetch-site": "same-origin" })).status).toBe(200);
+    // Chrome sends "Origin: null" on a same-origin form post under a strict referrer policy:
+    // Sec-Fetch-Site decides when present.
+    const nullSame = { origin: "null", "sec-fetch-site": "same-origin" };
+    expect((await post("/api/reset", nullSame)).status).toBe(200);
+    expect((await post("/api/reset", { "sec-fetch-site": "same-site" })).status).toBe(403);
+    const nullLogin = await fetch(base + "/login", {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": "application/x-www-form-urlencoded", ...nullSame },
+      body: `code=${encodeURIComponent(CODE)}`,
+    });
+    expect(nullLogin.status).toBe(303);
     // A cross-site sign-in is refused before the code is checked.
     const login = await fetch(base + "/login", {
       method: "POST",
