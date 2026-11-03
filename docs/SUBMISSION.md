@@ -155,7 +155,8 @@ did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6
 
 ## Team
 
-Eva, Max, Elisei, Jesse. TODO: confirm names and roles as they should appear.
+- truelumpen: AI Engineer
+- Eva, Max, Jesse: TODO: confirm names and roles as they should appear.
 
 ## Links
 
