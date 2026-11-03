@@ -8,7 +8,10 @@ import {
   counterIds,
   runTask,
 } from "@warrant/agents/offline";
-import { deterministicPurpose } from "@warrant/control";
+import { ModelBrain } from "@warrant/agents";
+import type { Brain } from "@warrant/agents";
+import { deterministicPurpose, modelPurpose } from "@warrant/control";
+import type { SessionModel } from "./hosted-model.js";
 import { createEngine } from "./server.js";
 import type { Engine } from "./server.js";
 
@@ -20,14 +23,20 @@ import type { Engine } from "./server.js";
  * The agents talk to their engine the way they always do, over its HTTP API, on a private
  * loopback port. One task at a time, round robin across the roles, `paceMs` apart, so a person can
  * watch each payment reach the gate. STOP needs nothing here: control refuses everything after it.
+ *
+ * With a visitor's own key (ADR-023) the agents and the purpose check run on the model instead,
+ * through that session's counted clients; once its calls are used up the agents stop taking tasks.
  */
 
 /**
  * One visitor's engine: the deterministic purpose check, and an empty queue. The agents wait
  * until the visitor loads a scenario, so nothing is paid before they have done anything.
  */
-export function hostedEngine(ownerToken: string): Engine {
-  return createEngine({ purpose: deterministicPurpose, ownerToken, scenario: "none" });
+export function hostedEngine(ownerToken: string, model?: SessionModel): Engine {
+  const purpose = model
+    ? modelPurpose({ complete: model.complete, model: model.model })
+    : deterministicPurpose;
+  return createEngine({ purpose, ownerToken, scenario: "none" });
 }
 
 export interface AgentDriver {
@@ -39,6 +48,8 @@ export interface DriverOptions {
   paceMs?: number;
   /** How often an empty queue is checked again. */
   idleMs?: number;
+  /** The visitor's own model access; the scripted brain without it. */
+  model?: SessionModel;
 }
 
 const ROLES: readonly AgentRole[] = ["sourcing", "support", "treasury"];
@@ -46,7 +57,10 @@ const ROLES: readonly AgentRole[] = ["sourcing", "support", "treasury"];
 export function startAgents(engine: Engine, opts: DriverOptions = {}): AgentDriver {
   const paceMs = opts.paceMs ?? 1_800;
   const idleMs = opts.idleMs ?? 1_000;
-  const brain = new ScriptedBrain();
+  const model = opts.model;
+  const brain: Brain = model
+    ? new ModelBrain({ create: model.create, model: model.model })
+    : new ScriptedBrain();
   const ids = counterIds(Date.now().toString(36));
   const server: Server = engine.app.listen(0, "127.0.0.1");
   let client: EngineClient | undefined;
@@ -56,6 +70,8 @@ export function startAgents(engine: Engine, opts: DriverOptions = {}): AgentDriv
 
   /** One task from the next role that has one. False when every queue is empty. */
   const step = async (c: EngineClient): Promise<boolean> => {
+    // Calls used up: leave the queue alone rather than take tasks nobody will answer.
+    if (model?.exhausted()) return false;
     for (let i = 0; i < ROLES.length; i++) {
       const role = ROLES[(next + i) % ROLES.length] ?? "sourcing";
       const [task] = await c.tasks(role, 1);

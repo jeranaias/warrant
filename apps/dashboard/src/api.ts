@@ -1,4 +1,5 @@
 import type { AgentRole, Money, PaymentProposal } from "@warrant/contracts";
+import type { ModelStatus } from "./model.js";
 import type { Replay } from "./replay.js";
 
 /**
@@ -191,7 +192,7 @@ export interface ChainView {
 }
 
 async function call<T>(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "DELETE",
   path: string,
   body?: unknown,
   asOwner = false,
@@ -247,4 +248,10 @@ export const api = {
     call<Replay>("GET", `/replay?proposalId=${encodeURIComponent(proposalId)}`),
   /** Hosted demo only: a fresh engine for this visitor. */
   reset: () => call<{ ok: boolean }>("POST", "/reset"),
+  /** Hosted demo only: what this visitor's agents run on (ADR-023). Fails where there is no such route. */
+  model: () => call<ModelStatus>("GET", "/model"),
+  /** Hosted demo only: run this visitor's agents on their own Anthropic key. Starts the session over. */
+  useModelKey: (key: string) => call<ModelStatus>("POST", "/model-key", { key }),
+  /** Hosted demo only: forget the key, back to the scripted agents. Starts the session over. */
+  forgetModelKey: () => call<ModelStatus>("DELETE", "/model-key"),
 };

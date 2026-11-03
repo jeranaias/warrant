@@ -12,7 +12,7 @@ export type { IdSource, ProposePaymentInput, ToProposalResult } from "./tool.js"
 export { LIMITS_TOOL_NAME, proposeLimitsTool, toBudgetChange } from "./limits.js";
 export type { ProposeLimitsInput, ToBudgetChangeResult } from "./limits.js";
 export { SYSTEM_PROMPTS, renderTask } from "./prompts.js";
-export { DEFAULT_AGENT_MODEL, ModelBrain, anthropicCreate } from "./model.js";
+export { DEFAULT_AGENT_MODEL, ModelBrain, anthropicClient, anthropicCreate } from "./model.js";
 export type { CreateMessage, ModelBrainOptions } from "./model.js";
 export { loadFixtures, recordCreate, replayCreate } from "./replay.js";
 export type { Fixtures } from "./replay.js";

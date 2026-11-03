@@ -15,6 +15,8 @@ import {
   parseCookies,
   signAuth,
 } from "./hosted-auth.js";
+import { anthropicClients, keyProblem, modelStatus, sessionModel } from "./hosted-model.js";
+import type { ModelClientFactory } from "./hosted-model.js";
 import { SessionStore } from "./hosted-sessions.js";
 import type { Session, SessionOptions } from "./hosted-sessions.js";
 
@@ -26,7 +28,10 @@ import type { Session, SessionOptions } from "./hosted-sessions.js";
  *   GET  /login        sign-in page; POST /login checks the code and sets the auth cookie
  *   GET  /             (signed in) makes this visitor's engine, then sends them to the owner link
  *   GET  /demo         the dashboard
- *   POST /api/reset    a fresh engine for this visitor
+ *   POST /api/reset    a fresh engine for this visitor (scripted agents again)
+ *   GET  /api/model    what this visitor's agents run on: scripted, or the model on their own key
+ *   POST /api/model-key   {key}: run this visitor's agents and purpose check on their own key
+ *   DELETE /api/model-key  forget it (ADR-023)
  *   ANY  /api/...      this visitor's engine (the same routes as `pnpm engine`)
  *
  * Every response carries security headers (CSP, no framing by other sites, no sniffing, no
@@ -52,6 +57,10 @@ export interface HostedOptions extends SessionOptions {
    * Cloudflare edge: `cf-connecting-ip`). Used before X-Forwarded-For when present.
    */
   clientIpHeader?: string;
+  /** Builds the model clients for a pasted key (ADR-023). Tests pass fakes; never the network. */
+  modelClients?: ModelClientFactory;
+  /** Bad key attempts per client address, so the key check can't be used to test keys at scale. */
+  keyLimiter?: FailureLimiter;
 }
 
 /** The built dashboard loads its own scripts and Google Fonts; React sets inline styles. */
@@ -96,6 +105,8 @@ export function hostedApp(opts: HostedOptions): Hosted {
   const now = opts.now ?? Date.now;
   const sessions = new SessionStore(opts);
   const limiter = opts.limiter ?? new FailureLimiter();
+  const keyLimiter = opts.keyLimiter ?? new FailureLimiter();
+  const modelClients = opts.modelClients ?? anthropicClients;
   const index = join(opts.distDir, "index.html");
   /** Who is asking, for the sign-in limit and the per-address session cap. */
   const clientOf = (req: Request): string =>
@@ -207,6 +218,61 @@ export function hostedApp(opts: HostedOptions): Hosted {
       return;
     }
     res.json({ ok: true });
+  });
+
+  // A visitor's own Anthropic key (ADR-023). Held only inside that session's model clients: never
+  // stored, logged or sent back, and no error from the API is passed on (it could quote the key).
+  app.get("/api/model", (req, res) => {
+    const s = sessionOf(req);
+    noStore(res);
+    if (!s) {
+      res.status(401).json({ error: "this demo session has ended: reload the page" });
+      return;
+    }
+    res.json(modelStatus(s.model));
+  });
+
+  app.post("/api/model-key", express.json({ limit: "1kb" }), async (req, res) => {
+    const s = sessionOf(req);
+    noStore(res);
+    if (!s) {
+      res.status(401).json({ error: "this demo session has ended: reload the page" });
+      return;
+    }
+    const ip = clientOf(req);
+    if (keyLimiter.blocked(ip, now())) {
+      res.status(429).json({ error: "too many key attempts: try again in 10 minutes" });
+      return;
+    }
+    const key: unknown = (req.body as { key?: unknown } | undefined)?.key;
+    const problem = keyProblem(key);
+    if (problem || typeof key !== "string") {
+      keyLimiter.fail(ip, now());
+      res.status(400).json({ error: problem ?? "paste an Anthropic API key" });
+      return;
+    }
+    let clients: ReturnType<ModelClientFactory>;
+    try {
+      clients = modelClients(key.trim());
+      await clients.verify();
+    } catch {
+      keyLimiter.fail(ip, now());
+      res.status(400).json({ error: "Anthropic did not accept this key" });
+      return;
+    }
+    sessions.useModel(s, sessionModel(clients));
+    res.json(modelStatus(s.model));
+  });
+
+  app.delete("/api/model-key", (req, res) => {
+    const s = sessionOf(req);
+    noStore(res);
+    if (!s) {
+      res.status(401).json({ error: "this demo session has ended: reload the page" });
+      return;
+    }
+    if (s.model) sessions.useModel(s, undefined);
+    res.json(modelStatus(s.model));
   });
 
   app.use("/api", (req, res, next) => {

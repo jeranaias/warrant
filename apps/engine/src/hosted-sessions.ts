@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { AgentDriver } from "./hosted-agents.js";
+import type { SessionModel } from "./hosted-model.js";
 import type { Engine } from "./server.js";
 
 /**
@@ -11,7 +12,8 @@ import type { Engine } from "./server.js";
  * sessions (its own oldest goes first), and when the store is full only a session idle for at least
  * `evictAfterMs` can make room. If every session is in use, `create` returns undefined and the
  * visitor is asked to try again shortly. With `startAgents`, each engine gets its own agents,
- * stopped when the session ends or resets.
+ * stopped when the session ends or resets. A session may carry its visitor's own model access
+ * (ADR-023); Reset and the end of the session drop it, back to the scripted agents.
  */
 
 export interface Session {
@@ -19,6 +21,8 @@ export interface Session {
   ownerToken: string;
   engine: Engine;
   agents?: AgentDriver;
+  /** The visitor's own model key, held only inside these clients (ADR-023). */
+  model?: SessionModel;
   lastSeen: number;
   /** Who opened it (the client address); used for the per-address cap. */
   key: string;
@@ -26,9 +30,9 @@ export interface Session {
 
 export interface SessionOptions {
   /** Builds a fresh engine with this owner key (mock rails only). */
-  makeEngine: (ownerToken: string) => Engine;
+  makeEngine: (ownerToken: string, model?: SessionModel) => Engine;
   /** Runs agents against a session's engine (the hosted demo); none when left out. */
-  startAgents?: (engine: Engine) => AgentDriver;
+  startAgents?: (engine: Engine, model?: SessionModel) => AgentDriver;
   max?: number;
   idleMs?: number;
   /** Sessions one client address may hold at once. */
@@ -110,13 +114,20 @@ export class SessionStore {
     return s;
   }
 
-  /** Same visitor, same owner key, a fresh engine. */
+  /** Same visitor, same owner key, a fresh engine with the scripted agents (any key dropped). */
   reset(s: Session): Session {
+    return this.useModel(s, undefined);
+  }
+
+  /** A fresh engine for this visitor, on its own model access or (undefined) the scripted agents. */
+  useModel(s: Session, model: SessionModel | undefined): Session {
     s.agents?.stop();
-    const fresh = this.engineFor(s.ownerToken);
+    const fresh = this.engineFor(s.ownerToken, model);
     s.engine = fresh.engine;
     if (fresh.agents) s.agents = fresh.agents;
     else delete s.agents;
+    if (model) s.model = model;
+    else delete s.model;
     s.lastSeen = this.now();
     return s;
   }
@@ -133,14 +144,15 @@ export class SessionStore {
     this.sessions.clear();
   }
 
-  private engineFor(ownerToken: string): Pick<Session, "engine" | "agents"> {
-    const engine = this.opts.makeEngine(ownerToken);
-    const agents = this.opts.startAgents?.(engine);
+  private engineFor(ownerToken: string, model?: SessionModel): Pick<Session, "engine" | "agents"> {
+    const engine = this.opts.makeEngine(ownerToken, model);
+    const agents = this.opts.startAgents?.(engine, model);
     return agents ? { engine, agents } : { engine };
   }
 
   private drop(s: Session): void {
     s.agents?.stop();
+    delete s.model;
     this.sessions.delete(s.id);
   }
 }

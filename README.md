@@ -10,7 +10,9 @@ money moves. Risky requests wait for the owner, and one STOP button stops everyt
 
 **Try it:** https://warrant-demo-bt31.onrender.com (access code from the team). Press **Run a
 scenario**, decide what is held for you, then press **STOP**. Simulated money; each visitor gets
-their own copy. The first visit after a quiet spell can take a minute to wake.
+their own copy. The first visit after a quiet spell can take a minute to wake. The agents are
+scripted; **Agents** in the top line runs them on Haiku with your own Anthropic key instead
+(memory only, never stored, at most 150 calls; ADR-023).
 
 Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents) ·
 [task board](https://github.com/users/jeranaias/projects/1)
