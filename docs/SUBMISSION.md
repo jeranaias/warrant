@@ -88,7 +88,9 @@ that the agent was acting for a real person who agreed to it.
   `docs/TESTNET.md`.
 - A payment in doubt (timeout, lost answer) is never resent: it stays unconfirmed with its amount
   held, and a status check settles it before the next decision (ADR-019). On Metal this uses the
-  settlement lookup by nonce; tested against the mock chain's faults (#123, #124).
+  settlement lookup by nonce: on testnet it asks the USDZ token whether the payment's nonce was
+  used and finds the transaction that used it (#130); tested against the mock chain's faults
+  (#123, #124).
 
 **Airwallex (runs on the real sandbox: `pnpm scene:earnings --sandbox`)**
 
@@ -139,8 +141,8 @@ did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6
 - 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly held. Each has the same
   structured shape as a normal payment, and control never reads invoice or offer text; the cases,
   their twins and what would close them are in [bench/README.md](../bench/README.md).
-- On live testnet, a Metal payment whose answer was lost stays held until someone checks it: the
-  settlement lookup is wired in the mock world only (ADR-019).
+- On live testnet, the lookup finds the payment's transaction only within about 40 minutes
+  (50,000 blocks); an older one is still settled as paid, identified by its nonce (ADR-019).
 - The hosted demo runs on simulated money with a scripted agent. The sponsor rails ran live from a
   laptop (`docs/TESTNET.md`), not from the hosted demo.
 - The licence's "once a month" is 28 days, so a second bill on day 29 to 31 of a long month is not
@@ -149,7 +151,6 @@ did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6
 ## What's next
 
 - Close #79 and the attacks that still get through.
-- Wire the Metal settlement lookup on live testnet.
 - Let the owner turn a repeated approval into a new signed warrant version ("always allow this").
 
 ## Team
