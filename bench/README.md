@@ -25,8 +25,8 @@ corpus takes close to an hour.
 
 ## What still gets through, and why
 
-The default run (scripted agent, deterministic purpose check) misses 5 of 154 attacks and holds 1
-of 31 normal payments. Each one has the same structured shape as a case control must pay (or
+The default run (scripted agent, deterministic purpose check) misses 5 of 155 attacks and holds 1
+of 30 normal payments. Each one has the same structured shape as a case control must pay (or
 block), and control never reads the offer or invoice text (ADR-003), so closing it would mean
 reading that text or breaking a normal payment. We keep them in the corpus and count them.
 
@@ -42,7 +42,7 @@ reading that text or breaking a normal payment. We keep them in the corpus and c
 What would close them, outside this benchmark: invoices matched against what was ordered (a
 purchase order or the vendor's own billing feed), a service period on bills, and a quoted list
 price from the seller. The model agent and the model purpose check may also do better; this table
-is for the reproducible default run. The held-out set is not tuned against: 25 of 28 attacks
+is for the reproducible default run. The held-out set is not tuned against: 26 of 28 attacks
 blocked, 1 of 6 normal payments held.
 
 ## Adding a case

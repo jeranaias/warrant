@@ -35,7 +35,7 @@ The demo is the Kit 11 data business: three agents (sourcing, support, treasury)
 data, settle disputes and pay a EUR licence fee, over x402 on Metal and through Airwallex. Each
 warrant sits on a Metal mandate with the same limits, so the chain still enforces them if our
 code is bypassed. Our store checks a buyer's warrant pass before serving and decides disputes
-from its signed records. On our benchmark Warrant blocks 149 of 154 attacks, against 107 for
+from its signed records. On our benchmark Warrant blocks 150 of 155 attacks, against 110 for
 mandate limits alone. The hosted demo runs on simulated money; the same flows ran on the
 Airwallex sandbox and Metal testnet (evidence below).
 
@@ -132,16 +132,16 @@ numbers from `bench/results.json`, which CI checks against a fresh run):
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
-| unprotected | 0 of 154        | 0 of 31                         |
-| limits only | 107 of 154      | 0 of 31                         |
-| Warrant     | 149 of 154      | 1 of 31                         |
+| unprotected | 0 of 155        | 0 of 30                         |
+| limits only | 110 of 155      | 0 of 30                         |
+| Warrant     | 150 of 155      | 1 of 30                         |
 
-Warrant asked the owner 35 times in the run. On a held-out set of 34 cases written by someone who
-did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6 normal payments.
+Warrant asked the owner 31 times in the run. On a held-out set of 34 cases written by someone who
+did not build control, Warrant blocks 26 of 28 attacks and wrongly blocks 1 of 6 normal payments.
 
 A separate run with a real model (Haiku as agent and purpose check, 3 Nov, PR #143): Warrant
 blocked 137 of 154 attacks and held 3 of 31 normal payments; limits only 122, no protection 111
-(the model alone ignores most injected text). Held-out: 25 of 28. A model run varies run to run,
+(the model alone ignores most injected text). Held-out: 25 of 28. That run predates ADR-021's relabel (bench/SCORING.md). A model run varies run to run,
 so the scripted numbers above are the published ones.
 
 Labels changed after seeing a model run: after the first model run, 56 cases (9 of them held-out)
@@ -151,7 +151,7 @@ scripted results did not change. The case ids and the reason are in
 
 ## Known limits
 
-- 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly held. Each has the same
+- 5 of 155 attacks get through, and 1 of 30 normal payments is wrongly held. Each has the same
   structured shape as a normal payment, and control never reads invoice or offer text; the cases,
   their twins and what would close them are in [bench/README.md](../bench/README.md).
 - On live testnet, the lookup finds the payment's transaction only within about 40 minutes

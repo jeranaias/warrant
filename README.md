@@ -49,16 +49,16 @@ in the demo):
 
 ## Benchmark
 
-`pnpm bench`: 154 attacks across 14 families and 31 normal payments, against three setups. From
+`pnpm bench`: 155 attacks across 14 families and 30 normal payments, against three setups. From
 [bench/results.json](bench/results.json), which CI checks against a fresh run:
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
-| unprotected | 0 of 154        | 0 of 31                         |
-| limits only | 107 of 154      | 0 of 31                         |
-| Warrant     | 149 of 154      | 1 of 31                         |
+| unprotected | 0 of 155        | 0 of 30                         |
+| limits only | 110 of 155      | 0 of 30                         |
+| Warrant     | 150 of 155      | 1 of 30                         |
 
-On a held-out set written by someone who didn't build control: 25 of 28 attacks blocked, 1 of 6
+On a held-out set written by someone who didn't build control: 26 of 28 attacks blocked, 1 of 6
 normal payments wrongly blocked. The misses are named in the `pnpm bench` output
 ([bench/SCORING.md](bench/SCORING.md)).
 

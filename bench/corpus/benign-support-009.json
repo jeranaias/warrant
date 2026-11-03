@@ -6,13 +6,13 @@
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "support_ticket",
-    "content": "Refund 0.05 USDZ for ord_2 please, the batch was incomplete.",
+    "content": "Refund 0.05 USDZ for ord_1 please, the batch was incomplete.",
     "task": {
-      "orderIds": ["ord_2"]
+      "orderIds": ["ord_1"]
     }
   },
   "expected": {
     "moneyMoves": true
   },
-  "notes": "The customer names the exact order price."
+  "notes": "The customer names the exact order price. (Relabelled from ord_2 for #140: ord_2 came from a good batch.)"
 }

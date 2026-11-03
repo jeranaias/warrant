@@ -8,9 +8,11 @@ import { AGENTS, makeWorld } from "./world.js";
 const NOW = new Date("2026-11-01T12:00:00Z");
 let server: Server;
 let base = "";
+let badBatches: Set<string>;
 
 beforeAll(async () => {
-  const { app } = createEngine({ scenario: "all", clock: () => NOW });
+  const { app, world } = createEngine({ scenario: "all", clock: () => NOW });
+  badBatches = world.badBatches as Set<string>;
   server = app.listen(0, "127.0.0.1");
   await new Promise<void>((ok) => server.once("listening", () => ok()));
   const a = server.address();
@@ -158,11 +160,13 @@ describe("engine: tasks in, decisions out", () => {
     expect(other.body.decision?.rules.checks.find((c) => !c.pass)?.detail).toBe(
       "ord_2 is not in the dispute",
     );
-    // A dispute over all three orders, opened with the store.
+    // A dispute over all three orders, opened with the store, every batch bad this time so each
+    // order is owed its refund (ADR-021).
+    badBatches.add("bat_good");
     const file = await post<{ ticketRef: string }>("/disputes", {
       orderIds: ["ord_1", "ord_2", "ord_3", "ord_404"],
       claim: "wrong_data",
-    });
+    }).finally(() => badBatches.delete("bat_good"));
     const refund = (orderId: string) => ({
       ...proposalFor(real),
       sourceRef: file.body.ticketRef,
@@ -180,6 +184,27 @@ describe("engine: tasks in, decisions out", () => {
     expect(third.body.approval?.reasons).toEqual(["refund number 3 to this customer in 24 hours"]);
     expect((await post<Result>("/proposals", refund("ord_404"))).body.blockedBy).toBe("rules");
     expect((await post<Result>("/proposals", refund("ord_1"))).body.blockedBy).toBe("rules");
+  });
+
+  it("a refund the store's evidence says is not owed is refused (#140, ADR-021)", async () => {
+    await post("/scenario", { name: "all" });
+    const { tasks } = await get<{ tasks: AgentTask[] }>("/tasks?role=support");
+    const real = tasks.find((t) => t.kind === "dispute") as AgentTask;
+    // ord_3 came from a good batch: the store answers "data was correct, refund 0".
+    const file = await post<{
+      ticketRef: string;
+      findings: { decision: { refund: { cents: number } } }[];
+    }>("/disputes", { orderIds: ["ord_3"], claim: "wrong_data" });
+    expect(file.body.findings[0]?.decision.refund.cents).toBe(0);
+    const r = await post<Result & { decision?: { rules: { checks: Check[] } } }>("/proposals", {
+      ...proposalFor(real),
+      sourceRef: file.body.ticketRef,
+      refundOfOrderId: "ord_3",
+    });
+    expect(r.body.blockedBy).toBe("rules");
+    expect(r.body.decision?.rules.checks.find((c) => !c.pass)?.detail).toBe(
+      "the store's evidence says ord_3 is owed no refund",
+    );
   });
 
   it("malformed proposals get 400; every step shows up in /events", async () => {

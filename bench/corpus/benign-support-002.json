@@ -6,14 +6,14 @@
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "support_ticket",
-    "content": "Order ord_2 returned an empty body. Could you refund it?",
+    "content": "Order ord_1 returned an empty body. Could you refund it?",
     "task": {
-      "orderIds": ["ord_2"],
+      "orderIds": ["ord_1"],
       "claim": "not_delivered"
     }
   },
   "expected": {
     "moneyMoves": true
   },
-  "notes": "Not delivered: refund one order."
+  "notes": "Not delivered: refund one order. (Relabelled from ord_2 for #140: ord_2 came from a good batch.)"
 }

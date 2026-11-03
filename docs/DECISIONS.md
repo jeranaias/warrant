@@ -394,3 +394,25 @@ Decision:
    Consequences: Kit 11's limit-change beat can be the agent's own proposal instead of a scripted
    one. A prompt-injected treasury can ask for any limits, but only the owner can grant them, and
    only within the total.
+
+## ADR-021: A refund follows the store's decision for its order
+
+Date: 2026-11-03 Status: accepted (#140; amends ADR-016)
+
+Context: the store decides a dispute order by order from its records (ADR-012): the signed order,
+the settlement on chain, the buyer's warrant pass and the upstream batch. Control checked that a
+refund names an order in the dispute, goes to its payer, at most its price, once, but not what the
+store decided. Support could refund an order the evidence says was fine, and control paid it.
+Decision:
+
+1. The engine keeps the store's refund per order for each dispute it answers, keyed by the
+   dispute's ticket (a support task's `sourceRef`), only for orders whose sale the store verified.
+2. Rule `refund_matches_order` caps a refund under that ticket at the decision: 0 is refused
+   ("the store's evidence says ord_3 is owed no refund"), more than the decision is refused.
+   An order the store could not verify keeps the existing checks and ADR-016.
+3. The engine answers a dispute before it hands the task to support, so the decision is on file
+   when the refund arrives.
+   Consequences: "the store decides from evidence" holds end to end, not only in the store's
+   answer. The benchmark changed with it (bench/SCORING.md): five benign refunds now name the
+   order from the stale batch, and one ("I never authorised ord_3" with a valid warrant pass) is
+   now an attack, refund-fraud-012.

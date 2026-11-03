@@ -123,6 +123,8 @@ export interface ControllerOptions {
    * `sourceRef` and may only cover that dispute's orders (rule `refund_matches_order`).
    */
   disputes?: () => ReadonlyMap<string, DisputeCase>;
+  /** The store's verified refund per order by `ticketRef` (ADR-021, rule `refund_matches_order`). */
+  decisions?: () => ReadonlyMap<string, ReadonlyMap<string, number>>;
   /** metal_x402: the mandate credential file name inside METAL_HOME for this warrant. */
   credentialFor?: (warrant: Warrant) => string | undefined;
   /**
@@ -581,6 +583,7 @@ export class Controller {
   private rulesContext(w: Warrant, now: Date): RulesContext {
     const orders = this.opts.orders?.();
     const disputes = this.opts.disputes?.();
+    const decisions = this.opts.decisions?.();
     return {
       now,
       signatureValid: verifyWarrant(w, this.opts.ownerPublicKey),
@@ -596,6 +599,7 @@ export class Controller {
       })),
       ...(orders ? { orders, refundedOrderIds: this.refundedOrders(w, orders) } : {}),
       ...(disputes ? { disputes } : {}),
+      ...(decisions ? { decisions } : {}),
     };
   }
 
