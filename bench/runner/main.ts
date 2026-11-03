@@ -11,6 +11,8 @@ import { headline, summarize, table } from "./score.js";
  * deterministic purpose check. With ANTHROPIC_API_KEY set:
  *   BENCH_AGENT=model     the model agent (AGENT_MODEL, default Haiku)
  *   BENCH_PURPOSE=model   the model purpose check (PURPOSE_MODEL, default Haiku)
+ *   BENCH_CONCURRENCY=8   cases at once (default 1; worth it with the model, which waits on
+ *                         the network)
  * Writes bench/results/results.json and results.md (gitignored). With the defaults it also
  * rewrites bench/results.json, the committed headline the dashboard shows; CI fails when that
  * file differs from a fresh run.
@@ -26,7 +28,11 @@ const purpose = env["BENCH_PURPOSE"] === "model" ? purposeFromEnv(env) : determi
 console.log(`bench: ${cases.length} cases, agent ${brain.name}, purpose ${purpose.model}`);
 
 const started = Date.now();
-const results = await runBench(cases, { brain, purpose });
+const concurrency = Number(env["BENCH_CONCURRENCY"] ?? 1);
+if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 32) {
+  throw new Error("BENCH_CONCURRENCY must be a whole number from 1 to 32");
+}
+const results = await runBench(cases, { brain, purpose, concurrency });
 const main = results.filter((r) => !r.heldout);
 const heldout = results.filter((r) => r.heldout);
 const scores = summarize(main);
