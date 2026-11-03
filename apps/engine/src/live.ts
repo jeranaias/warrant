@@ -10,7 +10,14 @@ import { requireSignedOffer } from "@metalntwx/metal-pay/mandates";
 import type { AgentRole, MandateRef, Warrant } from "@warrant/contracts";
 import { AGENT_BUDGETS, PassChecker, UPSTREAM_PRICE_BEFORE, signWarrant } from "@warrant/control";
 import type { ControlEvent } from "@warrant/control";
-import { CliMetalOwnerOps, MetalAdapter, execCliRunner, x402Quote } from "@warrant/rails";
+import {
+  CliMetalOwnerOps,
+  MetalAdapter,
+  chainSettlementLookup,
+  execCliRunner,
+  httpJsonRpc,
+  x402Quote,
+} from "@warrant/rails";
 import type { MandateStatus } from "@warrant/rails";
 import {
   METAL_TESTNET,
@@ -193,6 +200,8 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
         metalHome: cfg.home,
         rpcUrl: cfg.rpcUrl,
         quote: x402Quote(),
+        // A pay whose answer was lost is settled from the chain by its nonce (ADR-019).
+        lookupSettlement: chainSettlementLookup(httpJsonRpc(cfg.rpcUrl)),
       }),
       airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
     },

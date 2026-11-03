@@ -8,7 +8,13 @@ import {
   passIssuer,
   signWarrant,
 } from "@warrant/control";
-import { CliMetalOwnerOps, MetalAdapter, x402Quote } from "@warrant/rails";
+import {
+  CliMetalOwnerOps,
+  MetalAdapter,
+  chainSettlementLookup,
+  httpJsonRpc,
+  x402Quote,
+} from "@warrant/rails";
 import type { CliRunner } from "@warrant/rails";
 import { CATALOG } from "@warrant/store";
 import type { CustomerConfig, LiveConfig } from "./config.js";
@@ -127,6 +133,7 @@ export async function makeLiveCustomer(o: {
         metalHome: cfg.home,
         rpcUrl: cfg.rpcUrl,
         quote: x402Quote(),
+        lookupSettlement: chainSettlementLookup(httpJsonRpc(cfg.rpcUrl)),
       }),
     },
     purpose: placeholderPurpose,
