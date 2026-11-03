@@ -105,7 +105,7 @@ After the kill switch (`POST /kill` in live mode revokes the sourcing and suppor
 
 ## Live dispute run (2026-11-02)
 
-`RAILS_MODE=sandbox pnpm scene:dispute` (#106). Fill in from the printed output; each hash is on
+`RAILS_MODE=sandbox pnpm scene:dispute` (#106), from its printed output. Each hash is on
 the explorer at `https://testnet.metalntwx.com/tx/<hash>`. No `pnpm reset:live` needed after it.
 
 | Step                                                  | Result                                                                                                                                          |
