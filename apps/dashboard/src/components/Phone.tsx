@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { HOSTED, isOwner } from "../api.js";
-import { agentName, cents, field, foldRepeats, isMoney, money, time } from "../format.js";
+import { agentName, cents, field, foldRepeats, isMoney, money, namesOf, time } from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -10,6 +10,7 @@ import { ApprovalCard } from "./Approvals.js";
 import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { GateBar } from "./Gate.js";
+import { Replay } from "./Replay.js";
 import { Seller } from "./Seller.js";
 import { StopButton } from "./StopButton.js";
 
@@ -20,7 +21,7 @@ import { StopButton } from "./StopButton.js";
  *   gate     paid / waiting / blocked as one bar and the counts
  *   waiting  one approval at a time, big Approve / Deny; the rest queue underneath
  *   agents   budget left per agent, then the first-visit steps
- *   recent   the last payments
+ *   recent   the last payments; tap one for its replay
  *   bottom   STOP, always in reach
  */
 const FATE_WORD: Record<Fate, string> = { paid: "paid", blocked: "blocked", asked: "waiting" };
@@ -41,6 +42,8 @@ export function Phone({
   const { total, lanes } = useMemo(() => tally(passes), [passes]);
   const waiting = engine.approvals;
   const [pick, setPick] = useState<string | null>(null);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const names = useMemo(() => namesOf(engine.events, warrants), [engine.events, warrants]);
   const focus = waiting.find((a) => a.proposalId === pick) ?? waiting[0];
   const rest = waiting.filter((a) => a !== focus);
   // Alike payments in a row (a flood of one offer) fold into one line with "×20".
@@ -174,19 +177,29 @@ export function Phone({
 
       <section className="ph-recent">
         <div className="sheet-k">recent</div>
-        {recent.length === 0 ? (
+        {replayId ? (
+          <Replay
+            proposalId={replayId}
+            names={names}
+            version={engine.events.length}
+            onClose={() => setReplayId(null)}
+            closeLabel="Recent"
+          />
+        ) : recent.length === 0 ? (
           <p className="muted small">No payments yet.</p>
         ) : (
           <ol className="recent">
             {recent.map(({ item: p, n }) => (
               <li key={p.seq}>
-                <span className="mono muted">{time(p.at)}</span>
-                <span className="recent-to">
-                  {nameOf(p.warrantId)} → {payeeOf(p.payee)}
-                  {n > 1 && <span className="mono muted"> ×{n}</span>}
-                </span>
-                <span className="mono">{money(p.amount)}</span>
-                <span className={`fate ${p.fate}`}>{FATE_WORD[p.fate]}</span>
+                <button className="recent-open" onClick={() => setReplayId(p.proposalId)}>
+                  <span className="mono muted">{time(p.at)}</span>
+                  <span className="recent-to">
+                    {nameOf(p.warrantId)} → {payeeOf(p.payee)}
+                    {n > 1 && <span className="mono muted"> ×{n}</span>}
+                  </span>
+                  <span className="mono">{money(p.amount)}</span>
+                  <span className={`fate ${p.fate}`}>{FATE_WORD[p.fate]}</span>
+                </button>
               </li>
             ))}
           </ol>

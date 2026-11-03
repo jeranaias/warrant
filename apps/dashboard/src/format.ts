@@ -76,6 +76,8 @@ export interface FeedLine {
   text: string;
   /** Why it was blocked or held: the rule that failed or the purpose check's words. */
   why?: string;
+  /** The request this line is about, when it is about one: opens its replay. */
+  proposalId?: string;
 }
 
 /** What the feed needs to name things instead of showing ids. Every lookup may miss. */
@@ -137,7 +139,31 @@ export function namesOf(
 export function describe(e: LoggedEvent, names: Names = NO_NAMES): FeedLine {
   const d = describeEvent(e.event, names);
   const why = d.why ?? whyOf(e.event);
-  return { seq: e.seq, at: e.at, tone: d.tone, text: d.text, ...(why ? { why } : {}) };
+  const id = proposalIdOf(e.event);
+  return {
+    seq: e.seq,
+    at: e.at,
+    tone: d.tone,
+    text: d.text,
+    ...(why ? { why } : {}),
+    ...(id ? { proposalId: id } : {}),
+  };
+}
+
+/** The request an event is about, if any (the same events control's replay reads). */
+export function proposalIdOf(e: ControlEvent): string | undefined {
+  switch (e.type) {
+    case "proposal":
+      return e.proposal.proposalId;
+    case "approval_requested":
+      return e.pending.proposalId;
+    case "approval_decided":
+    case "execution":
+    case "budget_changed":
+      return e.proposalId;
+    default:
+      return undefined;
+  }
 }
 
 /** A hash or id cut to its first 10 characters, e.g. "0x6908b0a2...". */

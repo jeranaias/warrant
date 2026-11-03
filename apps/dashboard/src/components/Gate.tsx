@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import type { WarrantRow } from "../api.js";
 import { agentName, laneName, money } from "../format.js";
 import { paidByCurrency, reasonsOf, tally } from "../flow.js";
@@ -65,6 +66,7 @@ export function Gate({
   selected,
   onSelect,
   limits = 0,
+  onFate,
 }: {
   warrants: WarrantRow[];
   passes: Pass[];
@@ -74,6 +76,8 @@ export function Gate({
   onSelect: (warrantId: string | null) => void;
   /** New limits waiting for the owner: not payments, but held for them all the same. */
   limits?: number;
+  /** Paid / Held / Blocked clicked: open the latest such request's replay. */
+  onFate?: (fate: Fate) => void;
 }) {
   // Draw at the box's real pixel size so text stays the same size however wide the box is.
   const box = useRef<SVGSVGElement>(null);
@@ -304,7 +308,21 @@ export function Gate({
         const head = fate === "paid" ? "Paid" : fate === "asked" ? "Held for you" : "Blocked";
         const ty = c - 10 - (lines.length * 17) / 2 + 6;
         return (
-          <g key={fate} className={`gt-node ${fate}`}>
+          <g
+            key={fate}
+            className={`gt-node ${fate}${onFate && outN[fate] > 0 ? " open" : ""}`}
+            {...(onFate && outN[fate] > 0
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-label": `${head}: show the latest step by step`,
+                  onClick: () => onFate(fate),
+                  onKeyDown: (e: KeyboardEvent<SVGGElement>) => {
+                    if (e.key === "Enter" || e.key === " ") onFate(fate);
+                  },
+                }
+              : {})}
+          >
             <rect x={OX} y={c - h / 2} width={NODE} height={h} rx={2} />
             <text className="gt-head" x={OX + 22} y={ty}>
               {head} · {outN[fate]}

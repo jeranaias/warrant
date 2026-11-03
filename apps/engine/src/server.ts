@@ -3,7 +3,7 @@ import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { AgentRole, DisputeCase } from "@warrant/contracts";
 import type { AgentTask } from "@warrant/contracts";
-import { Controller } from "@warrant/control";
+import { Controller, replay } from "@warrant/control";
 import { classifyPay } from "@warrant/rails";
 import type { ControlEvent, KillSwitchHooks, PurposeChecker } from "@warrant/control";
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
@@ -20,6 +20,7 @@ import type { World } from "./world.js";
  *   ...agent decides...
  *   POST /proposals             -> PaymentProposal in, control's decision out
  *   GET  /events                -> everything that happened, for the analyzer and the dashboard
+ *   GET  /replay?proposalId=    -> one proposal step by step: rules, purpose, owner, ledger, rail
  *
  * Mock rails by default: nothing moves real money. With a sandbox world (`live.ts`,
  * RAILS_MODE=sandbox) the same routes run on the real Metal testnet.
@@ -230,6 +231,21 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   app.get("/events", (req, res) => {
     const since = Number(req.query["since"] ?? 0) || 0;
     res.json({ events: log.filter((e) => e.seq > since) });
+  });
+
+  // The replay log (#22): one proposal's life, in order, from the event log and the ledger.
+  app.get("/replay", (req, res) => {
+    const proposalId = String(req.query["proposalId"] ?? "");
+    if (proposalId === "" || proposalId.length > 128) {
+      res.status(400).json({ error: "proposalId is required" });
+      return;
+    }
+    const r = replay(proposalId, log, controller.ledger.all());
+    if (!r.found) {
+      res.status(404).json({ error: "nothing recorded for this proposal" });
+      return;
+    }
+    res.json(r);
   });
 
   // The owner's emergency stop. Everything stops at once; the timing is part of the answer.

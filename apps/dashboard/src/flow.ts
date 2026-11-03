@@ -11,6 +11,8 @@ export type Fate = "paid" | "blocked" | "asked";
 export interface Pass {
   seq: number;
   at: string;
+  /** The request, for its replay (GET /replay). */
+  proposalId: string;
   warrantId: string;
   /** The payee node it flows to; OTHER for a payee on no warrant (refunds to customers). */
   payee: string;
@@ -93,6 +95,7 @@ export function passesOf(events: LoggedEvent[], warrants: WarrantRow[]): Pass[] 
     out.push({
       seq,
       at,
+      proposalId: p.proposalId,
       warrantId: p.warrantId,
       payee: named.has(p.payeeId) ? p.payeeId : OTHER,
       fate,
