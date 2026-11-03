@@ -7,8 +7,10 @@ import {
   AUTH_TTL_MS,
   FailureLimiter,
   authValid,
+  busyPage,
   codeMatches,
   cookie,
+  isHttps,
   loginPage,
   parseCookies,
   signAuth,
@@ -26,6 +28,10 @@ import type { Session, SessionOptions } from "./hosted-sessions.js";
  *   GET  /demo         the dashboard
  *   POST /api/reset    a fresh engine for this visitor
  *   ANY  /api/...      this visitor's engine (the same routes as `pnpm engine`)
+ *
+ * Every response carries security headers (CSP, no framing by other sites, no sniffing, no
+ * referrer, HSTS over https). A POST from another site is refused (Origin / Sec-Fetch-Site), on
+ * top of the SameSite cookies. Errors never echo a stack.
  */
 
 export const SESSION_COOKIE = "warrant_demo_session";
@@ -36,6 +42,42 @@ export interface HostedOptions extends SessionOptions {
   /** The built dashboard (apps/dashboard/dist). */
   distDir: string;
   limiter?: FailureLimiter;
+  /**
+   * Proxy hops in front of us whose X-Forwarded-For entries we trust (Render: 1). The client
+   * address is the entry the nearest trusted proxy added, so a client can't pick its own.
+   */
+  trustProxyHops?: number;
+  /**
+   * A header the edge sets to the client address and overwrites when a client sends it (Render's
+   * Cloudflare edge: `cf-connecting-ip`). Used before X-Forwarded-For when present.
+   */
+  clientIpHeader?: string;
+}
+
+/** The built dashboard loads its own scripts and Google Fonts; React sets inline styles. */
+export const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ");
+
+/** A state-changing request that came from another site. */
+function crossSite(req: Request): boolean {
+  if (req.get("sec-fetch-site") === "cross-site") return true;
+  const origin = req.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== req.get("host");
+  } catch {
+    return true;
+  }
 }
 
 export interface Hosted {
@@ -51,11 +93,31 @@ export function hostedApp(opts: HostedOptions): Hosted {
   const sessions = new SessionStore(opts);
   const limiter = opts.limiter ?? new FailureLimiter();
   const index = join(opts.distDir, "index.html");
+  /** Who is asking, for the sign-in limit and the per-address session cap. */
+  const clientOf = (req: Request): string =>
+    (opts.clientIpHeader && req.get(opts.clientIpHeader)?.trim()) || req.ip || "unknown";
 
   const app = express();
   app.disable("x-powered-by");
-  // Render terminates TLS in front of us: trust its X-Forwarded-* headers for the client address.
-  app.set("trust proxy", true);
+  // Render terminates TLS in front of us. Trust only its hop: `true` would let a client choose its
+  // own address with a forged X-Forwarded-For and walk around the sign-in limit.
+  app.set("trust proxy", opts.trustProxyHops ?? 1);
+
+  app.use((req, res, next) => {
+    res.setHeader("content-security-policy", CSP);
+    res.setHeader("x-content-type-options", "nosniff");
+    res.setHeader("x-frame-options", "SAMEORIGIN");
+    res.setHeader("referrer-policy", "no-referrer");
+    res.setHeader("cross-origin-opener-policy", "same-origin");
+    res.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
+    if (isHttps(req)) res.setHeader("strict-transport-security", "max-age=15552000");
+    next();
+  });
+
+  app.use((req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || !crossSite(req)) return next();
+    res.status(403).json({ error: "cross-site request refused" });
+  });
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true });
@@ -66,7 +128,7 @@ export function hostedApp(opts: HostedOptions): Hosted {
   });
 
   app.post("/login", express.urlencoded({ extended: false, limit: "2kb" }), (req, res) => {
-    const ip = req.ip ?? "unknown";
+    const ip = clientOf(req);
     if (limiter.blocked(ip, now())) {
       res.status(429).type("html").send(loginPage("Too many attempts. Try again in 10 minutes."));
       return;
@@ -96,10 +158,15 @@ export function hostedApp(opts: HostedOptions): Hosted {
 
   const sessionOf = (req: Request): Session | undefined =>
     sessions.get(parseCookies(req)[SESSION_COOKIE]);
-  const startSession = (req: Request, res: Response): Session => {
-    const s = sessions.create();
-    res.setHeader("Set-Cookie", cookie(req, SESSION_COOKIE, s.id));
+  /** A new session for this visitor, or undefined when every seat is in use. */
+  const startSession = (req: Request, res: Response): Session | undefined => {
+    const s = sessions.create(clientOf(req));
+    if (s) res.setHeader("Set-Cookie", cookie(req, SESSION_COOKIE, s.id));
     return s;
+  };
+  const busy = (res: Response) => {
+    res.setHeader("retry-after", "60");
+    res.status(503).type("html").send(busyPage());
   };
   const noStore = (res: Response) => res.setHeader("cache-control", "no-store");
 
@@ -107,6 +174,10 @@ export function hostedApp(opts: HostedOptions): Hosted {
   app.get("/", (req, res) => {
     const s = sessionOf(req) ?? startSession(req, res);
     noStore(res);
+    if (!s) {
+      busy(res);
+      return;
+    }
     res.redirect(302, `/demo#/?owner=${s.ownerToken}`);
   });
 
@@ -126,7 +197,11 @@ export function hostedApp(opts: HostedOptions): Hosted {
   app.post("/api/reset", (req, res) => {
     const s = sessionOf(req);
     if (s) sessions.reset(s);
-    else startSession(req, res);
+    else if (!startSession(req, res)) {
+      res.setHeader("retry-after", "60");
+      res.status(503).json({ error: "the demo is full right now: try again in a minute" });
+      return;
+    }
     res.json({ ok: true });
   });
 
@@ -140,6 +215,15 @@ export function hostedApp(opts: HostedOptions): Hosted {
   });
 
   app.use(express.static(opts.distDir, { index: false }));
+
+  // Last: never send a stack trace (Express's default handler does outside production).
+  app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (res.headersSent) return next(err);
+    const status = (err as { status?: unknown }).status;
+    const code = typeof status === "number" && status >= 400 && status < 500 ? status : 500;
+    if (code === 500) console.error("hosted demo error:", err);
+    res.status(code).json({ error: code === 500 ? "something went wrong" : "bad request" });
+  });
 
   return { app, sessions, close: () => sessions.close() };
 }

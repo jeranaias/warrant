@@ -94,14 +94,14 @@ export function cookie(req: Request, name: string, value: string, maxAgeMs?: num
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** The sign-in page: one field, one button. Dashboard dark tokens and fonts; labels only. */
-export function loginPage(message?: string): string {
+/** A small page in the dashboard's dark tokens and fonts, around `body`. */
+function page(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Warrant · sign in</title>
+<title>${title}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
@@ -116,7 +116,7 @@ export function loginPage(message?: string): string {
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
   background: var(--bg); color: var(--text); font-family: var(--ui); line-height: 1.5; }
-form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
+form, main { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 8px; padding: 24px; display: grid; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; }
 .seal { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
@@ -126,22 +126,44 @@ label { font-size: 0.8rem; color: var(--muted); }
 input { width: 100%; font: 400 1rem var(--num); padding: 10px 12px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--sunk); color: var(--text); }
 input:focus { outline: 2px solid var(--seal); outline-offset: 1px; }
-button { font: 600 0.9rem var(--ui); padding: 10px 12px; border-radius: 8px; cursor: pointer;
-  border: 1px solid var(--seal); background: var(--seal-bg); color: var(--text); }
+button, .btn { font: 600 0.9rem var(--ui); padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--seal); background: var(--seal-bg); color: var(--text); text-align: center; text-decoration: none; }
 .what { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .msg { margin: 0; color: var(--stop); font-size: 0.85rem; }
 </style>
 </head>
 <body>
-<form method="post" action="/login">
-  <div class="brand"><span class="seal" aria-hidden="true">W</span>Warrant</div>
-  <p class="what">Payment controls for AI agents · demo on simulated money</p>
+${body}
+</body>
+</html>
+`;
+}
+
+const brand = `<div class="brand"><span class="seal" aria-hidden="true">W</span>Warrant</div>
+  <p class="what">Payment controls for AI agents · demo on simulated money</p>`;
+
+/** The sign-in page: one field, one button. Labels only. */
+export function loginPage(message?: string): string {
+  return page(
+    "Warrant · sign in",
+    `<form method="post" action="/login">
+  ${brand}
   <label for="code">Access code</label>
   <input id="code" name="code" type="password" autocomplete="current-password" required autofocus />
   ${message ? `<p class="msg" role="alert">${escapeHtml(message)}</p>` : ""}
   <button type="submit">Sign in</button>
-</form>
-</body>
-</html>
-`;
+</form>`,
+  );
+}
+
+/** Every demo seat is in use: say so plainly and offer a retry. */
+export function busyPage(): string {
+  return page(
+    "Warrant · busy",
+    `<main>
+  ${brand}
+  <p>The demo is full right now. Try again in a minute.</p>
+  <a class="btn" href="/">Try again</a>
+</main>`,
+  );
 }
