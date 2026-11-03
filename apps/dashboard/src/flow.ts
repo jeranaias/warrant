@@ -10,8 +10,6 @@ export type Fate = "paid" | "blocked" | "asked";
 
 export interface Pass {
   seq: number;
-  /** The proposal this pass is, for opening its replay. */
-  proposalId: string;
   at: string;
   /** The request, for its replay (GET /replay). */
   proposalId: string;
@@ -96,7 +94,6 @@ export function passesOf(events: LoggedEvent[], warrants: WarrantRow[]): Pass[] 
     }
     out.push({
       seq,
-      proposalId: p.proposalId,
       at,
       proposalId: p.proposalId,
       warrantId: p.warrantId,

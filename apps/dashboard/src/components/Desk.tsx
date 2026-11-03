@@ -6,7 +6,7 @@ import bench from "../../../../bench/results.json";
 import { FILTERS, askGroups, deskRows, filterCounts, filterRows, paySentence } from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
 import { OTHER, leftFraction, passesOf, payeeNodes } from "../flow.js";
-import { agentName, benchLine, cents, money, time } from "../format.js";
+import { agentName, benchLine, cents, money, namesOf, time } from "../format.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
@@ -18,6 +18,7 @@ import { DemoLine } from "./DemoLine.js";
 import { FirstRun } from "./FirstRun.js";
 import { LiveRuns } from "./LiveRuns.js";
 import { Scene } from "./Scene.js";
+import { Replay } from "./Replay.js";
 import { Moment } from "./Seller.js";
 import { StopButton } from "./StopButton.js";
 
@@ -27,8 +28,8 @@ import { StopButton } from "./StopButton.js";
  *   left     filters with counts, budget left per agent, the other pages, STOP
  *   middle   "Needs you" (held requests, alike ones grouped), then paid and blocked sentences
  *            with the reason, alike rows folded ("× 21"), and our store's moments
- *   right    the selected line: a held request's card (A / D), a payment's facts, a store moment;
- *            the STOP receipt once stopped
+ *   right    the selected line: a held request's card (A / D), a payment's facts and its replay
+ *            (Replay.tsx), a store moment; the STOP receipt once stopped
  *
  * On a narrow screen it is one column: held requests first, rows open in place, STOP at the
  * bottom. The Flow toggle switches to the gate (CommandPage / Phone).
@@ -57,15 +58,12 @@ export function Desk({
   narrow,
   onError,
   onFlow,
-  onOpenReplay,
 }: {
   engine: Engine;
   banner: ReactNode;
   narrow: boolean;
   onError: (e: string) => void;
   onFlow: () => void;
-  /** Opens a payment's replay; the button stays hidden until the replay log is wired in. */
-  onOpenReplay?: (proposalId: string) => void;
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
@@ -84,6 +82,27 @@ export function Desk({
   const [filter, setFilter] = useState<DeskFilter>("all");
   const [page, setPage] = useState<Page | null>(null);
   const [pick, setPick] = useState<Pick>(null);
+  // The payment whose replay is open in place of its facts.
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const names = useMemo(() => namesOf(engine.events, warrants), [engine.events, warrants]);
+  const choose = (p: Pick) => {
+    setPick(p);
+    setReplayId(null);
+  };
+  const detailOf = (r: DeskRow) =>
+    r.kind === "pay" && r.proposalId === replayId ? (
+      <section className="sheet desk-sheet">
+        <Replay
+          proposalId={r.proposalId}
+          names={names}
+          version={engine.events.length}
+          onClose={() => setReplayId(null)}
+          closeLabel="Details"
+        />
+      </section>
+    ) : (
+      <RowDetail r={r} onOpenReplay={setReplayId} />
+    );
   const shown = filterRows(rows, filter);
 
   const pickedAsk = pick?.kind === "ask" ? asks.find((g) => g.key === pick.key) : undefined;
@@ -102,7 +121,7 @@ export function Desk({
     const on = (e: KeyboardEvent) => {
       if (keyOf(e) !== "Escape") return;
       if (keys.current.page) setPage(null);
-      else setPick(null);
+      else choose(null);
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -177,7 +196,7 @@ export function Desk({
           <AskList
             asks={asks}
             current={topAsk?.key}
-            onPick={(key) => setPick({ kind: "ask", key })}
+            onPick={(key) => choose({ kind: "ask", key })}
           />
         )}
         {viewOnly}
@@ -199,8 +218,8 @@ export function Desk({
           rows={shown}
           empty={rows.length === 0}
           picked={pick?.kind === "row" ? pick.key : undefined}
-          onPick={(key) => setPick(pick?.key === key ? null : { kind: "row", key })}
-          inline={(r) => <RowDetail r={r} onOpenReplay={onOpenReplay} />}
+          onPick={(key) => choose(pick?.key === key ? null : { kind: "row", key })}
+          inline={detailOf}
         />
         <Budgets warrants={warrants} stopped={stopped} />
         <footer className="desk-stop">
@@ -224,7 +243,7 @@ export function Desk({
               disabled={asks.length === 0}
               onClick={() => {
                 setPage(null);
-                setPick(asks[0] ? { kind: "ask", key: asks[0].key } : null);
+                choose(asks[0] ? { kind: "ask", key: asks[0].key } : null);
               }}
             >
               Needs you <span className="mono">{engine.approvals.length}</span>
@@ -277,7 +296,7 @@ export function Desk({
                 <AskList
                   asks={asks}
                   current={ask?.key}
-                  onPick={(key) => setPick({ kind: "ask", key })}
+                  onPick={(key) => choose({ kind: "ask", key })}
                 />
               </section>
             )}
@@ -286,7 +305,7 @@ export function Desk({
               rows={shown}
               empty={rows.length === 0}
               picked={pickedRow?.key}
-              onPick={(key) => setPick({ kind: "row", key })}
+              onPick={(key) => choose({ kind: "row", key })}
             />
           </>
         )}
@@ -305,7 +324,7 @@ export function Desk({
             hotkeys
           />
         ) : pickedRow ? (
-          <RowDetail r={pickedRow} onOpenReplay={onOpenReplay} />
+          detailOf(pickedRow)
         ) : (
           <p className="desk-empty muted">
             {rows.length ? "Pick a line to see its details." : "Nothing has happened yet."}
@@ -532,7 +551,7 @@ function RowDetail({
   onOpenReplay,
 }: {
   r: DeskRow;
-  onOpenReplay: ((proposalId: string) => void) | undefined;
+  onOpenReplay: (proposalId: string) => void;
 }) {
   if (r.kind === "store")
     return (
@@ -544,13 +563,7 @@ function RowDetail({
   return <PayDetail r={r} onOpenReplay={onOpenReplay} />;
 }
 
-function PayDetail({
-  r,
-  onOpenReplay,
-}: {
-  r: PayRow;
-  onOpenReplay: ((proposalId: string) => void) | undefined;
-}) {
+function PayDetail({ r, onOpenReplay }: { r: PayRow; onOpenReplay: (proposalId: string) => void }) {
   return (
     <section className={`sheet desk-sheet ${r.fate === "blocked" ? "sheet-stop" : ""}`}>
       <div className="sheet-k">
@@ -582,11 +595,9 @@ function PayDetail({
         <dt>Proposal</dt>
         <dd className="mono">{r.proposalId}</dd>
       </dl>
-      {onOpenReplay && (
-        <button className="btn" onClick={() => onOpenReplay(r.proposalId)}>
-          Replay
-        </button>
-      )}
+      <button className="btn" onClick={() => onOpenReplay(r.proposalId)}>
+        Replay, step by step
+      </button>
     </section>
   );
 }
