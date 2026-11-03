@@ -32,7 +32,9 @@ the buyer's owner, which our store verifies before serving and keeps for dispute
 
 The demo business: customers' agents buy market data from our store over x402 on Metal. A
 **sourcing** agent buys upstream data, a **support** agent settles disputed orders, and a
-**treasury** agent moves earnings to Airwallex and pays a EUR licence fee.
+**treasury** agent moves earnings to Airwallex and pays a EUR licence fee from the wallet there.
+
+ADR numbers throughout point to the decision records in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## What ran for real
 
@@ -44,13 +46,27 @@ in the demo):
 | ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Warrant pass and dispute | Metal testnet     | Pass checked before serving; bad order refunded by mandate pull `0x2314f9bc…`; repeat refused; "never agreed" rejected (11 of 11) |
 | Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace`                    |
-| Earnings and licence fee | Airwallex sandbox | Deposit, USD to EUR, EUR 50.00 by SWIFT, PAID (ADR-017)                                                                           |
-| Virtual Visa card        | Airwallex sandbox | Seat bought; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)                          |
+| Earnings and licence fee | Airwallex sandbox | Simulated deposit, USD to EUR, EUR 50.00 by SWIFT, moved to PAID by the sandbox's simulator (ADR-017)                             |
+| Virtual Visa card        | Airwallex sandbox | Simulated purchases: seat approved; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)   |
+
+The two rails have not run live in one run yet: in the Airwallex run the Metal side is the mock
+chain, so the deposit's reference is a mock transaction hash.
+
+## How Airwallex is used
+
+| Product         | What Warrant does with it                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Global Accounts | Earnings land in the USD account, referenced by the Metal transaction hash.                                                           |
+| FX              | An approved EUR bill is converted from USD before it is paid.                                                                         |
+| Transfers       | The EUR licence fee goes to a saved beneficiary by SWIFT.                                                                             |
+| Issuing         | A virtual Visa whose own limits, merchant category and expiry come from the signed warrant, so the card refuses too. STOP freezes it. |
 
 ## Benchmark
 
-`pnpm bench`: 155 attacks across 14 families and 30 normal payments, against three setups. From
-[bench/results.json](bench/results.json), which CI checks against a fresh run:
+`pnpm bench`: 155 attacks across 14 families and 30 normal payments, against three setups, with a
+scripted agent and the rule-based purpose check. A separate run with a real model is in
+[docs/SUBMISSION.md](docs/SUBMISSION.md). From [bench/results.json](bench/results.json), which CI
+checks against a fresh run:
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
@@ -64,7 +80,8 @@ normal payments wrongly blocked. The misses are named in the `pnpm bench` output
 
 ## Run it locally
 
-Node 24+ and pnpm 10 (`corepack enable` once). No keys and no `.env` for the mock demo.
+Node 24+ (`.nvmrc`: run `fnm use` or `nvm use`) and pnpm 10 (`corepack enable` once). No keys and
+no `.env` for the mock demo.
 
 ```sh
 git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
@@ -74,8 +91,9 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 # open http://localhost:10000, type the code you picked, press Run a scenario
 ```
 
-On PowerShell, set the variables first: `$env:DEMO_PASSWORD="pick-one"`, and the same for
-`DEMO_COOKIE_SECRET`. A scenario plays out in about 25 seconds, one task every two seconds.
+On PowerShell, run `git clone` and `cd` as two commands, and set the variables first:
+`$env:DEMO_PASSWORD="pick-one"`, and the same for `DEMO_COOKIE_SECRET`. A scenario plays out in
+about 25 seconds, one task every two seconds.
 
 `pnpm install` may print "Ignored build scripts: esbuild". That is expected; nothing to approve.
 
@@ -89,8 +107,9 @@ pnpm scene:card        # virtual Visa card: one purchase, one decline, STOP free
 pnpm bench             # the attack benchmark
 ```
 
-Add `RAILS_MODE=sandbox` (Metal testnet) or `--sandbox` (Airwallex sandbox) to run on the real
-rails; setup is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
+To run on the real rails: `RAILS_MODE=sandbox` before `pnpm scene` or `pnpm scene:dispute` (Metal
+testnet), `--sandbox` after `pnpm scene:earnings` or `pnpm scene:card` (Airwallex sandbox). Setup
+is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 <details>
 <summary>Development setup (engine, dashboard and agents as separate processes)</summary>
