@@ -20,3 +20,4 @@ export * from "./pass/index.js";
 export * from "./disputes/index.js";
 export * from "./killswitch/index.js";
 export * from "./purpose/index.js";
+export * from "./replay/index.js";

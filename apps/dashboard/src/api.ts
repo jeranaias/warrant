@@ -1,4 +1,5 @@
 import type { AgentRole, Money, PaymentProposal } from "@warrant/contracts";
+import type { Replay } from "./replay.js";
 
 /**
  * The engine's HTTP API (apps/engine/src/server.ts), typed here by hand. The dashboard only talks
@@ -242,6 +243,8 @@ export const api = {
     justification: string;
     createdAt: string;
   }) => call<{ ok: boolean; error?: string }>("POST", "/budget-changes", body),
+  replay: (proposalId: string) =>
+    call<Replay>("GET", `/replay?proposalId=${encodeURIComponent(proposalId)}`),
   /** Hosted demo only: a fresh engine for this visitor. */
   reset: () => call<{ ok: boolean }>("POST", "/reset"),
 };

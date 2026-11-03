@@ -91,6 +91,8 @@ export function CommandPage({
 
   const [selected, setSelected] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<Drawer | null>(null);
+  // The request whose replay the activity drawer shows (null: the whole feed).
+  const [replayId, setReplayId] = useState<string | null>(null);
   const atStore = useMemo(() => sellerMoments(engine.events).length > 0, [engine.events]);
   const motion = useMotion();
   const clock = useUtcClock();
@@ -140,6 +142,14 @@ export function CommandPage({
             selected={selected}
             onSelect={(id) => setSelected(id === null || id === selected ? null : id)}
             limits={limitRequests(engine.approvals)}
+            onFate={(fate) => {
+              const latest = passes.filter((p) => p.fate === fate).at(-1)?.proposalId;
+              const id =
+                latest ?? (fate === "asked" ? engine.approvals.at(-1)?.proposalId : undefined);
+              if (!id) return;
+              setReplayId(id);
+              setDrawer("activity");
+            }}
           />
         )}
       </div>
@@ -212,7 +222,14 @@ export function CommandPage({
             <button className="drawer-x" onClick={() => setDrawer(null)} aria-label="Close">
               ×
             </button>
-            {drawer === "activity" && <Activity events={engine.events} warrants={warrants} />}
+            {drawer === "activity" && (
+              <Activity
+                events={engine.events}
+                warrants={warrants}
+                open={replayId}
+                onOpen={setReplayId}
+              />
+            )}
             {drawer === "mandates" &&
               (engine.chain ? <Chain chain={engine.chain} /> : <p className="muted">No chain.</p>)}
             {drawer === "scenarios" && (
@@ -250,7 +267,10 @@ export function CommandPage({
                 key={id}
                 className="hud-btn"
                 aria-pressed={drawer === id}
-                onClick={() => setDrawer(drawer === id ? null : id)}
+                onClick={() => {
+                  setReplayId(null);
+                  setDrawer(drawer === id ? null : id);
+                }}
               >
                 {label}
                 {key && <kbd>{key}</kbd>}

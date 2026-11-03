@@ -453,6 +453,132 @@ td {
   color: var(--stop);
 }
 
+/* a feed line about a request opens its replay */
+.feed-open {
+  all: unset;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.feed-open:focus-visible,
+.recent-open:focus-visible,
+.link-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.feed-open:hover .feed-text {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+}
+
+/* replay: one request, step by step */
+.replay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.link-btn {
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.replay-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.replay-steps > li {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0 7px 16px;
+  font-size: 0.86rem;
+}
+
+/* the vertical line joining the steps */
+.replay-steps > li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.replay-steps > li:first-child::before {
+  top: 13px;
+}
+
+.replay-steps > li:last-child::before {
+  bottom: calc(100% - 13px);
+}
+
+.replay-dot {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.replay-steps > li.tone-ok .replay-dot {
+  background: var(--ok);
+}
+
+.replay-steps > li.tone-wait .replay-dot {
+  background: var(--wait);
+}
+
+.replay-steps > li.tone-stop .replay-dot {
+  background: var(--stop);
+}
+
+.replay-steps > li.tone-owner .replay-dot {
+  background: var(--owner);
+}
+
+.replay-steps > li.tone-stop .feed-why {
+  color: var(--stop);
+}
+
+.replay-checks {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.replay-checks li.stop {
+  color: var(--stop);
+}
+
+.replay-ids {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 /* buttons */
 .btn {
   font: inherit;
@@ -677,6 +803,19 @@ select {
 .gt.is-stopped .gt-gate-k {
   fill: var(--stop);
 }
+.gt-node.open {
+  cursor: pointer;
+}
+
+.gt-node.open:hover .gt-head,
+.gt-node.open:focus-visible .gt-head {
+  text-decoration: underline;
+}
+
+.gt-node.open:focus-visible {
+  outline: none;
+}
+
 .gt-node.paid rect {
   fill: var(--ok);
 }
@@ -1149,6 +1288,20 @@ kbd {
 
 .recent li {
   display: contents;
+}
+
+.recent-open {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .recent-to {

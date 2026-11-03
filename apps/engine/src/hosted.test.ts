@@ -104,6 +104,7 @@ describe("hosted demo: sign-in", () => {
     expect((await v.send("/demo")).headers.get("location")).toBe("/login");
     expect((await v.send("/assets/app.js")).headers.get("location")).toBe("/login");
     expect((await v.api("/world")).status).toBe(401);
+    expect((await v.api("/replay?proposalId=prop_1")).status).toBe(401);
     expect((await v.api("/reset", {})).status).toBe(401);
     expect((await v.send("/login")).status).toBe(200);
     expect(hosted.sessions.size).toBe(0);
