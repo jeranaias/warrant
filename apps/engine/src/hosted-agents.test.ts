@@ -99,6 +99,7 @@ describe("hosted demo: the agents run inside the session", () => {
       },
     });
     const s = store.create();
+    if (!s) throw new Error("no session");
     store.reset(s);
     expect(started).toEqual(["a1", "a2"]);
     expect(stopped).toEqual(["a1"]);

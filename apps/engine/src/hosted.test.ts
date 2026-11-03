@@ -5,9 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { deterministicPurpose } from "@warrant/control";
 import { AUTH_COOKIE, AUTH_TTL_MS, FailureLimiter, authValid, signAuth } from "./hosted-auth.js";
-import { SESSION_COOKIE, hostedApp } from "./hosted-app.js";
+import { CSP, SESSION_COOKIE, hostedApp } from "./hosted-app.js";
 import type { Hosted, HostedOptions } from "./hosted-app.js";
 import { SessionStore } from "./hosted-sessions.js";
+import type { Session, SessionOptions } from "./hosted-sessions.js";
 import { createEngine } from "./server.js";
 
 const CODE = "correct horse battery";
@@ -47,11 +48,12 @@ async function start(over: Partial<HostedOptions> = {}) {
   return { hosted, base };
 }
 
-/** A browser stand-in: keeps cookies, never follows redirects. */
-function visitor(base: string) {
+/** A browser stand-in: keeps cookies, never follows redirects. `extra` goes on every request. */
+function visitor(base: string, extra: Record<string, string> = {}) {
   const jar = new Map<string, string>();
   const send = async (path: string, init: RequestInit = {}) => {
     const headers = new Headers(init.headers);
+    for (const [k, v] of Object.entries(extra)) headers.set(k, v);
     if (jar.size) headers.set("cookie", [...jar].map(([k, v]) => `${k}=${v}`).join("; "));
     const r = await fetch(base + path, { ...init, headers, redirect: "manual" });
     for (const c of r.headers.getSetCookie()) {
@@ -214,7 +216,7 @@ describe("hosted demo: one engine per visitor", () => {
   });
 
   it("sends a visitor whose session ended back through / for a new one", async () => {
-    const { base } = await start({ max: 1 });
+    const { base } = await start({ max: 1, evictAfterMs: 0 });
     const a = visitor(base);
     const b = visitor(base);
     await a.enter();
@@ -224,13 +226,28 @@ describe("hosted demo: one engine per visitor", () => {
   });
 });
 
+/** A store session that must exist. */
+function made(store: SessionStore, key?: string): Session {
+  const s = store.create(key);
+  if (!s) throw new Error("expected a session");
+  return s;
+}
+
 describe("SessionStore", () => {
-  it("evicts the least recently used session when full", () => {
-    const store = new SessionStore({ makeEngine, max: 2, sweepMs: 0 });
-    const s1 = store.create();
-    const s2 = store.create();
-    store.get(s1.id); // s2 is now the oldest
-    const s3 = store.create();
+  const store0 = (over: Partial<SessionOptions> = {}) =>
+    new SessionStore({ makeEngine, sweepMs: 0, ...over });
+
+  it("evicts the least recently used session when full, once it has been idle a while", () => {
+    let t = 0;
+    const store = store0({ max: 2, evictAfterMs: 1000, now: () => t });
+    const s1 = made(store, "a");
+    const s2 = made(store, "b");
+    t = 500;
+    store.get(s1.id); // s2 is now the oldest, idle 500 ms
+    expect(store.create("c")).toBeUndefined(); // nobody idle long enough: busy, nobody evicted
+    expect(store.size).toBe(2);
+    t = 1200; // s2 idle 1200 ms
+    const s3 = made(store, "c");
     expect(store.size).toBe(2);
     expect(store.get(s2.id)).toBeUndefined();
     expect(store.get(s1.id)).toBe(s1);
@@ -238,11 +255,25 @@ describe("SessionStore", () => {
     store.close();
   });
 
+  it("caps sessions per client address, dropping that address's own oldest", () => {
+    const store = store0({ max: 10, perKey: 2 });
+    const judge = made(store, "judge");
+    const m1 = made(store, "mallory");
+    const m2 = made(store, "mallory");
+    const m3 = made(store, "mallory");
+    expect(store.size).toBe(3);
+    expect(store.get(m1.id)).toBeUndefined();
+    expect(store.get(m2.id)).toBe(m2);
+    expect(store.get(m3.id)).toBe(m3);
+    expect(store.get(judge.id)).toBe(judge);
+    store.close();
+  });
+
   it("drops sessions idle longer than the limit", () => {
     let t = 0;
-    const store = new SessionStore({ makeEngine, idleMs: 1000, sweepMs: 0, now: () => t });
-    const s1 = store.create();
-    const s2 = store.create();
+    const store = store0({ idleMs: 1000, now: () => t });
+    const s1 = made(store);
+    const s2 = made(store);
     t = 900;
     store.get(s2.id);
     t = 1500;
@@ -253,5 +284,133 @@ describe("SessionStore", () => {
     t = 5000;
     expect(store.get(s2.id)).toBeUndefined();
     store.close();
+  });
+});
+
+const STACK = /at .+\.(js|ts):\d+/;
+
+describe("hosted demo: hardening", () => {
+  it("sends security headers on every response", async () => {
+    const { base } = await start();
+    for (const path of ["/api/health", "/login", "/"]) {
+      const r = await fetch(base + path, { redirect: "manual" });
+      expect(r.headers.get("content-security-policy")).toBe(CSP);
+      expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(r.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+      expect(r.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(r.headers.get("x-powered-by")).toBeNull();
+      expect(r.headers.get("strict-transport-security")).toBeNull(); // plain http here
+    }
+    expect(CSP).toMatch(/frame-ancestors 'self'/);
+    expect(CSP).toMatch(/script-src 'self'(;|$)/);
+    const https = await fetch(base + "/api/health", { headers: { "x-forwarded-proto": "https" } });
+    expect(https.headers.get("strict-transport-security")).toMatch(/max-age=/);
+  });
+
+  it("refuses a state-changing request from another site", async () => {
+    const { base } = await start();
+    const v = visitor(base);
+    const owner = await v.enter();
+    const host = new URL(base).host;
+    const post = (path: string, headers: Record<string, string>) =>
+      v.send(path, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${owner}`,
+          ...headers,
+        },
+        body: "{}",
+      });
+    expect((await post("/api/kill", { origin: "https://evil.example" })).status).toBe(403);
+    expect((await post("/api/reset", { "sec-fetch-site": "cross-site" })).status).toBe(403);
+    expect((await post("/api/kill", { origin: "null" })).status).toBe(403);
+    expect((await v.api<{ engaged: boolean }>("/kill")).body.engaged).toBe(false);
+    // Same origin, and no Origin at all (curl, scripts), still work.
+    expect((await post("/api/reset", { origin: `http://${host}` })).status).toBe(200);
+    expect((await post("/api/kill", { "sec-fetch-site": "same-origin" })).status).toBe(200);
+    // A cross-site sign-in is refused before the code is checked.
+    const login = await fetch(base + "/login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://evil.example",
+      },
+      body: `code=${encodeURIComponent(CODE)}`,
+      redirect: "manual",
+    });
+    expect(login.status).toBe(403);
+    expect(login.headers.getSetCookie()).toEqual([]);
+  });
+
+  it("does not let a forged X-Forwarded-For walk around the sign-in limit", async () => {
+    // The proxy appends the real client (192.0.2.50) after whatever the client sent.
+    const { base } = await start({ limiter: new FailureLimiter(2, 60_000) });
+    for (let i = 0; i < 2; i++) {
+      const v = visitor(base, { "x-forwarded-for": `203.0.113.${i}, 192.0.2.50` });
+      expect((await v.login("nope")).status).toBe(401);
+    }
+    const forged = visitor(base, { "x-forwarded-for": "198.51.100.7, 192.0.2.50" });
+    expect((await forged.login("nope")).status).toBe(429);
+  });
+
+  it("keys the limit on the edge's client header when configured", async () => {
+    const { base } = await start({
+      limiter: new FailureLimiter(1, 60_000),
+      clientIpHeader: "cf-connecting-ip",
+    });
+    const a = visitor(base, { "cf-connecting-ip": "203.0.113.1" });
+    const b = visitor(base, { "cf-connecting-ip": "203.0.113.2" });
+    expect((await a.login("nope")).status).toBe(401);
+    expect((await a.login("nope")).status).toBe(429);
+    expect((await b.login(CODE)).status).toBe(303); // another client is not locked out
+  });
+
+  it("shows a plain busy page instead of pushing out someone mid-demo", async () => {
+    const { base, hosted } = await start({ max: 1 });
+    const judge = visitor(base);
+    await judge.enter();
+    const late = visitor(base);
+    expect((await late.login(CODE)).status).toBe(303);
+    const r = await late.send("/");
+    expect(r.status).toBe(503);
+    expect(r.headers.get("retry-after")).toBe("60");
+    expect(await r.text()).toMatch(/demo is full right now/);
+    expect((await late.api("/reset", {})).status).toBe(503);
+    expect(hosted.sessions.size).toBe(1);
+    expect((await judge.api("/world")).status).toBe(200);
+  });
+
+  it("answers bad requests without a stack trace", async () => {
+    const { base } = await start();
+    const v = visitor(base);
+    const owner = await v.enter();
+    const send = (body: string) =>
+      v.send("/api/kill", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${owner}` },
+        body,
+      });
+    const broken = await send("{not json");
+    expect(broken.status).toBe(400);
+    const text = await broken.text();
+    expect(text).not.toMatch(STACK);
+    expect(text).not.toMatch(/SyntaxError/);
+    const big = await send(JSON.stringify({ reason: "x".repeat(200_000) }));
+    expect(big.status).toBe(413);
+    expect(await big.text()).not.toMatch(STACK);
+    expect((await v.api<{ engaged: boolean }>("/kill")).body.engaged).toBe(false);
+  });
+
+  it("never puts the owner key anywhere but the redirect into the dashboard", async () => {
+    const { base } = await start();
+    const v = visitor(base);
+    const owner = await v.enter();
+    for (const path of ["/api/health", "/api/world", "/api/kill", "/demo"]) {
+      const r = await v.send(path);
+      expect(await r.text()).not.toContain(owner);
+      expect(JSON.stringify([...r.headers])).not.toContain(owner);
+    }
+    expect([...v.jar.values()].join(" ")).not.toContain(owner);
   });
 });
