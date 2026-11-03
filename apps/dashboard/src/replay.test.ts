@@ -90,6 +90,8 @@ describe("replay wording", () => {
       label: "over the per-payment cap",
       detail: "4 > 3",
     });
+    // The failing detail shows once, beside its check, not again under the step.
+    expect(lines[1]?.why).toBeUndefined();
   });
 
   it("held, denied; and a timeout settled by a status check", () => {
