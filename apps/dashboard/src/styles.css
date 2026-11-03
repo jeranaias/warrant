@@ -812,8 +812,14 @@ select {
   text-decoration: underline;
 }
 
-.gt-node.open:focus-visible {
+/* No box after a click; a ring on the node itself for keyboard focus only. */
+.gt-node.open:focus {
   outline: none;
+}
+
+.gt-node.open:focus-visible rect {
+  stroke: var(--text);
+  stroke-width: 2;
 }
 
 .gt-node.paid rect {
@@ -1855,4 +1861,515 @@ kbd {
 
 .live-runs a {
   color: var(--seal);
+}
+
+button.ph-desk {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/*
+ * The decision desk (components/Desk.tsx): the default page. Follows the system theme through
+ * the :root tokens (light, dark above), unlike the gate pages. Three columns on a desk: filters
+ * and budgets, the list, the selected line. One column on a phone.
+ */
+.desk {
+  --solid: var(--panel);
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 400px;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "top top top"
+    "banner banner banner"
+    "nav list detail";
+  height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+}
+
+.desk.is-stopped .desk-top {
+  box-shadow: inset 0 -2px 0 var(--stop);
+}
+
+.desk-top {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.desk-top .seal-mark {
+  width: 28px;
+  height: 28px;
+  font-size: 0.7rem;
+}
+
+.desk-name {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.desk-link {
+  font: 500 0.68rem var(--num);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desk-link::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.desk-link.on::before {
+  background: var(--ok);
+}
+
+.desk-btn {
+  font: 500 0.74rem var(--num);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.desk-btn:hover {
+  border-color: var(--muted);
+}
+
+.desk-banner {
+  grid-area: banner;
+  padding: 8px 16px 0;
+}
+
+.desk-nav {
+  grid-area: nav;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.desk-k {
+  margin: 10px 4px 4px;
+  font: 600 0.62rem var(--num);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.desk-k.wait {
+  color: var(--wait);
+}
+
+.desk-filters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.desk-filter {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font: 500 0.9rem var(--ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.desk-filter .mono {
+  color: var(--muted);
+}
+
+.desk-filter:hover:not(:disabled) {
+  background: var(--sunk);
+}
+
+.desk-filter[aria-pressed="true"] {
+  background: var(--seal-bg);
+  color: var(--seal);
+}
+
+.desk-filter:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.desk-filter.wait,
+.desk-filter.wait .mono {
+  color: var(--wait);
+  font-weight: 600;
+}
+
+.desk-filter.wait[aria-pressed="true"] {
+  background: var(--wait-bg);
+}
+
+.desk-budgets {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+  display: grid;
+  gap: 10px;
+}
+
+.desk-budgets li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  font-size: 0.85rem;
+}
+
+.desk-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.desk-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--tint, var(--seal));
+}
+
+.desk-budgets .wait .desk-bar > span {
+  background: var(--wait);
+}
+
+.desk-budgets .stop .desk-bar > span {
+  background: var(--stop);
+}
+
+.desk-bench {
+  margin: 0 4px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.desk-nav .stop-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.desk-nav .btn.kill {
+  width: 100%;
+  justify-content: center;
+}
+
+.desk-list {
+  grid-area: list;
+  overflow: auto;
+  padding: 14px 18px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.desk .firstrun {
+  position: static;
+  transform: none;
+  align-self: flex-start;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.desk-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.desk-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.desk-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desk-row:hover {
+  background: var(--sunk);
+}
+
+.desk-row[aria-pressed="true"] {
+  background: var(--seal-bg);
+  box-shadow: inset 3px 0 0 var(--seal);
+}
+
+.desk-row.wait[aria-pressed="true"] {
+  background: var(--wait-bg);
+  box-shadow: inset 3px 0 0 var(--wait);
+}
+
+.desk-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 0.5em;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.desk-row.paid .desk-dot {
+  background: var(--ok);
+}
+
+.desk-row.blocked .desk-dot {
+  background: var(--stop);
+}
+
+.desk-row.wait .desk-dot {
+  background: var(--wait);
+}
+
+.desk-row.store .desk-dot {
+  background: var(--seal);
+}
+
+.desk-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.desk-row-text {
+  font-size: 0.92rem;
+}
+
+.desk-row-why {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.desk-row.blocked .desk-row-why {
+  color: var(--stop);
+}
+
+.desk-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.desk-n {
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: var(--wait-bg);
+  color: var(--wait);
+  font-weight: 600;
+}
+
+.desk-empty {
+  margin: 12px 4px;
+  font-size: 0.9rem;
+}
+
+.desk-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--sunk);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.desk-page {
+  position: relative;
+}
+
+.desk-page-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+}
+
+.desk-detail {
+  grid-area: detail;
+  overflow: auto;
+  padding: 14px 16px 32px;
+  border-left: 1px solid var(--line);
+}
+
+.desk .sheet {
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: none;
+  border-radius: var(--radius);
+}
+
+.desk .sheet-wait {
+  box-shadow: 0 0 0 3px var(--wait-bg);
+}
+
+.desk-sentence {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.desk-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.desk-demo {
+  margin: 0;
+}
+
+/* one column: a phone (#/m) or a narrow window */
+.desk.narrow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: auto;
+  min-height: 100vh;
+  padding-bottom: 96px;
+}
+
+.desk.narrow > :not(.desk-top):not(.desk-stop) {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+.desk.narrow .desk-top {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  gap: 8px;
+}
+
+.desk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.desk-chips .chip[aria-selected="true"] {
+  color: var(--seal);
+  border-color: var(--seal);
+  background: var(--seal-bg);
+}
+
+.desk-inline {
+  padding: 0 12px 12px;
+}
+
+.desk-inline .sheet {
+  border: 0;
+  padding: 4px 0 0;
+}
+
+.desk-stop {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  z-index: 3;
+}
+
+.desk-stop > * {
+  display: flex;
+  max-width: 448px;
+  margin: 0 auto;
+}
+
+.desk-stop .btn.kill.big {
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+}
+
+.desk-stop .stop-confirm.big {
+  display: flex;
+  gap: 10px;
+}
+
+.desk-stop .stop-confirm.big .btn {
+  flex: 1;
+  min-height: 56px;
+}
+
+@media (max-width: 1100px) {
+  .desk {
+    grid-template-columns: 190px minmax(0, 1fr) 340px;
+  }
+}
+
+.desk-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.desk-top .chip {
+  white-space: nowrap;
+}
+
+.desk.narrow .desk-link {
+  display: none;
+}
+
+.desk.narrow .desk-row {
+  gap: 10px;
+}
+
+.desk.narrow .desk-row-side {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.72rem;
 }

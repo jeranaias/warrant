@@ -20,7 +20,7 @@ export function Seller({ events, max = 3 }: { events: readonly LoggedEvent[]; ma
   );
 }
 
-function Moment({ m }: { m: SellerMoment }) {
+export function Moment({ m }: { m: SellerMoment }) {
   return (
     <article className={`moment ${m.ok ? "" : "refused"}`}>
       <header>

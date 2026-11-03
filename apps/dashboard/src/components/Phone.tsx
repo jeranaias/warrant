@@ -30,10 +30,13 @@ export function Phone({
   engine,
   onDone,
   onError,
+  onDesk,
 }: {
   engine: EngineState;
   onDone: () => void;
   onError: (e: string) => void;
+  /** Back to the decision desk. */
+  onDesk: () => void;
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
@@ -93,6 +96,9 @@ export function Phone({
           <span className={`chip ${stopped ? "stop" : ""}`}>{stopped ? "stopped" : "running"}</span>
         )}
         <span className="spacer" />
+        <button className="ph-desk" onClick={onDesk}>
+          Desk
+        </button>
         <a className="ph-desk" href="#/desk">
           Desktop
         </a>
