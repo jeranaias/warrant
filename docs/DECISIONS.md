@@ -444,3 +444,27 @@ Decision:
    prompt-injected treasury can only ask to move earnings to our own address, within its limits,
    and only the owner can let it happen. Budget changes now meet a full 20 USDZ total: raising one
    agent's total means lowering another's.
+
+## ADR-023: A visitor can run the hosted demo's agents on their own model key
+
+Date: 2026-11-03 Status: accepted
+
+Context: the hosted demo runs scripted agents and the deterministic purpose check, so nobody's key
+is needed and every run is the same. A judge may still want to see a real model drive the agents.
+We will not put our own key on a public server, and a visitor's key is a secret of theirs.
+Decision:
+
+1. **Agents** in the demo's top line opens a dialog where a signed-in visitor pastes their own
+   Anthropic API key. The server checks its shape, then checks it with Anthropic's free token
+   count. Only then does that visitor's session start over with the model (Haiku) as its agents
+   and its purpose check. Rails stay mock: money is simulated whatever key is used.
+2. The key lives only inside that session's SDK clients, in server memory. It is never a stored
+   field, never logged, never sent back, and no error text from the API is passed on (it could
+   quote the key). **Forget key**, **Reset** and the end of the session drop it.
+3. Each session may make at most 150 model calls, agents and purpose check together (a full run
+   takes about 40). After that the agents stop taking tasks and the purpose check answers
+   "uncertain", so anything left goes to the owner. Bad keys count against a per-address limit
+   (10 per 10 minutes), so the check can't be used to test keys at scale.
+   Consequences: the demo can show a real model meeting the same attacks, on the visitor's own
+   account, without our key on the host. A model run differs from run to run; the published
+   benchmark stays the scripted one. `pnpm engine` locally is unchanged (`.env` key).

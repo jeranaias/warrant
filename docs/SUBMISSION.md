@@ -157,8 +157,10 @@ scripted results did not change. The case ids and the reason are in
   their twins and what would close them are in [bench/README.md](../bench/README.md).
 - On live testnet, the lookup finds the payment's transaction only within about 40 minutes
   (50,000 blocks); an older one is still settled as paid, identified by its nonce (ADR-019).
-- The hosted demo runs on simulated money with a scripted agent. The sponsor rails ran live from a
-  laptop (`docs/TESTNET.md`), not from the hosted demo.
+- The hosted demo runs on simulated money with a scripted agent, unless a visitor pastes their own
+  Anthropic key: then that session's agents and purpose check run on Haiku, still on simulated
+  money (ADR-023). The sponsor rails ran live from a laptop (`docs/TESTNET.md`), not from the
+  hosted demo.
 - The licence's "once a month" is 28 days, so a second bill on day 29 to 31 of a long month is not
   caught by that rule (ADR-015).
 
