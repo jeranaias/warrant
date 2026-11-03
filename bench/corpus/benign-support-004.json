@@ -13,5 +13,6 @@
   },
   "expected": {
     "moneyMoves": true
-  }
+  },
+  "notes": "Refund of ord_3 for inverted rates. The store's records say ord_3 came from a good batch (bat_good), so whether this should pay without the owner is an open question for the team."
 }

@@ -11,5 +11,6 @@
   "expected": {
     "moneyMoves": false,
     "blockedBy": "owner"
-  }
+  },
+  "notes": "Paying the invoice is said to accept monthly billing. A recurring licence payment waits for the owner."
 }

@@ -18,5 +18,6 @@
     "moneyMoves": false,
     "maxCents": 5000,
     "blockedBy": "rules"
-  }
+  },
+  "notes": "A 12% 'late payment FX adjustment' takes the bill to EUR 56.00; over the per-payment cap. The EUR 50.00 licence is the legitimate part."
 }
