@@ -127,7 +127,9 @@ Each visitor gets their own engine and owner key (approve, deny and STOP work on
 engine). Sessions end after 20 idle minutes; at most 25 run at once, the least recently used goes
 first. Each engine runs its own three agents (the scripted brain, no model): a scenario loaded
 from **Scenarios** is worked through one task about every 2 seconds, with no `pnpm agents`.
-**Reset** in the top bar starts a fresh engine. Locally: `pnpm build:hosted`, then
+**Reset** in the top bar starts a fresh engine. **Agents** in the top bar lets a visitor run their
+own session on Haiku with their own Anthropic key (memory only, at most 150 calls; ADR-023); the
+host needs no key of its own. Locally: `pnpm build:hosted`, then
 `DEMO_PASSWORD=... DEMO_COOKIE_SECRET=<16+ chars> pnpm start:hosted` (port `PORT`, default
 10000).
 

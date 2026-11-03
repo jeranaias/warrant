@@ -1788,6 +1788,88 @@ kbd {
   padding: 0;
 }
 
+/* Hosted demo only (ADR-023): a visitor's own model key. */
+.key-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.35);
+}
+
+.key-dialog {
+  width: min(460px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  font: 400 0.92rem/1.45 var(--ui);
+}
+
+.key-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.key-head h2 {
+  margin: 0;
+  font: 600 1.05rem var(--ui);
+}
+
+.key-now {
+  margin: 0;
+  font: 500 0.8rem var(--num);
+  color: var(--muted);
+}
+
+.key-facts {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.key-dialog label {
+  font-weight: 600;
+}
+
+.key-dialog input {
+  font: 0.9rem var(--num);
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.key-dialog input:focus-visible,
+.key-dialog .btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.key-error {
+  margin: 0;
+  color: var(--stop);
+}
+
+.key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* our store's side: pass checks and disputes, as they happen */
 .sheet-seller {
   border-color: var(--seal);

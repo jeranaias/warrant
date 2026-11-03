@@ -23,6 +23,14 @@ export function anthropicCreate(client = new Anthropic()): CreateMessage {
   return (params) => client.messages.create(params);
 }
 
+/**
+ * A client for a key a person pasted (the hosted demo, ADR-023): one retry, 30 s per call. The key
+ * stays inside the SDK client; nothing here keeps or logs it.
+ */
+export function anthropicClient(apiKey: string): Anthropic {
+  return new Anthropic({ apiKey, maxRetries: 1, timeout: 30_000 });
+}
+
 export interface ModelBrainOptions {
   create: CreateMessage;
   model?: string;
