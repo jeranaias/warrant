@@ -11,7 +11,7 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
 | `Rail`                 | common.ts   | `metal_x402`, `airwallex_transfer`, `airwallex_fx`, `airwallex_card`.                                                      |
 | `AgentRole`            | common.ts   | `sourcing`, `support`, `treasury`.                                                                                         |
 | `Warrant`              | warrant.ts  | Owner-signed grant to one agent: purpose, rails, payees, per-payment cap, total budget, validity window. Limits inclusive. |
-| `Payee`                | warrant.ts  | Allowlisted payee with routing ref, optional `billingPeriod`, card payees' `merchantCategoryCode`. No card numbers.        |
+| `Payee`                | warrant.ts  | Allowlisted payee: routing ref, optional `billingPeriod`, `merchantCategoryCode`, `ownerApprovesEach`. No card numbers.    |
 | `PaymentProposal`      | proposal.ts | The only thing an agent can submit. Carries an idempotency key.                                                            |
 | `BudgetChangeProposal` | proposal.ts | Treasury's request to change a warrant's limits. Always owner-approved.                                                    |
 | `PaymentSummary`       | summary.ts  | Everything the purpose model sees besides the warrant. Strict, no free text from untrusted sources.                        |
@@ -69,3 +69,6 @@ Changing contracts: PR labeled `contracts`, separate from feature work, one team
   digits, optional and signed with the warrant (the design tool seat is `5734`). The Airwallex card
   adapter copies the codes into the card's `allowed_merchant_categories`, so the card network
   refuses any other merchant type too.
+- A payee can ask the owner every time (#26, ADR-022): `Payee.ownerApprovesEach` (`true` or
+  absent), signed with the warrant. Every payment to it waits for the owner, whatever the amount.
+  Treasury's sweep payee (our own treasury address) carries it.

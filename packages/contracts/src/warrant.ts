@@ -27,6 +27,12 @@ export const Payee = z
       .string()
       .regex(/^\d{4}$/)
       .optional(),
+    /**
+     * Set when every payment to this payee waits for the owner, whatever the amount (ADR-022:
+     * treasury's earnings sweep to our own address). Signed with the warrant, so only the owner
+     * sets it.
+     */
+    ownerApprovesEach: z.literal(true).optional(),
   })
   .strict();
 export type Payee = z.infer<typeof Payee>;

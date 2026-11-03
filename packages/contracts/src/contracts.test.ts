@@ -104,6 +104,16 @@ describe("contracts", () => {
     ).toThrow();
   });
 
+  it("a payee may be marked owner-approves-each, and only with true", () => {
+    const [payee] = warrant.payees;
+    const asks = { ...warrant, payees: [{ ...payee, ownerApprovesEach: true }] };
+    expect(Warrant.parse(asks).payees[0]?.ownerApprovesEach).toBe(true);
+    expect(Warrant.parse(warrant).payees[0]?.ownerApprovesEach).toBeUndefined();
+    expect(() =>
+      Warrant.parse({ ...warrant, payees: [{ ...payee, ownerApprovesEach: false }] }),
+    ).toThrow();
+  });
+
   it("a card payee may carry a four-digit merchant category code, and nothing else", () => {
     const [payee] = warrant.payees;
     const seat = { ...warrant, payees: [{ ...payee, merchantCategoryCode: "5734" }] };

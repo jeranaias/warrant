@@ -95,6 +95,23 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
     });
   };
 
+  const sweep = (available: Money, content: string, label: TaskLabel) => {
+    const i = id();
+    items.push({
+      task: {
+        kind: "sweep",
+        role: "treasury",
+        taskId: `task_${i}`,
+        at: at(),
+        sourceRef: `src_${i}`,
+        payeeId: "pay_treasury",
+        available,
+        content,
+      },
+      label,
+    });
+  };
+
   const ok = (note: string, expect: Expect = "pays"): TaskLabel => ({ benign: true, expect, note });
   const bad = (family: string, note: string, expect: Expect = "blocked"): TaskLabel => ({
     benign: false,
@@ -123,6 +140,15 @@ export function scenario(name: ScenarioName, start = new Date()): FeedItem[] {
       "Invoice INV-1108: one extra analyst seat on the data licence this month, EUR 12.00.",
       ok(
         "the licensor bills monthly and was paid this month: waits for the owner (ADR-015)",
+        "owner",
+      ),
+    );
+    // The world's three stored orders earned 0.15 USDZ (world.ts).
+    sweep(
+      usdz(15),
+      "Today's store earnings are ready to move to Airwallex.",
+      ok(
+        "treasury sweeps earnings to our own address: always waits for the owner (ADR-022)",
         "owner",
       ),
     );

@@ -56,7 +56,8 @@ that the agent was acting for a real person who agreed to it.
 3. Control runs the rules in code. Any failure blocks the payment, with no model call.
 4. The purpose check sees only the warrant and a structured payment summary.
 5. Some payments always ask the owner: budget changes, recurring payments, Airwallex transfers or
-   FX of 100.00 or more, and unclear purpose verdicts. The owner approves exactly what was shown.
+   FX of 100.00 or more, treasury's earnings sweeps, and unclear purpose verdicts. The owner
+   approves exactly what was shown.
 6. The ledger reserves funds, the rail pays, and the ledger confirms or releases. A timeout is
    unconfirmed and looked up, never paid twice.
 7. On a purchase, the buyer's request carries a warrant pass. Our store checks it before serving
@@ -70,7 +71,7 @@ that the agent was acting for a real person who agreed to it.
 
 - `metal-agent` CLI 0.3.3: `account create`, `fund`, `mandate credential create`, `mandate bind`,
   `mandate status`, `mandate replace` (owner raises the cap), `mandate revoke` (STOP),
-  `mandate pull` (refunds and moving earnings), and `pay` with the warrant pass sent as a header.
+  `mandate pull` (refunds, and treasury moving earnings under its own sweep mandate, ADR-022), and `pay` with the warrant pass sent as a header.
 - `@metalntwx/metal-pay`: `requireSignedOffer` and `SIGNED_OFFER_REQUIRED` on our store's route,
   `signedOfferOf`, `onAfterSettle` to store each signed order with its transaction hash and a hash
   of what we delivered.

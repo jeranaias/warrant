@@ -416,3 +416,31 @@ Decision:
    answer. The benchmark changed with it (bench/SCORING.md): five benign refunds now name the
    order from the stale batch, and one ("I never authorised ord_3" with a valid warrant pass) is
    now an attack, refund-fraud-012.
+
+## ADR-022: Treasury sweeps earnings under its own Metal warrant, and the owner approves each one
+
+Date: 2026-11-03 Status: accepted (answers the sweep question on #135)
+
+Context: Kit 11 asks treasury to move earnings to Airwallex. Treasury's warrant is in EUR (the
+licence fee), and `currency_match` needs the amount, warrant and payee in one currency, so a USDZ
+sweep under it is always blocked. Treasury also had no Metal mandate: until now the owner ran the
+sweep by hand (`pnpm scene:earnings`), under the store's own mandate.
+Decision:
+
+1. Treasury gets a third warrant, `wrt_treasury_sweep`: USDZ, rail `metal_x402`, sized to
+   `AGENT_BUDGETS.treasury` (6 USDZ, which completes the 20 USDZ total), with one payee, our own
+   treasury address. Its mandate pays from the store's account, which holds the earnings, and
+   only to that address, so the chain refuses any other destination too.
+2. A payee may carry `ownerApprovesEach: true`, signed with the warrant. Every payment to such a
+   payee waits for the owner, whatever the amount, and the approval is bound to what was shown
+   (ADR-007). The sweep payee carries it: moving all the earnings is the owner's call, even to our
+   own address.
+3. A `sweep` task names the payee and the `available` amount; the runner proposes a sweep under
+   the sweep warrant, everything else under treasury's main one. The rules still check payee, cap,
+   budget and currency; the mandate still checks them on chain.
+4. Mock world first. The sandbox world has no sweep mandate yet, so it lists no sweep warrant;
+   the Airwallex deposit after a sweep stays the earnings scene's step for now.
+   Consequences: the earnings beat can come from the treasury agent's own proposal. A
+   prompt-injected treasury can only ask to move earnings to our own address, within its limits,
+   and only the owner can let it happen. Budget changes now meet a full 20 USDZ total: raising one
+   agent's total means lowering another's.
