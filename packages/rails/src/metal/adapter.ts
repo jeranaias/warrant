@@ -16,8 +16,15 @@ export interface MetalAdapterOptions {
    * price that differs from what control approved is refused before anything is signed.
    */
   quote?: (url: string) => Promise<number | undefined>;
-  /** Look up a signed x402 payment whose answer was lost (facilitator /settlements by nonce). */
-  lookupSettlement?: (url: string, nonce: string) => Promise<RailResult | undefined>;
+  /**
+   * Look up a signed x402 payment whose answer was lost, by the nonce the CLI printed and the
+   * credential it was signed under (live: `chainSettlementLookup`, read from the chain).
+   */
+  lookupSettlement?: (
+    url: string,
+    nonce: string,
+    credentialPath?: string,
+  ) => Promise<RailResult | undefined>;
 }
 
 interface Attempt {
@@ -25,6 +32,7 @@ interface Attempt {
   args: string[];
   url?: string;
   nonce?: string;
+  credential?: string;
   last: RailResult;
 }
 
@@ -94,6 +102,7 @@ export class MetalAdapter implements RailAdapter {
       kind: "pay",
       args,
       url,
+      credential: cred,
       ...(outcome.kind !== "refused" && outcome.kind !== "held" && outcome.nonce
         ? { nonce: outcome.nonce }
         : {}),
@@ -108,7 +117,7 @@ export class MetalAdapter implements RailAdapter {
     if (a.last.status === "succeeded" || a.last.status === "failed") return a.last;
     if (a.kind === "pull") return this.runPull(idempotencyKey, a.args); // same id pays at most once
     if (a.nonce && a.url && this.opts.lookupSettlement) {
-      const found = await this.opts.lookupSettlement(a.url, a.nonce);
+      const found = await this.opts.lookupSettlement(a.url, a.nonce, a.credential);
       if (found) {
         a.last = found;
         return found;
