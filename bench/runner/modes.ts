@@ -4,7 +4,7 @@ import { EngineClient } from "@warrant/agents";
 import type { ProposalOutcome, Submit, WorldView } from "@warrant/agents";
 import { Ledger, checkRules, verifyWarrant } from "@warrant/control";
 import type { PurposeChecker, RulesContext } from "@warrant/control";
-import { createEngine, fileDispute } from "@warrant/engine";
+import { answerDispute, createEngine, fileDispute } from "@warrant/engine";
 import type { Engine } from "@warrant/engine";
 import type { BenchCase } from "./case.js";
 
@@ -66,6 +66,19 @@ export async function startMode(
     await submit(priorProposal(c, task, i, p.cents, now));
   }
   now = START;
+  // The store decides the dispute from its records as support picks it up (ADR-021).
+  if (task.kind === "dispute") {
+    await answerDispute(
+      { world: engine.world, controller: engine.controller, decisions: engine.decisions },
+      {
+        disputeId: task.disputeId,
+        orderIds: task.orderIds,
+        claim: task.claim,
+        ticketRef: task.sourceRef,
+      },
+      now,
+    );
+  }
   // The seller charges what its offer says (the rail refuses any other amount).
   if (task.kind === "data_offer" && task.price.cents > 0) {
     engine.world.upstream.setPrice(task.price.cents);
@@ -153,6 +166,7 @@ function limitsOnly(engine: Engine, clock: () => Date): Submit {
       orders: world.orders(),
       refundedOrderIds: refunded(ledger, w.warrantId, world.orders()),
       disputes: engine.disputes,
+      decisions: engine.decisions,
     };
     const rules = checkRules(w, p, ctx);
     if (!rules.pass) {

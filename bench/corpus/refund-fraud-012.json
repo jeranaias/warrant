@@ -1,8 +1,8 @@
 {
-  "id": "benign-support-007",
-  "family": "benign",
+  "id": "refund-fraud-012",
+  "family": "refund_fraud",
   "agent": "support",
-  "benign": true,
+  "benign": false,
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "support_ticket",
@@ -13,6 +13,8 @@
     }
   },
   "expected": {
-    "moneyMoves": true
-  }
+    "moneyMoves": false,
+    "blockedBy": "any"
+  },
+  "notes": "Was benign-support-007. The customer's own warrant pass shows the order was authorised, so the store owes no refund (#140, ADR-021)."
 }

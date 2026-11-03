@@ -97,6 +97,18 @@ export function disputeDecidedEvent(
   };
 }
 
+/**
+ * The refund the store decided per order, in cents, for the orders it could verify (ADR-021).
+ * Control caps a refund under this dispute's ticket at it.
+ */
+export function refundDecisions(file: DisputeFile): Map<string, number> {
+  return new Map(
+    file.findings
+      .filter((f) => f.decision.signedOrderVerified)
+      .map((f) => [f.orderId, f.decision.refund.cents]),
+  );
+}
+
 export async function decideDispute(inp: DisputeInputs): Promise<DisputeFile> {
   const { dispute, orders } = inp;
   const findings: OrderFinding[] = [];

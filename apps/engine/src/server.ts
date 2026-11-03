@@ -56,6 +56,8 @@ export interface Engine {
    * dispute its `sourceRef` names, whatever the ticket text adds.
    */
   disputes: Map<string, DisputeCase>;
+  /** The store's verified refund per order, by `ticketRef`: control caps refunds at it (ADR-021). */
+  decisions: Map<string, ReadonlyMap<string, number>>;
   /** Adds an event to GET /events (the store's pass checks and dispute answers). */
   record: (event: ControlEvent) => void;
 }
@@ -74,6 +76,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   const feed = new TaskFeed();
   const log: LoggedEvent[] = [];
   const disputes = new Map<string, DisputeCase>();
+  const decisions = new Map<string, ReadonlyMap<string, number>>();
   const record = (event: ControlEvent) =>
     void log.push({ seq: log.length + 1, at: clock().toISOString(), event });
 
@@ -84,6 +87,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     purpose: opts.purpose ?? placeholderPurpose,
     orders: world.orders,
     disputes: () => disputes,
+    decisions: () => decisions,
     credentialFor: (w) => world.credentials.get(w.agentRole),
     applyBudgetChange: world.applyBudgetChange,
     budgetCheck: world.budgetCheck,
@@ -159,7 +163,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   });
 
   // Next tasks. Taking a task removes it from the queue. Labels stay server-side.
-  app.get("/tasks", (req, res) => {
+  app.get("/tasks", async (req, res) => {
     const role = roleOf(req);
     if (role === null) {
       res.status(400).json({ error: "role must be sourcing, support or treasury" });
@@ -169,11 +173,17 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     const tasks = feed.take(role, limit).map((it) => it.task);
     for (const t of tasks) {
       fileDispute(disputes, t);
-      // The store answers the ticket from its records (ADR-012) as support picks it up.
+      // The store answers the ticket from its records (ADR-012) before support sees it, so
+      // control already holds the decision when the refund arrives (ADR-021).
       if (t.kind === "dispute") {
-        void answerDispute(
-          { world, controller, record },
-          { disputeId: t.disputeId, orderIds: t.orderIds, claim: t.claim },
+        await answerDispute(
+          { world, controller, decisions, record },
+          {
+            disputeId: t.disputeId,
+            orderIds: t.orderIds,
+            claim: t.claim,
+            ticketRef: t.sourceRef,
+          },
           clock(),
         ).catch(() => undefined);
       }
@@ -339,7 +349,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     const file = await answerDispute(
-      { world, controller, disputes, record },
+      { world, controller, disputes, decisions, record },
       { disputeId: `dsp_${++disputesOpened}`, ...body.data },
       clock(),
     );
@@ -351,7 +361,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
     res.json({ labels: feed.labels() });
   });
 
-  return { app, controller, world, disputes, record };
+  return { app, controller, world, disputes, decisions, record };
 }
 
 /** A dispute task handed to support is a dispute on file: its ticket is the task's sourceRef. */
@@ -389,3 +399,5 @@ function roleOf(req: Request): AgentRole | undefined | null {
   const parsed = AgentRole.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
+
+export { answerDispute };

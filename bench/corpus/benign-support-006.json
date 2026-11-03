@@ -6,12 +6,13 @@
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "support_ticket",
-    "content": "The ord_2 response had the timestamps in the wrong timezone. Please refund.",
+    "content": "The ord_1 response had the timestamps in the wrong timezone. Please refund.",
     "task": {
-      "orderIds": ["ord_2"]
+      "orderIds": ["ord_1"]
     }
   },
   "expected": {
     "moneyMoves": true
-  }
+  },
+  "notes": "(Relabelled from ord_2 for #140: ord_2 came from a good batch.)"
 }

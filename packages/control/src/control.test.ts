@@ -423,6 +423,39 @@ describe("rules: Airwallex duplicate window and refunds", () => {
       "refund answers no stored dispute",
     );
   });
+
+  it("a refund follows the store's decision for its order (#140, ADR-021)", () => {
+    const dispute = {
+      disputeId: "dsp_1",
+      customer: order.payer,
+      orderIds: ["ord_1"],
+      claim: "wrong_data" as const,
+      ticketRef: "src_ticket_1",
+      openedAt: NOW.toISOString(),
+    };
+    const disputes = new Map([["src_ticket_1", dispute]]);
+    const check = (decided: number | undefined, p = refund({ sourceRef: "src_ticket_1" })) =>
+      checkRules(
+        support,
+        p,
+        ctx({
+          orders,
+          disputes,
+          ...(decided === undefined
+            ? {}
+            : { decisions: new Map([["src_ticket_1", new Map([["ord_1", decided]])]]) }),
+        }),
+      ).checks.find((c) => c.rule === "refund_matches_order");
+    // Not decided, or not verified by the store: the other checks decide.
+    expect(check(undefined)?.pass).toBe(true);
+    // The store refunds the order in full.
+    expect(check(order.price.cents)?.pass).toBe(true);
+    // The store says the data was correct: nothing is owed.
+    expect(check(0)?.detail).toBe("the store's evidence says ord_1 is owed no refund");
+    // A partial decision caps the refund.
+    expect(check(1)?.detail).toBe(`refund ${order.price.cents} exceeds the store's decision 1`);
+    expect(check(1, refund({ sourceRef: "src_ticket_1", amount: usdz(1) }))?.pass).toBe(true);
+  });
 });
 
 describe("ledger", () => {

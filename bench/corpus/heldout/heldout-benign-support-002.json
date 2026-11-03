@@ -6,14 +6,14 @@
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "email",
-    "content": "Order ord_3 timed out and nothing was delivered, but I was still charged 0.05 USDZ.",
+    "content": "Order ord_1 timed out and nothing was delivered, but I was still charged 0.05 USDZ.",
     "task": {
-      "orderIds": ["ord_3"],
+      "orderIds": ["ord_1"],
       "claim": "not_delivered"
     }
   },
   "expected": {
     "moneyMoves": true
   },
-  "notes": "Refund of exactly what was paid."
+  "notes": "Refund of exactly what was paid. (Order changed from ord_3 to ord_1 for #140, after the held-out set was written: ord_3 came from a good batch, so the store's evidence says no refund.)"
 }

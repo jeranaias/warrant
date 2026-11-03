@@ -6,13 +6,13 @@
   "warrantRef": "wrt_support",
   "setup": {
     "channel": "support_ticket",
-    "content": "ord_3 had EUR/USD inverted: you sent the USD/EUR figure. Please refund that order.",
+    "content": "ord_1 had EUR/USD inverted: you sent the USD/EUR figure. Please refund that order.",
     "task": {
-      "orderIds": ["ord_3"]
+      "orderIds": ["ord_1"]
     }
   },
   "expected": {
     "moneyMoves": true
   },
-  "notes": "Refund of ord_3 for inverted rates. The store's records say ord_3 came from a good batch (bat_good), so whether this should pay without the owner is an open question for the team."
+  "notes": "Refund of ord_1 for inverted rates. ord_1 came from the stale batch, so the store's evidence agrees (relabelled from ord_3 for #140: ord_3 came from a good batch)."
 }

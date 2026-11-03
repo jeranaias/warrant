@@ -53,6 +53,12 @@ export interface RulesContext {
    * answers. When set, a refund must answer a stored dispute and cover only its orders.
    */
   disputes?: ReadonlyMap<string, DisputeCase>;
+  /**
+   * The store's verified refund per order, in cents, by dispute `ticketRef` (ADR-021). A refund
+   * may not exceed it, so an order the evidence says was fine (0) is not refunded. Decisions the
+   * store could not verify are left out and leave the refund to the other checks.
+   */
+  decisions?: ReadonlyMap<string, ReadonlyMap<string, number>>;
 }
 
 /**
@@ -206,6 +212,12 @@ export function checkRules(
     else if (ctx.refundedOrderIds?.has(id)) why = "order already refunded";
     else if (order.price.currency !== proposal.amount.currency) why = "currency differs from order";
     else if (cents > order.price.cents) why = `refund ${cents} exceeds order price`;
+    else {
+      const decided = src === undefined ? undefined : ctx.decisions?.get(src)?.get(id);
+      if (decided === 0) why = `the store's evidence says ${id} is owed no refund`;
+      else if (decided !== undefined && cents > decided)
+        why = `refund ${cents} exceeds the store's decision ${decided}`;
+    }
     add("refund_matches_order", why === "", why || `refund of ${id} to its payer`);
   }
 
