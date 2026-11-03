@@ -137,6 +137,17 @@ export function outcomeLine(r: Replay): { tone: Tone; text: string } {
   return who ? { tone: o.tone, text: `Blocked by ${who}` } : o;
 }
 
+/** "payee not on warrant" and "payee not on the warrant" say the same thing. */
+function sameWords(a: string, b: string): boolean {
+  const norm = (t: string) =>
+    t
+      .toLowerCase()
+      .replace(/\b(the|a|an)\b/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  return norm(a) === norm(b);
+}
+
 /** Every step of a replay as one plain line. */
 export function replayLines(r: Replay, names: Names): ReplayLine[] {
   return r.steps.map((s): ReplayLine => {
@@ -168,13 +179,14 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
           text: s.pass
             ? `Rules: all ${s.checks.length} checks passed`
             : `Rules: ${failed.length} of ${s.checks.length} failed`,
-          checks: s.checks.map((c) => ({
-            ok: c.pass,
-            label: c.pass
+          checks: s.checks.map((c) => {
+            const label = c.pass
               ? (RULE_LABELS[c.rule] ?? words(c.rule))
-              : (REASONS[c.rule] ?? words(c.rule)),
-            ...(c.pass ? {} : { detail: c.detail }),
-          })),
+              : (REASONS[c.rule] ?? words(c.rule));
+            // The detail only when it adds something ("9900 vs cap 5000"), not the label again.
+            const extra = !c.pass && !sameWords(c.detail, label);
+            return { ok: c.pass, label, ...(extra ? { detail: c.detail } : {}) };
+          }),
           // Each failed check carries its own detail beside it, so no line-level why.
         };
       }

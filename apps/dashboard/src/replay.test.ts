@@ -78,6 +78,7 @@ describe("replay wording", () => {
           checks: [
             { rule: "payee_allowlist", pass: true, detail: "ok" },
             { rule: "per_payment_cap", pass: false, detail: "4 > 3" },
+            { rule: "payee_allowlist", pass: false, detail: "payee not on warrant" },
           ],
         },
         { kind: "purpose_skipped", at },
@@ -85,13 +86,15 @@ describe("replay wording", () => {
     };
     const lines = replayLines(r, names);
     expect(outcomeLine(r)).toEqual({ tone: "stop", text: "Blocked by the rules" });
-    expect(lines[1]?.text).toBe("Rules: 1 of 2 failed");
+    expect(lines[1]?.text).toBe("Rules: 2 of 3 failed");
     expect(lines[1]?.checks?.find((c) => !c.ok)).toMatchObject({
       label: "over the per-payment cap",
       detail: "4 > 3",
     });
     // The failing detail shows once, beside its check, not again under the step.
     expect(lines[1]?.why).toBeUndefined();
+    // A detail that only repeats its label is left out.
+    expect(lines[1]?.checks?.at(-1)).toEqual({ ok: false, label: "payee not on the warrant" });
   });
 
   it("held, denied; and a timeout settled by a status check", () => {
