@@ -15,6 +15,24 @@ Nov 11.
 | 7   | 4:05-4:20 | **Kill switch**              | One click: warrants revoked, mandates revoked, card frozen, next proposal refused. (K2: freeze the card)                                                                                                                                                                                                              | B, C, D |
 | 8   | 4:20-4:55 | **The numbers**              | Benchmark: 150+ attacks, unprotected vs limits only vs Warrant, block rate and false-block rate, misses shown honestly.                                                                                                                                                                                               | A       |
 
+## Clicks on the hosted demo
+
+The main screen is the **Decision Desk**; **Flow** in the header shows the same run as the gate
+view, and **Desk** goes back. **Reset** (top right) starts a fresh copy.
+
+1. **Run a scenario** (step 1 of the strip). Paid and blocked requests arrive as one sentence
+   each, with the reason; repeats fold into one line ("× 19").
+2. **Needs you** holds the second licence bill of the month. **Approve EUR 12.00** or **Deny**.
+3. Click any line: the right side replays it step by step (rules, purpose check, owner, funds,
+   rail).
+4. **At our store** filters to the store's moments: warrant pass checked, buyer refused,
+   disputes decided order by order.
+5. **Live runs** lists the same flows on Metal testnet and the Airwallex sandbox, with links.
+6. **STOP**, then **Yes, stop all money now**. The receipt shows the time and what was revoked.
+
+For beat 4 (new limits): **Scenarios** → **Raise to 4 cents** → **Treasury asks to set the
+sourcing cap to …** → **Sign new limits**.
+
 ## Attack moments to weave in
 
 - Beat 2: a fake "price notice" in upstream data tells sourcing to pay a new address. Rules block it

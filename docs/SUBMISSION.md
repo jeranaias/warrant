@@ -105,6 +105,11 @@ that the agent was acting for a real person who agreed to it.
   faults, #122).
 - A second bill from the licensor in the same month waits for the owner, with the reason "bills
   once a month and was already paid this month" (ADR-015). The hosted demo shows this one.
+- The owner's screen is a decision desk: held requests first, then every paid and blocked
+  request as one sentence with its reason, repeats folded. Any line opens a step-by-step replay
+  of that request from the event log: each of the 9 rules with pass or fail, the purpose check,
+  the owner's decision with the hash of what was shown, funds held, confirmed or released, and
+  the rail's result (`GET /api/replay`, #132, #133).
 - Live on the sandbox (2026-11-02): earnings deposited into our USD Global Account, converted USD to
   EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID; control's ledger confirmed it.
   EUR SEPA is refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT
