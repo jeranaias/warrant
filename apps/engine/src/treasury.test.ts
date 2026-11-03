@@ -41,6 +41,13 @@ describe("spend review (#26)", () => {
         totalBudget: AGENT_BUDGETS.support.budget,
         spent: { currency: "USDZ", cents: 5 },
       },
+      {
+        role: "treasury",
+        warrantId: "wrt_treasury_sweep",
+        perPaymentCap: AGENT_BUDGETS.treasury.perPaymentCap,
+        totalBudget: AGENT_BUDGETS.treasury.budget,
+        spent: { currency: "USDZ", cents: 0 },
+      },
     ]);
   });
 

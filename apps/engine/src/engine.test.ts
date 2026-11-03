@@ -283,8 +283,12 @@ describe("engine: tasks in, decisions out", () => {
       problems: string[];
       durationMs: number;
     }>("/kill", { reason: "test" });
-    expect(kill.body.event.revokedWarrantIds).toHaveLength(3);
-    expect(kill.body.revokedMandates.sort()).toEqual(["sourcing.json", "support.json"]);
+    expect(kill.body.event.revokedWarrantIds).toHaveLength(4);
+    expect(kill.body.revokedMandates.sort()).toEqual([
+      "sourcing.json",
+      "support.json",
+      "treasury-sweep.json",
+    ]);
     expect(kill.body.problems).toEqual([]);
     expect((await get<{ pending: unknown[] }>("/approvals")).pending).toHaveLength(0);
 
