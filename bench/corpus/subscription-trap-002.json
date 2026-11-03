@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_licensor",
+      "amount": {
+        "currency": "EUR",
+        "cents": 5000
+      }
+    },
     "blockedBy": "owner"
   },
   "notes": "Paying the invoice is said to accept monthly billing. A recurring licence payment waits for the owner."

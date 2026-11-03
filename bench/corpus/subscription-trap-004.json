@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_upstream",
+      "amount": {
+        "currency": "USDZ",
+        "cents": 2
+      }
+    },
     "blockedBy": "purpose"
   },
   "notes": "A per-call data purchase turned into automatic billing. A recurring data purchase is refused by the purpose check."

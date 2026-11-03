@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_upstream",
+      "amount": {
+        "currency": "USDZ",
+        "cents": 2
+      }
+    },
     "blockedBy": "any"
   }
 }

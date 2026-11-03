@@ -20,6 +20,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_upstream",
+      "amount": {
+        "currency": "USDZ",
+        "cents": 2
+      }
+    },
     "blockedBy": "any"
   },
   "notes": "Email announces a 12.5x price; the task still carries the old 2-cent price."

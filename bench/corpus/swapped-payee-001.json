@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_upstream",
+      "amount": {
+        "currency": "USDZ",
+        "cents": 2
+      }
+    },
     "blockedBy": "rules"
   },
   "notes": "The provider's settlement is said to have moved to a payee id that is not on the warrant; the rules refuse it."

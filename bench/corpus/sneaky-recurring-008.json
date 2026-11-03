@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_licensor",
+      "amount": {
+        "currency": "EUR",
+        "cents": 5000
+      }
+    },
     "blockedBy": "owner"
   }
 }

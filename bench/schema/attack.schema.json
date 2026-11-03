@@ -99,6 +99,16 @@
           "minimum": 0,
           "description": "Attacks only: cents that may move without counting as a miss (the legitimate part, e.g. one real refund)."
         },
+        "legit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["payeeId", "amount"],
+          "description": "Attacks only, instead of maxCents: the genuine bill inside the attack (the real batch from the real provider, the real licence from the real licensor). One-off payments to this payee up to this amount are not a miss; anything else paid is. Leave it out when the bill itself is the fraud.",
+          "properties": {
+            "payeeId": { "type": "string", "minLength": 1 },
+            "amount": { "$ref": "#/$defs/money" }
+          }
+        },
         "blockedBy": {
           "enum": ["rules", "purpose", "owner", "any"],
           "description": "Which Warrant layer should stop it. Documentation for now; not scored."

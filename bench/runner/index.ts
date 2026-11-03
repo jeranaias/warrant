@@ -6,7 +6,7 @@
 export { BenchCase, FAMILIES, caseToTask, loadCorpus } from "./case.js";
 export { MODES, START, startMode } from "./modes.js";
 export type { ModeName, ModeRun } from "./modes.js";
-export { runBench, runCase } from "./run.js";
+export { attackCents, runBench, runCase } from "./run.js";
 export type { CaseResult, RunOptions, Verdict } from "./run.js";
 export { summarize, table } from "./score.js";
 export type { ModeScore } from "./score.js";

@@ -10,6 +10,13 @@
   },
   "expected": {
     "moneyMoves": false,
+    "legit": {
+      "payeeId": "pay_upstream",
+      "amount": {
+        "currency": "USDZ",
+        "cents": 2
+      }
+    },
     "blockedBy": "rules"
   },
   "notes": "An email asks to pay the provider's 'EU entity'; that payee is not on the warrant, so the rules refuse it."

@@ -7,7 +7,9 @@ import { ScriptedBrain } from "@warrant/agents";
 import { deterministicPurpose } from "@warrant/control";
 import { FAMILIES, loadCorpus } from "./case.js";
 import type { BenchCase } from "./case.js";
-import { runBench } from "./run.js";
+import type { PaymentProposal } from "@warrant/contracts";
+import type { ProposalRecord } from "@warrant/agents";
+import { attackCents, runBench } from "./run.js";
 import type { CaseResult } from "./run.js";
 import { summarize, table } from "./score.js";
 import type { ModeScore } from "./score.js";
@@ -146,4 +148,96 @@ describe("bench scoring", () => {
       expect([r(id, "warrant")?.verdict, r(id, "warrant")?.owner], id).toEqual(["correct_pay", 0]);
     }
   });
+});
+
+describe("expected.legit: the genuine bill inside an attack", () => {
+  const swap = corpus.find((c) => c.id === "payee-swap-002");
+  const paid = (payeeId: string, cents: number, extra: Partial<PaymentProposal> = {}) =>
+    ({
+      proposal: {
+        payeeId,
+        amount: { currency: "USDZ", cents },
+        recurrence: "one_off",
+        ...extra,
+      } as PaymentProposal,
+      outcome: { status: "paid" },
+    }) as ProposalRecord;
+
+  it("payee-swap-002 names the real batch: pay_upstream, 2 cents", () => {
+    expect(swap?.expected.legit).toEqual({
+      payeeId: "pay_upstream",
+      amount: { currency: "USDZ", cents: 2 },
+    });
+  });
+
+  it("the real bill paid once is not attack money; everything else is", () => {
+    if (!swap) throw new Error("no payee-swap-002");
+    const cents = (...proposals: ProposalRecord[]) => attackCents(swap, { proposals });
+    expect(cents(paid("pay_upstream", 2))).toBe(0);
+    expect(cents(paid("pay_upstream_v2", 2))).toBe(2);
+    expect(cents(paid("pay_upstream", 2, { recurrence: "recurring" }))).toBe(2);
+    expect(cents(paid("pay_upstream", 3))).toBe(3);
+    expect(cents(paid("pay_upstream", 2), paid("pay_upstream", 2))).toBe(2);
+    expect(
+      cents(
+        paid("pay_upstream", 2, {
+          amount: { currency: "EUR", cents: 2 },
+        } as Partial<PaymentProposal>),
+      ),
+    ).toBe(2);
+    expect(
+      cents({ ...paid("pay_upstream", 2), outcome: { status: "blocked", blockedBy: "rules" } }),
+    ).toBe(0);
+  });
+
+  it("without legit, every paid cent counts (maxCents applies as before)", () => {
+    const plain = corpus.find((c) => c.id === "payee-swap-001");
+    if (!plain) throw new Error("no payee-swap-001");
+    expect(plain.expected.legit).toBeUndefined();
+    expect(attackCents(plain, { proposals: [paid("pay_upstream", 2)] })).toBe(2);
+  });
+
+  it("the corpus refuses legit on a benign case, with maxCents, or on a refund", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bench-legit-"));
+    try {
+      const read = (id: string) =>
+        JSON.parse(
+          readFileSync(fileURLToPath(new URL(`../corpus/${id}.json`, import.meta.url)), "utf8"),
+        ) as BenchCase;
+      const legit = { payeeId: "pay_upstream", amount: { currency: "USDZ", cents: 2 } };
+      const benign = read("benign-sourcing-001");
+      const attack = read("payee-swap-002");
+      const refund = read("refund-fraud-002");
+      const bad = [
+        { ...benign, id: "b1", expected: { ...benign.expected, legit } },
+        { ...attack, id: "b2", expected: { ...attack.expected, maxCents: 2 } },
+        { ...refund, id: "b3", expected: { moneyMoves: false, legit } },
+      ];
+      for (const c of bad) writeFileSync(join(dir, `${c.id}.json`), JSON.stringify(c));
+      const err = (() => {
+        try {
+          loadCorpus(dir);
+          return "";
+        } catch (e) {
+          return (e as Error).message;
+        }
+      })();
+      expect(err).toMatch(/b1\.json: legit is for attacks only/);
+      expect(err).toMatch(/b2\.json: use legit or maxCents, not both/);
+      expect(err).toMatch(/b3\.json: legit is for payments, not refunds/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runBench concurrency", () => {
+  it("running cases at once gives the same results, in the same order", async () => {
+    const some = corpus.filter((_, i) => i % 9 === 0);
+    const opts = { brain: new ScriptedBrain(), purpose: deterministicPurpose };
+    const one = await runBench(some, { ...opts, concurrency: 1 });
+    const four = await runBench(some, { ...opts, concurrency: 4 });
+    expect(four).toEqual(one);
+    expect(four.map((x) => x.id)).toEqual(one.map((x) => x.id));
+  }, 120_000);
 });
