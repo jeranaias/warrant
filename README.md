@@ -1,165 +1,55 @@
 # Warrant
 
-Warrant lets a business owner give AI agents a budget without giving them the keys. The owner
-signs a **warrant** for each agent: who it may pay, how much per payment and in total, on which
-rails, and until when. Every payment an agent asks for is checked against its warrant before any
-money moves. Risky requests wait for the owner on their phone, and one STOP button stops
-everything at once.
+Give AI agents a budget without giving them the keys.
 
-Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 Business Agents). Task board:
-[Warrant hackathon project](https://github.com/users/jeranaias/projects/1).
+The owner signs a **warrant** for each agent: who it may pay, how much per payment and in total,
+on which rails, and until when. Every payment an agent asks for is checked against it before any
+money moves. Risky requests wait for the owner, and one STOP button stops everything.
 
-**Try it without installing anything:** https://warrant-demo-bt31.onrender.com (access code from
-the team). Press **Run a scenario**, decide what is held for you, then press **STOP**. Each visitor
-gets their own copy on simulated money; the first visit after a quiet spell can take a minute.
+![Warrant demo: agents' requests flow through the warrant to paid, held or blocked; the store checks a buyer's warrant pass and settles a dispute; the owner approves a held bill; STOP revokes every warrant](docs/media/warrant-demo.gif)
 
-## What is in the demo
+**Try it:** https://warrant-demo-bt31.onrender.com (access code from the team). Press **Run a
+scenario**, decide what is held for you, then press **STOP**. Simulated money; each visitor gets
+their own copy. The first visit after a quiet spell can take a minute to wake.
 
-A small pay-per-call data business with three AI agents:
+Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents) ·
+[task board](https://github.com/users/jeranaias/projects/1)
 
-- Customers' agents buy market data from our store at 5 cents a query, over x402 on Metal. Each
-  purchase carries a signed order.
-- The **sourcing agent** buys upstream data at 2 cents a call, capped at 3 cents per purchase.
-- The **support agent** handles disputed orders and refunds the ones the evidence supports.
-- The **treasury agent** moves earnings to Airwallex, pays a EUR 50.00 monthly licence fee, and
-  proposes new limits within the 20 USDZ total.
+## How it works
 
-Agents never pay anyone. They send a typed payment proposal. Control decides:
+Agents never pay anyone. They send a typed payment proposal, and control decides in four steps:
 
-1. **Rules, in code.** Payee list, per-payment cap, total budget, expiry, duplicate guard, rail
-   and currency. No model is involved.
-2. **Purpose check.** A separate check sees only the signed warrant and a structured summary of
-   the payment, never the invoice, offer or ticket text.
-3. **The owner,** for budget changes, recurring payments, Airwallex transfers or FX of 100.00 or
-   more, and anything the purpose check is unsure about (ADR-007, ADR-013). The approval is bound
-   to a hash of exactly what the owner saw.
-4. **Ledger.** Funds are reserved before money moves, then confirmed or released. The log is
-   append-only. A timeout is recorded as unconfirmed and looked up, never retried blind.
+| Step              | What it checks                                                                                                                                       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Rules**         | Payee list, per-payment cap, total budget, expiry, repeats, rail and currency. Code only, no model.                                                  |
+| **Purpose check** | Sees the signed warrant and a structured summary, never the invoice, offer or ticket text, so instructions hidden in that text can't reach it.       |
+| **Owner**         | Budget changes, recurring bills, large transfers, unclear cases. The approval is bound to a hash of exactly what the owner saw (ADR-007, ADR-013).   |
+| **Ledger**        | Funds reserved, then confirmed or released. Append-only. A timeout is recorded as unconfirmed and settled by a status check, never resent (ADR-019). |
 
-Each agent's warrant sits on top of a Metal mandate with the same limits. If our code were
-bypassed, the mandate still refuses on chain.
+Each warrant sits on a **Metal mandate** with the same limits, so the chain still refuses if our
+code is bypassed. Sellers can check the buyer too: a purchase carries a **warrant pass** signed by
+the buyer's owner, which our store verifies before serving and keeps for disputes (ADR-012).
 
-Sellers can check the buyer too. A purchase carries a **warrant pass**: a grant signed by the
-buyer's owner, plus a per-purchase pass. Our store checks it before serving and keeps it with the
-order, so a dispute can be settled from evidence (ADR-012).
+The demo business: customers' agents buy market data from our store over x402 on Metal. A
+**sourcing** agent buys upstream data, a **support** agent settles disputed orders, and a
+**treasury** agent moves earnings to Airwallex and pays a EUR licence fee.
 
-## Prerequisites
+## What ran for real
 
-- Node 24 or newer (`.nvmrc`). Check with `node -v`.
-- pnpm 10 through corepack: run `corepack enable` once. `package.json` pins the exact pnpm
-  version, so corepack fetches it the first time you run `pnpm`.
-- Git.
-- Nothing else for the local demo. It runs on in-memory mocks and needs no keys and no `.env`.
-- Optional: a model API key in `.env` (variable names in `.env.example`). Without it, the agents
-  run as a scripted agent that obeys whatever the task text says, and the purpose check is the
-  deterministic one.
-- Only for the Metal testnet run: a Metal RPC endpoint, the `metal-agent` 0.3.3 CLI and a
-  `METAL_HOME` folder outside the repo. See [docs/TESTNET.md](docs/TESTNET.md).
+The hosted demo runs on simulated money. The same flows were run on the real sandboxes, with
+evidence in [docs/TESTNET.md](docs/TESTNET.md) (also under **Live runs** in the demo):
 
-## Quickstart (local, mock rails)
-
-```sh
-git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
-pnpm install
-pnpm verify          # optional: format check, lint, typecheck, tests (what CI runs)
-```
-
-Then three terminals, all from the repo root:
-
-```sh
-pnpm engine          # terminal 1: the engine on http://127.0.0.1:4000, mock rails
-pnpm dashboard       # terminal 2: the dashboard on http://localhost:5173
-pnpm agents          # terminal 3: the agents work through the queued tasks, then exit
-```
-
-Locally the engine queues every scenario at startup (`all`), and nothing pays until you run
-`pnpm agents`. `pnpm agents --scenario <name>` loads one scenario first. Names: `normal`,
-`price_rise`, `dispute`, `attacks`, `all` (the dashboard shows them as Normal day, Supplier raises
-the price, Customer disputes a charge, Attacks on the agents, Everything). Pressing **Run** in the
-dashboard only queues tasks: run `pnpm agents` again to work through them.
-
-One process instead of three (the hosted demo, run locally; the agents run inside it):
-
-```sh
-pnpm build:hosted
-DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
-# open http://localhost:10000 and type the code you picked
-```
-
-Scripted scenes print each step to the terminal. They need no engine running:
-
-```sh
-pnpm scene             # price rise, then the owner raises the cap
-pnpm scene:dispute     # a customer disputes; the store decides from evidence
-pnpm scene:earnings    # earnings move to Airwallex; the EUR licence fee is paid
-pnpm scene:card        # a virtual Visa card: one purchase, one decline, STOP freezes the card
-pnpm bench             # the attack benchmark (no API key needed)
-```
-
-## Open the owner link
-
-`pnpm engine` makes a new owner key each start and prints a line like this:
-
-```
-owner link (keep it to yourself): http://localhost:5173/#/m?owner=<key>
-```
-
-Open that link. It is the phone page. The page moves the key out of the address bar into the
-tab's session storage. Without the key you can look, but you cannot approve or stop.
-
-- Desktop view: in the same tab, go to `/#/` (or open `http://localhost:5173/#/?owner=<key>`).
-- The dashboard dev server listens on `localhost`; `127.0.0.1:5173` may not load on some machines.
-- A browser narrower than about 700 px opens the phone page by itself. **Desktop** on that page
-  switches back.
-- On a real phone: `pnpm dashboard --host`, then open the link with your computer's address. Use
-  a network you trust.
-
-## What to click for each beat
-
-All on the desktop dashboard unless noted.
-
-| Beat                     | What to do                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The business runs        | Run `pnpm agents`. Watch the gate: each request flows to Paid, Held for you or Blocked, with the reason. **Activity** lists every step.                                                                                                                                                                                                                                                       |
-| Price rises, money stops | Open **Scenarios**, pick **Supplier raises the price**, click **Run**, run `pnpm agents`. The 2-cent purchase pays. The 4-cent one is blocked by the per-payment cap before any chain call. Or run `pnpm scene` for the full story in the terminal.                                                                                                                                           |
-| The owner decides        | In **Scenarios**, click **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ**. The request appears in the waiting card on the right and on the phone page. Click **Sign new limits**. The mandate is replaced and a new warrant version is signed.                                                                                                                |
-| Attacks                  | Pick **Attacks on the agents**, click **Run**, run `pnpm agents`. A swapped payee, a fake invoice and a refund to another wallet are blocked. A recurring licence payment is held for the owner, or blocked as a duplicate if the licence was just paid. One offer that says "buy 200 batches" pays once, and the repeats are blocked as duplicates. That first payment is a known gap (#79). |
-| A dispute                | Run `pnpm scene:dispute`. The store answers from the signed order, the settlement and the customer's warrant pass, refunds the one bad order, and refuses a second refund of it.                                                                                                                                                                                                              |
-| Both rails               | Run `pnpm scene:earnings`.                                                                                                                                                                                                                                                                                                                                                                    |
-| STOP                     | Click **STOP**, then **Yes, stop all money now**. The banner shows how long it took and how many mandates were revoked. Every later proposal is refused.                                                                                                                                                                                                                                      |
-| The numbers              | Run `pnpm bench`.                                                                                                                                                                                                                                                                                                                                                                             |
-
-## What is real and what is mocked
-
-| Part                                      | Local demo (`RAILS_MODE=mock`, default)    | Live run (`RAILS_MODE=sandbox`)                                                    |
-| ----------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Metal payments, mandates, refusals        | In-memory chain that enforces each mandate | **Metal testnet** (chain 63825) via the `metal-agent` CLI                          |
-| Upstream provider and our store (x402)    | In memory                                  | Real x402 sellers built on `@metalntwx/metal-pay`, on local ports                  |
-| Owner raises the cap (`mandate replace`)  | In memory                                  | **On chain**                                                                       |
-| Dispute and refund (`pnpm scene:dispute`) | Mock chain                                 | **Metal testnet** with `RAILS_MODE=sandbox pnpm scene:dispute`                     |
-| Airwallex deposit, FX, transfer           | Airwallex mock (`packages/mocks`)          | **Airwallex sandbox** with `pnpm scene:earnings --sandbox` (EUR by SWIFT, ADR-017) |
-| Airwallex virtual card and freeze (Kit 2) | Airwallex mock, `pnpm scene:card`          | **Airwallex sandbox** with `pnpm scene:card --sandbox` (ADR-018)                   |
-| Agents and purpose check                  | Scripted, or a model if a key is set       | Same                                                                               |
-
-The Airwallex adapter (`packages/rails/src/airwallex`) runs against the mock by default and against
-the real Airwallex sandbox with `pnpm scene:earnings --sandbox` (keys from `.env`). The live price-rise run and its transaction hashes are recorded in
-[docs/TESTNET.md](docs/TESTNET.md). To run it:
-
-```sh
-RAILS_MODE=sandbox pnpm scene     # about 2 minutes, on Metal testnet
-pnpm reset:live                   # put sourcing back on its 3-cent cap before the next run
-```
-
-On PowerShell, set the variable first: `$env:RAILS_MODE="sandbox"; pnpm scene`.
+| Flow                     | Where             | Result                                                                                                         |
+| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace` |
+| Dispute                  | Metal testnet     | Pass checked, bad order refunded by mandate pull, repeat refund refused, "never agreed" rejected (11 of 11)    |
+| Earnings and licence fee | Airwallex sandbox | Deposit, USD to EUR, EUR 50.00 by SWIFT, PAID (ADR-017)                                                        |
+| Virtual Visa card        | Airwallex sandbox | Seat bought; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)       |
 
 ## Benchmark
 
-`pnpm bench` runs every case against three setups: no protection, Metal mandate limits only, and
-Warrant. The corpus has 185 cases: 154 attacks across 14 families and 31 normal payments, plus a held-out
-set of 34 written by someone who did not build control.
-
-From `bench/results.json`, which `pnpm bench` rewrites and CI checks against a fresh run
-(scripted naive agent, deterministic purpose check):
+`pnpm bench`: 154 attacks across 14 families and 31 normal payments, against three setups. From
+[bench/results.json](bench/results.json), which CI checks against a fresh run:
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
@@ -167,37 +57,101 @@ From `bench/results.json`, which `pnpm bench` rewrites and CI checks against a f
 | limits only | 107 of 154      | 0 of 31                         |
 | Warrant     | 149 of 154      | 1 of 31                         |
 
-On the held-out set Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6 normal payments.
-Warrant asked the owner 35 times in the run. Attacks Warrant lets through, and the one false
-block, are listed by name in the `pnpm bench` output. See [bench/SCORING.md](bench/SCORING.md) for how results are counted.
+On a held-out set written by someone who didn't build control: 25 of 28 attacks blocked, 1 of 6
+normal payments wrongly blocked. The misses are named in the `pnpm bench` output
+([bench/SCORING.md](bench/SCORING.md)).
 
-## Repo map
+## Run it locally
+
+Node 24+ and pnpm 10 (`corepack enable` once). No keys and no `.env` for the mock demo.
+
+```sh
+git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
+pnpm install
+pnpm build:hosted
+DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
+# open http://localhost:10000, type the code you picked, press Run a scenario
+```
+
+On PowerShell, set the variables first: `$env:DEMO_PASSWORD="pick-one"`, and the same for
+`DEMO_COOKIE_SECRET`.
+
+Each beat as a terminal scene (no server needed):
+
+```sh
+pnpm scene             # price rise, then the owner raises the cap
+pnpm scene:dispute     # a customer disputes; the store decides from evidence
+pnpm scene:earnings    # earnings to Airwallex, then the EUR licence fee
+pnpm scene:card        # virtual Visa card: one purchase, one decline, STOP freezes it
+pnpm bench             # the attack benchmark
+```
+
+Add `RAILS_MODE=sandbox` (Metal testnet) or `--sandbox` (Airwallex sandbox) to run on the real
+rails; setup is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+<details>
+<summary>Development setup (engine, dashboard and agents as separate processes)</summary>
+
+```sh
+pnpm verify          # format check, lint, typecheck, tests (what CI runs)
+pnpm engine          # terminal 1: engine on http://127.0.0.1:4000, mock rails
+pnpm dashboard       # terminal 2: dashboard on http://localhost:5173
+pnpm agents          # terminal 3: agents work through the queued tasks, then exit
+```
+
+The engine queues every scenario at startup. Nothing pays until `pnpm agents` runs, and pressing
+**Run** in the dashboard only queues tasks. `pnpm agents --scenario <name>` loads one scenario:
+`normal`, `price_rise`, `dispute`, `attacks`, `all`.
+
+`pnpm engine` prints an owner link (`http://localhost:5173/#/m?owner=<key>`). Open it to approve
+and stop; without the key you can look but not act. The page moves the key into the tab's session
+storage. `/#/` is the desktop view; narrow screens get the phone page by themselves. On a real
+phone, run `pnpm dashboard --host` on a network you trust.
+
+A model API key in `.env` (names in `.env.example`) is optional. Without one, the agents are
+scripted and the purpose check is deterministic.
+
+</details>
+
+<details>
+<summary>What to click for each beat</summary>
+
+| Beat                     | What to do                                                                                                                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The business runs        | **Run a scenario**. Each request flows to Paid, Held for you or Blocked, with the reason. **Activity** lists every step.                                                                   |
+| The seller checks        | The **seller's view** shows the store checking each buyer's warrant pass, refusing a buyer without one, and deciding disputes order by order.                                              |
+| The owner decides        | A second licence bill in the same month is held. Approve or deny it in the waiting card (or on the phone page).                                                                            |
+| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                      |
+| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.      |
+| Attacks                  | **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays once and the repeats are blocked (known gap, #79). |
+| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                             |
+| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                           |
+
+</details>
+
+<details>
+<summary>Repo map</summary>
 
 ```
-apps/engine          local server: task feed for the agents, control, scenes, live mode
+apps/engine          server: task feed, control, scenes, hosted demo, live mode
 apps/dashboard       owner UI (Vite + React): desktop view and phone page (#/m)
 apps/store           our data business: x402 route that requires a signed order
 packages/contracts   shared types and zod schemas (the team agreement)
 packages/control     rules, purpose check, ledger, approvals, kill switch, warrant pass
 packages/agents      sourcing, support, treasury: prompts and one propose_payment tool
 packages/rails       Metal and Airwallex adapters behind one interface
-packages/mocks       mock Airwallex and Metal servers, and the scenario task feed
+packages/mocks       mock Airwallex and Metal servers with fault injection, scenario feed
 bench/               attack corpus, runner and scoring
 docs/                architecture, decisions, demo script, runbook, testnet evidence
 ```
 
-Other commands: `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm format`, `pnpm mocks` (the
-standalone mock Airwallex and Metal servers; the local demo does not need them).
+</details>
 
 ## Docs
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the decision flow and trust boundaries
-- [docs/RUNBOOK.md](docs/RUNBOOK.md): full setup, including the Airwallex sandbox and Metal testnet
-- [docs/TESTNET.md](docs/TESTNET.md): our testnet accounts, mandates and transaction evidence
-- [docs/DEMO.md](docs/DEMO.md): the demo script, beat by beat
-- [docs/DECISIONS.md](docs/DECISIONS.md): why things are the way they are (ADRs)
-- [docs/CONTRACTS.md](docs/CONTRACTS.md): the shared types
-- [docs/SUBMISSION.md](docs/SUBMISSION.md) and [docs/VIDEO.md](docs/VIDEO.md): submission and
-  video drafts
+[Architecture](docs/ARCHITECTURE.md) · [Decisions (ADRs)](docs/DECISIONS.md) ·
+[Runbook](docs/RUNBOOK.md) · [Testnet evidence](docs/TESTNET.md) · [Demo script](docs/DEMO.md) ·
+[Contracts](docs/CONTRACTS.md) · [Submission draft](docs/SUBMISSION.md) ·
+[Video draft](docs/VIDEO.md)
 
 Everything here is sandbox or testnet. Nothing points at production Airwallex or mainnet.
