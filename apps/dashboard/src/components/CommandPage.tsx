@@ -78,10 +78,13 @@ export function CommandPage({
   engine,
   banner,
   onError,
+  onDesk,
 }: {
   engine: Engine;
   banner: ReactNode;
   onError: (e: string) => void;
+  /** Back to the decision desk. */
+  onDesk: () => void;
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
@@ -170,6 +173,9 @@ export function CommandPage({
           {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
           <span className="hud-clock mono">{clock} UTC</span>
+          <button className="hud-btn" onClick={onDesk}>
+            Desk
+          </button>
           <a className="hud-btn" href="#/m">
             Phone
           </a>
@@ -443,7 +449,7 @@ function AgentPanel({
   );
 }
 
-function StopReceipt({
+export function StopReceipt({
   kill,
   roleOf,
 }: {
