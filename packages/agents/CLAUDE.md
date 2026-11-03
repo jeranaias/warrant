@@ -3,7 +3,9 @@
 **Purpose:** the three agents (sourcing, support, treasury). Each is a system prompt
 (`src/<role>/prompt.md`) plus ONE money tool, `propose_payment` (`src/tool.ts`, ADR-008). The
 runner fills ids, warrant, agent, idempotency key and `sourceRef`, then submits the
-`PaymentProposal` to control (`POST /proposals`). Treasury's `BudgetChangeProposal` is not wired yet.
+`PaymentProposal` to control (`POST /proposals`). Treasury also has `propose_limits` (`src/limits.ts`,
+ADR-020) for `spend_review` tasks: a `BudgetChangeProposal` sent to `POST /budget-changes`, which
+moves no money and always waits for the owner. Treasury's `sweep` task is not wired yet.
 
 **Layout:**
 

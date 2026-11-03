@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentTask } from "@warrant/contracts";
-import type { Brain, Propose } from "./brain.js";
+import type { Brain, Propose, ProposeLimits } from "./brain.js";
 import type { AgentContext } from "./context.js";
 import { SYSTEM_PROMPTS, renderTask } from "./prompts.js";
+import { LIMITS_TOOL_NAME, proposeLimitsTool } from "./limits.js";
 import { TOOL_NAME, proposePaymentTool } from "./tool.js";
 
 /** ADR-008: Haiku for the agents. Override with AGENT_MODEL. */
@@ -30,9 +31,10 @@ export interface ModelBrainOptions {
 }
 
 /**
- * A model-driven agent: plain tool use with the one `propose_payment` tool (ADR-008, no agent
- * framework). The system prompt and tool are identical for every task of a role, so they are
- * marked for prompt caching; the task goes last.
+ * A model-driven agent: plain tool use (no agent framework) with the one money tool,
+ * `propose_payment` (ADR-008), plus `propose_limits` for treasury (ADR-020; it moves no money).
+ * The system prompt and tools are identical for every task of a role, so they are marked for
+ * prompt caching; the task goes last.
  */
 export class ModelBrain implements Brain {
   readonly name: string;
@@ -45,7 +47,16 @@ export class ModelBrain implements Brain {
     this.name = `model:${this.model}`;
   }
 
-  async act(task: AgentTask, ctx: AgentContext, propose: Propose): Promise<void> {
+  async act(
+    task: AgentTask,
+    ctx: AgentContext,
+    propose: Propose,
+    proposeLimits?: ProposeLimits,
+  ): Promise<void> {
+    const tools =
+      ctx.role === "treasury"
+        ? [proposePaymentTool(), proposeLimitsTool()]
+        : [proposePaymentTool()];
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: renderTask(task, ctx) }];
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       const res = await this.opts.create(
@@ -55,7 +66,7 @@ export class ModelBrain implements Brain {
           system: [
             { type: "text", text: SYSTEM_PROMPTS[ctx.role], cache_control: { type: "ephemeral" } },
           ],
-          tools: [proposePaymentTool()],
+          tools,
           messages,
         },
         `${ctx.role}/${task.taskId}/${turn}`,
@@ -65,10 +76,15 @@ export class ModelBrain implements Brain {
       messages.push({ role: "assistant", content: res.content });
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const u of uses) {
-        const text =
+        const handler =
           u.name === TOOL_NAME
-            ? await propose(u.input).catch((e: unknown) => `error: ${String(e)}`)
-            : `unknown tool ${u.name}`;
+            ? propose
+            : u.name === LIMITS_TOOL_NAME && ctx.role === "treasury"
+              ? (proposeLimits ?? (() => Promise.resolve(`${LIMITS_TOOL_NAME} is not available`)))
+              : undefined;
+        const text = handler
+          ? await handler(u.input).catch((e: unknown) => `error: ${String(e)}`)
+          : `unknown tool ${u.name}`;
         results.push({ type: "tool_result", tool_use_id: u.id, content: text });
       }
       messages.push({ role: "user", content: results });

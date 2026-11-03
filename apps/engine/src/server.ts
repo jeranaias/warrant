@@ -9,6 +9,7 @@ import type { ControlEvent, KillSwitchHooks, PurposeChecker } from "@warrant/con
 import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
 import { answerDispute } from "./disputes.js";
+import { spendReview } from "./treasury.js";
 import { AGENTS, CUSTOMER_ADDRESS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
 import type { World } from "./world.js";
 
@@ -184,6 +185,22 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   app.post("/proposals", async (req, res) => {
     const result = await controller.submit(req.body);
     res.status(result.blockedBy === "malformed" ? 400 : 200).json(result);
+  });
+
+  // Queue a spend review for treasury (#26): each USDZ warrant's limits and spend from the ledger,
+  // the Kit 11 total and, when it is over sourcing's limit, the upstream price. Moves no money.
+  let reviews = 0;
+  app.post("/treasury/review", (_req, res) => {
+    const item = spendReview({
+      n: ++reviews,
+      at: clock(),
+      warrants: world.warrants.values(),
+      spentCents: (id) => controller.ledger.spentCents(id),
+      upstreamCents: world.upstream.price(),
+    });
+    const queued = feed.load([item]);
+    // The feed gives every load after the first fresh ids (`_2`...): answer the id it queued.
+    res.json({ taskId: feed.pending().at(-1)?.task.taskId, queued });
   });
 
   // Treasury proposes new limits for an agent (BudgetChangeProposal). Always waits for the owner.

@@ -1,7 +1,13 @@
-import type { AgentRole, AgentTask, PaymentProposal } from "@warrant/contracts";
+import type {
+  AgentRole,
+  AgentTask,
+  BudgetChangeProposal,
+  PaymentProposal,
+} from "@warrant/contracts";
 import type { Brain } from "./brain.js";
 import { contextFor } from "./context.js";
 import type { AgentContext, WorldView } from "./context.js";
+import { LIMITS_TOOL_NAME, toBudgetChange } from "./limits.js";
 import { toProposal } from "./tool.js";
 import type { IdSource } from "./tool.js";
 
@@ -22,11 +28,24 @@ export interface ProposalRecord {
   outcome: ProposalOutcome;
 }
 
+/**
+ * Where treasury's limit changes go: the engine's POST /budget-changes. They move no money, so the
+ * answer is "owner" (waiting for the owner's decision) or "blocked" (control refused the plan).
+ */
+export type SubmitLimits = (change: BudgetChangeProposal) => Promise<ProposalOutcome>;
+
+export interface LimitChangeRecord {
+  change?: BudgetChangeProposal;
+  outcome: ProposalOutcome;
+}
+
 export interface TaskRun {
   taskId: string;
   role: AgentRole;
   brain: string;
   proposals: ProposalRecord[];
+  /** Treasury's `propose_limits` calls (spend reviews only). Never money that moved. */
+  limitChanges: LimitChangeRecord[];
   error?: string;
 }
 
@@ -35,9 +54,14 @@ export interface RunTaskOptions {
   task: AgentTask;
   ctx: AgentContext;
   submit: Submit;
+  /** Where `propose_limits` goes. Without it, the tool answers "not submitted". */
+  submitLimits?: SubmitLimits;
   ids: IdSource;
   clock?: () => Date;
-  /** Runner-side guard on model loops; not a money control (control enforces those). */
+  /**
+   * Runner-side guard on model loops, counting payments and limit changes together; not a money
+   * control (control enforces those).
+   */
   maxProposals?: number;
 }
 
@@ -50,19 +74,38 @@ export async function runTask(o: RunTaskOptions): Promise<TaskRun> {
     role: o.ctx.role,
     brain: o.brain.name,
     proposals: [],
+    limitChanges: [],
   };
+  const full = () => run.proposals.length + run.limitChanges.length >= max;
+  const FULL = "not submitted: proposal limit for this task reached";
   try {
-    await o.brain.act(o.task, o.ctx, async (input) => {
-      if (run.proposals.length >= max) return "not submitted: proposal limit for this task reached";
-      const built = toProposal(input, o.task, o.ctx, o.ids, clock());
-      if (!built.ok) {
-        run.proposals.push({ outcome: { status: "malformed", detail: built.error } });
-        return `not submitted: ${built.error}`;
-      }
-      const outcome = await o.submit(built.proposal);
-      run.proposals.push({ proposal: built.proposal, outcome });
-      return describe(outcome);
-    });
+    await o.brain.act(
+      o.task,
+      o.ctx,
+      async (input) => {
+        if (full()) return FULL;
+        const built = toProposal(input, o.task, o.ctx, o.ids, clock());
+        if (!built.ok) {
+          run.proposals.push({ outcome: { status: "malformed", detail: built.error } });
+          return `not submitted: ${built.error}`;
+        }
+        const outcome = await o.submit(built.proposal);
+        run.proposals.push({ proposal: built.proposal, outcome });
+        return describe(outcome);
+      },
+      async (input) => {
+        if (full()) return FULL;
+        if (!o.submitLimits) return `not submitted: ${LIMITS_TOOL_NAME} is not available here`;
+        const built = toBudgetChange(input, o.task, o.ctx, o.ids, clock());
+        if (!built.ok) {
+          run.limitChanges.push({ outcome: { status: "malformed", detail: built.error } });
+          return `not submitted: ${built.error}`;
+        }
+        const outcome = await o.submitLimits(built.change);
+        run.limitChanges.push({ change: built.change, outcome });
+        return describe(outcome);
+      },
+    );
   } catch (e) {
     run.error = String(e).slice(0, 300);
   }
@@ -97,6 +140,32 @@ export class EngineClient {
     const body = (await res.json()) as EngineSubmitResult;
     return outcomeOf(body);
   };
+
+  /** POST /budget-changes: treasury's limit change. It always waits for the owner when accepted. */
+  readonly submitLimits: SubmitLimits = async (change) => {
+    const res = await fetch(`${this.base}/budget-changes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(change),
+    });
+    const body = (await res.json()) as { ok?: boolean; problems?: string[]; error?: string };
+    if (res.ok && body.ok) return { status: "owner" };
+    const detail = (body.problems ?? []).join("; ") || body.error || `HTTP ${res.status}`;
+    return { status: "blocked", blockedBy: "rules", detail };
+  };
+
+  /**
+   * POST /treasury/review: queue a spend review for treasury, built by the engine from the live
+   * warrants and ledger. Returns its task id. Driver-side only: brains never call this.
+   */
+  async queueSpendReview(): Promise<string> {
+    const res = await fetch(`${this.base}/treasury/review`, { method: "POST" });
+    const body = (await res.json()) as { taskId?: string; error?: string };
+    if (!res.ok || !body.taskId) {
+      throw new Error(`engine /treasury/review: ${body.error ?? `HTTP ${res.status}`}`);
+    }
+    return body.taskId;
+  }
 
   /** The scenario names the engine can load (GET /scenarios). */
   async scenarios(): Promise<string[]> {
@@ -176,6 +245,7 @@ export async function runLoop(o: LoopOptions): Promise<TaskRun[]> {
           task,
           ctx,
           submit: o.engine.submit,
+          submitLimits: o.engine.submitLimits,
           ids: o.ids,
         });
         runs.push(run);
