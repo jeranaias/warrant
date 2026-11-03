@@ -30,6 +30,9 @@ const hosted = hostedApp({
   distDir,
   makeEngine: hostedEngine,
   startAgents: (engine) => startAgents(engine),
+  // Render serves *.onrender.com through Cloudflare, which sets this header and overwrites a
+  // client's copy. Set CLIENT_IP_HEADER="" on a host without such an edge.
+  clientIpHeader: process.env["CLIENT_IP_HEADER"] ?? "cf-connecting-ip",
 });
 
 const server = hosted.app.listen(port, "0.0.0.0", () => {
