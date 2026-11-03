@@ -148,8 +148,19 @@ function sameWords(a: string, b: string): boolean {
   return norm(a) === norm(b);
 }
 
+/** Rules whose detail is amounts in cents ("4 vs cap 3"). */
+const MONEY_RULES = new Set(["per_payment_cap", "total_budget"]);
+
+/** "4 vs cap 3" in the request's currency: "0.04 USDZ vs cap 0.03 USDZ". */
+function moneyDetail(detail: string, currency: Money["currency"] | undefined): string {
+  if (!currency) return detail;
+  return detail.replace(/\b\d+\b/g, (n) => money({ currency, cents: Number(n) }));
+}
+
 /** Every step of a replay as one plain line. */
 export function replayLines(r: Replay, names: Names): ReplayLine[] {
+  const first = r.steps.find((s) => s.kind === "asked");
+  const currency = first?.kind === "asked" ? first.amount.currency : undefined;
   return r.steps.map((s): ReplayLine => {
     switch (s.kind) {
       case "asked": {
@@ -185,7 +196,8 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
               : (REASONS[c.rule] ?? words(c.rule));
             // The detail only when it adds something ("9900 vs cap 5000"), not the label again.
             const extra = !c.pass && !sameWords(c.detail, label);
-            return { ok: c.pass, label, ...(extra ? { detail: c.detail } : {}) };
+            const detail = MONEY_RULES.has(c.rule) ? moneyDetail(c.detail, currency) : c.detail;
+            return { ok: c.pass, label, ...(extra ? { detail } : {}) };
           }),
           // Each failed check carries its own detail beside it, so no line-level why.
         };

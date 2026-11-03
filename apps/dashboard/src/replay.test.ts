@@ -89,7 +89,7 @@ describe("replay wording", () => {
     expect(lines[1]?.text).toBe("Rules: 2 of 3 failed");
     expect(lines[1]?.checks?.find((c) => !c.ok)).toMatchObject({
       label: "over the per-payment cap",
-      detail: "4 > 3",
+      detail: "0.04 USDZ > 0.03 USDZ",
     });
     // The failing detail shows once, beside its check, not again under the step.
     expect(lines[1]?.why).toBeUndefined();
