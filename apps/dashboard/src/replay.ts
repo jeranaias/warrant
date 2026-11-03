@@ -161,7 +161,6 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
       case "malformed":
         return { at: s.at, tone: "stop", text: "Refused: not a valid request", why: s.error };
       case "rules": {
-        const passed = s.checks.filter((c) => c.pass).length;
         const failed = s.checks.filter((c) => !c.pass);
         return {
           at: s.at,
@@ -176,7 +175,7 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
               : (REASONS[c.rule] ?? words(c.rule)),
             ...(c.pass ? {} : { detail: c.detail }),
           })),
-          ...(passed === s.checks.length ? {} : { why: failed.map((c) => c.detail).join("; ") }),
+          // Each failed check carries its own detail beside it, so no line-level why.
         };
       }
       case "purpose":

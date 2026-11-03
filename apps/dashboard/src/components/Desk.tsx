@@ -72,7 +72,7 @@ export function Desk({
   const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
   const nameOf = (id: string) => agentName(warrants.find((w) => w.warrantId === id)?.agentRole);
   const payeeOf = (id: string) =>
-    payees.find((p) => p.id === id)?.name ?? (id === OTHER ? "a customer" : id);
+    id === OTHER ? "a customer" : (payees.find((p) => p.id === id)?.name ?? id);
   const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
   const roleOfWarrant = (id: string) => warrants.find((w) => w.warrantId === id)?.agentRole;
 
@@ -82,27 +82,16 @@ export function Desk({
   const [filter, setFilter] = useState<DeskFilter>("all");
   const [page, setPage] = useState<Page | null>(null);
   const [pick, setPick] = useState<Pick>(null);
-  // The payment whose replay is open in place of its facts.
-  const [replayId, setReplayId] = useState<string | null>(null);
   const names = useMemo(() => namesOf(engine.events, warrants), [engine.events, warrants]);
-  const choose = (p: Pick) => {
-    setPick(p);
-    setReplayId(null);
-  };
-  const detailOf = (r: DeskRow) =>
-    r.kind === "pay" && r.proposalId === replayId ? (
-      <section className="sheet desk-sheet">
-        <Replay
-          proposalId={r.proposalId}
-          names={names}
-          version={engine.events.length}
-          onClose={() => setReplayId(null)}
-          closeLabel="Details"
-        />
-      </section>
-    ) : (
-      <RowDetail r={r} onOpenReplay={setReplayId} />
-    );
+  const choose = setPick;
+  // Every request line opens on its replay (Replay.tsx); a folded line shows its latest.
+  const steps = (proposalId: string, latest = false) => (
+    <div className="desk-steps">
+      <div className="sheet-k">step by step{latest ? " · latest" : ""}</div>
+      <Replay proposalId={proposalId} names={names} version={engine.events.length} />
+    </div>
+  );
+  const detailOf = (r: DeskRow) => <RowDetail r={r} steps={steps} />;
   const shown = filterRows(rows, filter);
 
   const pickedAsk = pick?.kind === "ask" ? asks.find((g) => g.key === pick.key) : undefined;
@@ -190,6 +179,7 @@ export function Desk({
             onDone={engine.refresh}
             onError={onError}
             roleOf={roleOfAgent}
+            steps={steps}
           />
         )}
         {asks.length > 1 && (
@@ -321,6 +311,7 @@ export function Desk({
             onDone={engine.refresh}
             onError={onError}
             roleOf={roleOfAgent}
+            steps={steps}
             hotkeys
           />
         ) : pickedRow ? (
@@ -460,12 +451,14 @@ function AskDetail({
   onDone,
   onError,
   roleOf,
+  steps,
   hotkeys = false,
 }: {
   g: AskGroup;
   onDone: () => void;
   onError: (e: string) => void;
   roleOf: (agentId: string) => string | undefined;
+  steps: Steps;
   hotkeys?: boolean;
 }) {
   const [first] = g.items;
@@ -483,6 +476,7 @@ function AskDetail({
         roleOf={roleOf}
       />
       {n > 1 && <DenyAll items={g.items} onDone={onDone} onError={onError} />}
+      {steps(first.proposalId)}
     </section>
   );
 }
@@ -546,13 +540,9 @@ function DenyAll({
   );
 }
 
-function RowDetail({
-  r,
-  onOpenReplay,
-}: {
-  r: DeskRow;
-  onOpenReplay: (proposalId: string) => void;
-}) {
+type Steps = (proposalId: string, latest?: boolean) => ReactNode;
+
+function RowDetail({ r, steps }: { r: DeskRow; steps: Steps }) {
   if (r.kind === "store")
     return (
       <section className="sheet sheet-seller desk-sheet">
@@ -560,17 +550,17 @@ function RowDetail({
         <Moment m={r.moment} />
       </section>
     );
-  return <PayDetail r={r} onOpenReplay={onOpenReplay} />;
+  return <PayDetail r={r} steps={steps} />;
 }
 
-function PayDetail({ r, onOpenReplay }: { r: PayRow; onOpenReplay: (proposalId: string) => void }) {
+function PayDetail({ r, steps }: { r: PayRow; steps: Steps }) {
   return (
     <section className={`sheet desk-sheet ${r.fate === "blocked" ? "sheet-stop" : ""}`}>
       <div className="sheet-k">
         {r.fate}
         {r.n > 1 ? ` · ${r.n} alike` : ""}
       </div>
-      <p className="desk-sentence">{paySentence(r)}</p>
+      <p className="desk-sentence">{paySentence(r, !r.reason)}</p>
       {r.reason && (
         <div className="why-box">
           <span className="why-k">Reason</span>
@@ -592,12 +582,8 @@ function PayDetail({ r, onOpenReplay }: { r: PayRow; onOpenReplay: (proposalId: 
         )}
         <dt>{r.n > 1 ? "Latest" : "When"}</dt>
         <dd className="num">{time(r.at)}</dd>
-        <dt>Proposal</dt>
-        <dd className="mono">{r.proposalId}</dd>
       </dl>
-      <button className="btn" onClick={() => onOpenReplay(r.proposalId)}>
-        Replay, step by step
-      </button>
+      {steps(r.proposalId, r.n > 1)}
     </section>
   );
 }

@@ -812,8 +812,14 @@ select {
   text-decoration: underline;
 }
 
-.gt-node.open:focus-visible {
+/* No box after a click; a ring on the node itself for keyboard focus only. */
+.gt-node.open:focus {
   outline: none;
+}
+
+.gt-node.open:focus-visible rect {
+  stroke: var(--text);
+  stroke-width: 2;
 }
 
 .gt-node.paid rect {
@@ -2339,4 +2345,31 @@ button.ph-desk {
   .desk {
     grid-template-columns: 190px minmax(0, 1fr) 340px;
   }
+}
+
+.desk-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.desk-top .chip {
+  white-space: nowrap;
+}
+
+.desk.narrow .desk-link {
+  display: none;
+}
+
+.desk.narrow .desk-row {
+  gap: 10px;
+}
+
+.desk.narrow .desk-row-side {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.72rem;
 }
