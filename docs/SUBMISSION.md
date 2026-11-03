@@ -1,7 +1,8 @@
 # Submission form: draft
 
-Draft text for the hackathon submission form. Anything marked TODO is not verified yet. Check each
-one before we submit (target Nov 12).
+Text for the hackathon submission form (target Nov 12). Every number and transaction here is in
+the repo (`bench/results.json`, `docs/TESTNET.md`, `docs/DECISIONS.md`). Anything marked TODO is
+still open.
 
 ## Project name
 
@@ -25,17 +26,18 @@ signs a warrant for each agent: who it may pay, how much per payment and in tota
 and until when. Agents never pay anyone. They send a typed payment proposal, and Warrant decides.
 Rules in code check the payee, the cap, the budget, the expiry and repeats. A separate purpose
 check sees only the signed warrant and a structured summary, never the invoice or offer text, so
-hidden instructions in that text cannot reach it. Budget changes, recurring payments, large
-Airwallex transfers and unclear cases wait for the owner on their phone. The approval is bound to
-exactly what the owner saw. One STOP button refuses every payment from then on and revokes the
+hidden instructions in that text cannot reach it. Budget changes, a second bill in the same
+billing period, Airwallex transfers of 100.00 or more and unclear cases wait for the owner, who
+approves exactly what was shown. One STOP refuses every payment from then on and revokes the
 agents' mandates.
 
-Our demo is the Kit 11 data business. Three agents (sourcing, support, treasury) buy upstream
+The demo is the Kit 11 data business: three agents (sourcing, support, treasury) buy upstream
 data, settle disputes and pay a EUR licence fee, over x402 on Metal and through Airwallex. Each
 warrant sits on a Metal mandate with the same limits, so the chain still enforces them if our
-code is bypassed. Sellers can check a buyer's warrant pass, a grant its human owner signed, and settle
-disputes from evidence. On our 79-case benchmark, Warrant blocks 54 of 60 attacks, against 42 for
-mandate limits alone.
+code is bypassed. Our store checks a buyer's warrant pass before serving and decides disputes
+from its signed records. On our benchmark Warrant blocks 149 of 154 attacks, against 107 for
+mandate limits alone. The hosted demo runs on simulated money; the same flows ran on the
+Airwallex sandbox and Metal testnet (evidence below).
 
 ## The problem
 
@@ -72,13 +74,21 @@ that the agent was acting for a real person who agreed to it.
 - `@metalntwx/metal-pay`: `requireSignedOffer` and `SIGNED_OFFER_REQUIRED` on our store's route,
   `signedOfferOf`, `onAfterSettle` to store each signed order with its transaction hash and a hash
   of what we delivered.
-- Mandates enforce the same limits on chain. Evidence on testnet: purchases at 2 cents, a 4-cent
-  purchase refused as `mandate_cap_exceeded`, the owner's `mandate replace`, and the old
-  credential refused as `mandate_revoked` (transaction hashes in `docs/TESTNET.md`).
-- The dispute scene runs on the mock chain. TODO: run the dispute and `verifyMandatePayment` on
-  testnet, or say "mock chain" in the form.
-- TODO: confirm the warrant pass on testnet (store and upstream checking passes in
-  `RAILS_MODE=sandbox`) and record the evidence in `docs/TESTNET.md`.
+- Mandates enforce the same limits on chain (live runs 2026-10-31): purchases at 2 cents paid; with
+  our rules off, a 4-cent purchase was refused on chain as `mandate_cap_exceeded`; the owner's
+  `mandate replace` raised the cap; the old credential was then refused as `mandate_revoked`.
+- A seller can prove an agent paid under a mandate a human signed (live run 2026-11-02,
+  `RAILS_MODE=sandbox pnpm scene:dispute`): the customer's agent bought two queries from our store,
+  each with a signed order and a warrant pass; the store checked the pass before serving (owner
+  key, customer mandate, 0.05 cap) and verified both settlements with `verifyMandatePayment`.
+- Disputes are decided from the store's own records: "data was wrong" on both orders refunded the
+  stale one (5 cents back by `mandate pull`) and kept the correct one; asking again was refused
+  (`already_refunded`, `order_not_found`, then `refund_matches_order`); "my agent never agreed"
+  was rejected with 11 of 11 checks holding. Transaction hashes, with explorer links, are in
+  `docs/TESTNET.md`.
+- A payment in doubt (timeout, lost answer) is never resent: it stays unconfirmed with its amount
+  held, and a status check settles it before the next decision (ADR-019). On Metal this uses the
+  settlement lookup by nonce; tested against the mock chain's faults (#123, #124).
 
 **Airwallex (runs on the real sandbox: `pnpm scene:earnings --sandbox`)**
 
@@ -87,8 +97,12 @@ that the agent was acting for a real person who agreed to it.
   `POST /api/v1/transfers/create`, `GET /api/v1/transfers?request_id=`,
   `POST /api/v1/simulation/deposit/create` (earnings arrive with the Metal transaction hash as
   the reference), and the sandbox transfer simulation.
-- Every write carries a `request_id` from control's idempotency key. A timeout is looked up by
-  that id, never resent.
+- Every write carries a `request_id` from control's idempotency key. A timeout leaves the transfer
+  unconfirmed with its amount held; a status check by that id settles it before the next decision,
+  and it is never resent (ADR-019, tested against the Airwallex mock's timeout and duplicate
+  faults, #122).
+- A second bill from the licensor in the same month waits for the owner, with the reason "bills
+  once a month and was already paid this month" (ADR-015). The hosted demo shows this one.
 - Live on the sandbox (2026-11-02): earnings deposited into our USD Global Account, converted USD to
   EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID; control's ledger confirmed it.
   EUR SEPA is refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT
@@ -99,24 +113,50 @@ that the agent was acting for a real person who agreed to it.
 - An agent buys a design tool seat with an Airwallex virtual Visa card whose limits are the
   warrant's: USD 15.00 per purchase, USD 50.00 in all, merchant category 5734 only (ADR-018).
 - Live on the sandbox (2026-11-02): the USD 12.00 seat was approved; a USD 40.00 purchase was
-  blocked by control (`per_payment_cap`) and declined by the card itself (`LIMIT_EXCEEDED`); STOP
-  froze the card in 627 ms, and the next purchase was refused as `CARD_INACTIVE`.
+  blocked by control (`per_payment_cap`) and, sent straight to the card, declined by the card
+  itself (`LIMIT_EXCEEDED`); STOP froze the card in 627 ms, and the next purchase was declined as
+  `CARD_INACTIVE` (`pnpm scene:card --sandbox`, evidence in `docs/TESTNET.md`).
+- The card number and CVV are never fetched; the agent never sees them.
+
+## Benchmark
+
+`pnpm bench` runs every case against three setups (scripted agent, deterministic purpose check;
+numbers from `bench/results.json`, which CI checks against a fresh run):
+
+| Setup       | Attacks blocked | Normal payments wrongly blocked |
+| ----------- | --------------- | ------------------------------- |
+| unprotected | 0 of 154        | 0 of 31                         |
+| limits only | 107 of 154      | 0 of 31                         |
+| Warrant     | 149 of 154      | 1 of 31                         |
+
+Warrant asked the owner 35 times in the run. On a held-out set of 34 cases written by someone who
+did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6 normal payments.
+
+## Known limits
+
+- A flood of purchases from one offer is paid once before anything stops it (#79): control can't
+  see a quantity without reading the offer text, which it never does.
+- 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly blocked; both are named in
+  the `pnpm bench` output.
+- On live testnet, a Metal payment whose answer was lost stays held until someone checks it: the
+  settlement lookup is wired in the mock world only (ADR-019).
+- The hosted demo runs on simulated money with a scripted agent. The sponsor rails ran live from a
+  laptop (`docs/TESTNET.md`), not from the hosted demo.
+- The licence's "once a month" is 28 days, so a second bill on day 29 to 31 of a long month is not
+  caught by that rule (ADR-015).
 
 ## What's next
 
-- Close the known gaps the benchmark shows: a flood of purchases from one offer still pays once
-  (#79; control can't see quantity without reading offer text, which it never does), and the
-  attacks that get through (named in the `pnpm bench` output).
-- Grow the benchmark from 79 cases to 150+.
+- Close #79 and the attacks that still get through.
+- Wire the Metal settlement lookup on live testnet.
 - Let the owner turn a repeated approval into a new signed warrant version ("always allow this").
-- TODO: anything the team wants to add.
 
 ## Team
 
-Eva, Max, Elisei, Jesse.
+Eva, Max, Elisei, Jesse. TODO: confirm names and roles as they should appear.
 
 ## Links
 
+- Live demo: https://warrant-demo-bt31.onrender.com (access code in the form's private notes).
 - Repo: TODO (public link, or confirm judges can access a private repo).
 - Video: TODO (see `docs/VIDEO.md`).
-- Live demo: TODO, if we host one.
