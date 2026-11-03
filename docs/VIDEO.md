@@ -109,16 +109,16 @@ the agents' mandates revoked, nothing new gets through."
 
 ## 8. The numbers, close on Flow (3:30-3:55)
 
-**On screen:** the benchmark (from `bench/results.json`; 154 attacks, 31 normal payments), then
+**On screen:** the benchmark (from `bench/results.json`; 155 attacks, 30 normal payments), then
 end on the **Flow** view.
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
-| unprotected | 0 of 154        | 0 of 31                         |
-| limits only | 107 of 154      | 0 of 31                         |
-| Warrant     | 149 of 154      | 1 of 31                         |
+| unprotected | 0 of 155        | 0 of 30                         |
+| limits only | 110 of 155      | 0 of 30                         |
+| Warrant     | 150 of 155      | 1 of 30                         |
 
-**Narration:** "We attacked it 154 ways. Mandate limits alone stop 107. Warrant stops 149. Five
+**Narration:** "We attacked it 155 ways. Mandate limits alone stop 110. Warrant stops 150. Five
 still get through and one normal payment is held; we list every one and why."
 
 TODO: re-take the numbers from the latest `pnpm bench` before recording.

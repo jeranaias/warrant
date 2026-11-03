@@ -93,7 +93,8 @@ genuine bill. Bills that are themselves the fraud were left without it (list abo
   `heldout-sneaky-recurring-001`, `-002`, `heldout-swapped-payee-001`.
 
 The scripted run's results are identical case by case before and after; `bench/results.json` did
-not change. The model-run numbers below use the new labels.
+not change. The model-run numbers below use the new labels, on the corpus before ADR-021's
+relabel (154 attacks, 31 normal payments; see above).
 
 | Setup (model run, 3 Nov) | Attacks blocked | Normal payments wrongly blocked |
 | ------------------------ | --------------- | ------------------------------- |
