@@ -37,14 +37,15 @@ The demo business: customers' agents buy market data from our store over x402 on
 ## What ran for real
 
 The hosted demo runs on simulated money. The same flows were run on the real sandboxes, with
-evidence in [docs/TESTNET.md](docs/TESTNET.md) (also under **Live runs** in the demo):
+evidence and transaction hashes in [docs/TESTNET.md](docs/TESTNET.md) (also under **Live runs**
+in the demo):
 
-| Flow                     | Where             | Result                                                                                                         |
-| ------------------------ | ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace` |
-| Dispute                  | Metal testnet     | Pass checked, bad order refunded by mandate pull, repeat refund refused, "never agreed" rejected (11 of 11)    |
-| Earnings and licence fee | Airwallex sandbox | Deposit, USD to EUR, EUR 50.00 by SWIFT, PAID (ADR-017)                                                        |
-| Virtual Visa card        | Airwallex sandbox | Seat bought; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)       |
+| Flow                     | Where             | Result                                                                                                                            |
+| ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Warrant pass and dispute | Metal testnet     | Pass checked before serving; bad order refunded by mandate pull `0x2314f9bc…`; repeat refused; "never agreed" rejected (11 of 11) |
+| Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace`                    |
+| Earnings and licence fee | Airwallex sandbox | Deposit, USD to EUR, EUR 50.00 by SWIFT, PAID (ADR-017)                                                                           |
+| Virtual Visa card        | Airwallex sandbox | Seat bought; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)                          |
 
 ## Benchmark
 
@@ -121,17 +122,17 @@ scripted and the purpose check is deterministic.
 The main screen is the **Decision Desk**. **Flow** in the header shows the same run as the gate
 view; **Desk** goes back.
 
-| Beat                     | What to do                                                                                                                                                                                                 |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                           |
-| The owner decides        | **Needs you** holds a second licence bill in the same month. **Approve EUR 12.00** or **Deny** (also on the phone page).                                                                                   |
-| Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                |
-| The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                            |
-| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                      |
-| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                      |
-| Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays once and the repeats are blocked (known gap, #79). |
-| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                             |
-| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                           |
+| Beat                     | What to do                                                                                                                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                                   |
+| The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                                    |
+| The owner decides        | **Needs you** holds a second licence bill in the same month. **Approve EUR 12.00** or **Deny** (also on the phone page).                                                                                           |
+| Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                        |
+| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                              |
+| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                              |
+| Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays the one purchase the offer allows and blocks every repeat. |
+| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                                     |
+| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                                   |
 
 </details>
 

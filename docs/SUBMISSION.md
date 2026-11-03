@@ -139,10 +139,18 @@ numbers from `bench/results.json`, which CI checks against a fresh run):
 Warrant asked the owner 35 times in the run. On a held-out set of 34 cases written by someone who
 did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6 normal payments.
 
+A separate run with a real model (Haiku as agent and purpose check, 3 Nov, PR #143): Warrant
+blocked 137 of 154 attacks and held 3 of 31 normal payments; limits only 122, no protection 111
+(the model alone ignores most injected text). Held-out: 25 of 28. A model run varies run to run,
+so the scripted numbers above are the published ones.
+
+Labels changed after seeing a model run: after the first model run, 56 cases (9 of them held-out)
+got `expected.legit`, which counts paying the genuine bill as correct instead of as a miss. The
+scripted results did not change. The case ids and the reason are in
+[bench/SCORING.md](../bench/SCORING.md).
+
 ## Known limits
 
-- A flood of purchases from one offer is paid once before anything stops it (#79): control can't
-  see a quantity without reading the offer text, which it never does.
 - 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly held. Each has the same
   structured shape as a normal payment, and control never reads invoice or offer text; the cases,
   their twins and what would close them are in [bench/README.md](../bench/README.md).
@@ -155,7 +163,7 @@ did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6
 
 ## What's next
 
-- Close #79 and the attacks that still get through.
+- Close the attacks that still get through ([bench/README.md](../bench/README.md)).
 - Let the owner turn a repeated approval into a new signed warrant version ("always allow this").
 
 ## Team

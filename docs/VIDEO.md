@@ -18,9 +18,9 @@ scenario**, so there is room to slow down in the edit.
 | --- | --------- | ---------------------------------- | ----------------------------------- |
 | 1   | 0:00-0:15 | Cold open on Flow                  | Hosted demo                         |
 | 2   | 0:15-0:50 | Run a scenario: the Desk fills     | Hosted demo                         |
-| 3   | 0:50-1:30 | Needs you: the held EUR 12.00 bill | Hosted demo                         |
-| 4   | 1:30-2:05 | Why it was blocked: the replay     | Hosted demo                         |
-| 5   | 2:05-2:45 | At our store: pass and dispute     | Hosted demo, then **Live runs**     |
+| 3   | 0:50-1:30 | At our store: pass and dispute     | Hosted demo, then **Live runs**     |
+| 4   | 1:30-2:10 | Needs you: the held EUR 12.00 bill | Hosted demo                         |
+| 5   | 2:10-2:45 | Why it was blocked: the replay     | Hosted demo                         |
 | 6   | 2:45-3:10 | Real rails                         | **Live runs** (testnet and sandbox) |
 | 7   | 3:10-3:30 | STOP                               | Hosted demo                         |
 | 8   | 3:30-3:55 | The numbers, close on Flow         | Benchmark, Flow view                |
@@ -47,10 +47,27 @@ left.
 **Narration:** "Agents never pay anyone. They ask, and every request is checked against the
 warrant the owner signed. Paid, or blocked with the reason, in one sentence."
 
-Be honest about the burst: one purchase from that offer paid before the repeats were blocked
-(known gap, #79).
+The burst: one purchase from that offer is paid (the one the offer allows) and every repeat is
+blocked.
 
-## 3. Needs you: the held EUR 12.00 bill (0:50-1:30)
+## 3. At our store: pass and dispute (0:50-1:30)
+
+This is Metal's ask: dispute handling, and a seller proving an agent paid under a mandate a human
+signed.
+
+**On screen:** filter **At our store**. "Buyer's warrant pass checked" (the owner who signed, the
+mandate, the cap against the price), "Buyer refused at the store" (no warrant pass: not served,
+not charged), and a dispute decided order by order: one refunded for wrong data with its on-chain
+transaction, the others kept ("data was correct", "order not found"). Then **Live runs**, the
+Metal testnet dispute row: purchases `0x32a27368…` and `0x6f658444…` with their passes, the
+refund by mandate pull `0x2314f9bc…`, the repeat refund refused, and "my agent never agreed"
+rejected with 11 of 11 checks holding. Cut to the explorer page for the refund.
+
+**Narration:** "Our store checks every buyer's warrant pass before serving: proof a real person
+authorised that agent at that price. When a customer disputes, the store decides from its
+records, order by order."
+
+## 4. Needs you: the held EUR 12.00 bill (1:30-2:10)
 
 **On screen:** **Needs you** at the top: "Treasury agent → Data licensor (EUR) · EUR 12.00",
 reason "Data licensor (EUR) bills once a month and was already paid this month". The card on the
@@ -63,7 +80,7 @@ that."
 
 Option: the same card on the phone page (narrow window, or **Phone** in the header).
 
-## 4. Why it was blocked: the replay (1:30-2:05)
+## 5. Why it was blocked: the replay (2:10-2:45)
 
 **On screen:** click the blocked 0.04 USDZ line. The right side shows it step by step: the
 request, then "Rules: 1 of 9 failed" with each check ticked and "over the per-payment cap ·
@@ -72,25 +89,10 @@ request, then "Rules: 1 of 9 failed" with each check ticked and "over the per-pa
 **Narration:** "Every decision can be replayed: which rule, which reason, what was held and what
 moved. Nothing to take on trust."
 
-## 5. At our store: pass and dispute (2:05-2:45)
-
-This is Metal's ask: dispute handling, and a seller proving an agent paid under a mandate a human
-signed.
-
-**On screen:** filter **At our store**. "Buyer's warrant pass checked" (the owner who signed, the
-mandate, the cap against the price), "Buyer refused at the store" (no warrant pass: not served,
-not charged), and a dispute decided order by order: one refunded for wrong data with its on-chain
-transaction, the others kept ("data was correct", "order not found").
-
-**Narration:** "Our store checks every buyer's warrant pass before serving: proof a real person
-authorised that agent at that price. When a customer disputes, the store decides from its
-records, order by order."
-
 ## 6. Real rails (2:45-3:10)
 
-**On screen:** **Live runs**. The same flows on Metal testnet and the Airwallex sandbox, with
-dates and links: the dispute (refund by mandate pull, repeat refund refused, "my agent never
-agreed" rejected with 11 of 11 checks holding), the mandate refusing a 4-cent purchase on chain,
+**On screen:** **Live runs**. The other flows on Metal testnet and the Airwallex sandbox, with
+dates and links: the mandate refusing a 4-cent purchase on chain,
 the EUR 50.00 licence fee by SWIFT (PAID), and the virtual Visa card (over-limit purchase declined
 by the card, STOP froze it in 627 ms). Cut to one explorer page for a hash.
 

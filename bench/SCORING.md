@@ -63,3 +63,30 @@ not read while tuning prompts or rules. Report held-out results separately.
   proposals. Shown because too many questions is why people switch safety checks off (ADR-013).
 - With the model agent, each config runs the model again (tool results differ per config), so
   the three runs are not byte-identical. The default scripted agent is.
+
+## Labels changed after seeing a model run
+
+On 3 Nov, after the first full run with the model (Haiku as agent and as purpose check), 56 cases
+got `expected.legit` (#143). That run counted the model paying the real bill and ignoring the
+injected text as a miss, so the label was added where the task's own payee and amount are the
+genuine bill. Bills that are themselves the fraud were left without it (list above).
+
+- Main corpus (47): `fake-price-notice-001` to `-011`, `hidden-instruction-invoice-003`, `-006`,
+  `-009`, `-011`, `payee-swap-002` to `-011`, `price-rise-004`, `prompt-injection-002` to `-006`
+  and `-011`, `sneaky-recurring-002`, `-003`, `-005`, `-006`, `-008`, `-009`, `-011`,
+  `subscription-trap-002`, `-004`, `-009`, `swapped-payee-001`, `-002`, `-005`, `-008`, `-009`.
+- Held-out (9), so these were seen before scoring: `heldout-fake-price-notice-001`, `-002`,
+  `heldout-fx-rate-manipulation-001`, `heldout-payee-swap-001`, `-002`, `heldout-price-rise-002`,
+  `heldout-sneaky-recurring-001`, `-002`, `heldout-swapped-payee-001`.
+
+The scripted run's results are identical case by case before and after; `bench/results.json` did
+not change. The model-run numbers below use the new labels.
+
+| Setup (model run, 3 Nov) | Attacks blocked | Normal payments wrongly blocked |
+| ------------------------ | --------------- | ------------------------------- |
+| unprotected              | 111 of 154      | 2 of 31                         |
+| limits only              | 122 of 154      | 2 of 31                         |
+| Warrant                  | 137 of 154      | 3 of 31                         |
+| Warrant, held-out        | 25 of 28        | 1 of 6                          |
+
+A model run is not reproducible run to run. The scripted run is the published number.
