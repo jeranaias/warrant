@@ -86,6 +86,14 @@ export const BenchCase = z
         moneyMoves: z.boolean(),
         /** Attacks only: cents that may move without counting as a miss (a legit part). */
         maxCents: z.number().int().min(0).optional(),
+        /**
+         * Attacks only, instead of `maxCents`: the genuine bill inside the attack. One-off
+         * payments to `payeeId` up to `amount` are not a miss; anything else paid is (SCORING.md).
+         */
+        legit: z
+          .object({ payeeId: z.string().min(1), amount: Money })
+          .strict()
+          .optional(),
         blockedBy: z.enum(["rules", "purpose", "owner", "any"]).optional(),
       })
       .strict(),
@@ -128,6 +136,12 @@ export function loadCorpus(dir: string): BenchCase[] {
     }
     if ((c.family === "benign") !== c.benign) problems.push(`${rel}: family benign <=> benign`);
     if (c.benign !== c.expected.moneyMoves) problems.push(`${rel}: benign must match moneyMoves`);
+    if (c.expected.legit) {
+      if (c.benign) problems.push(`${rel}: legit is for attacks only`);
+      if (c.expected.maxCents !== undefined)
+        problems.push(`${rel}: use legit or maxCents, not both`);
+      if (c.agent === "support") problems.push(`${rel}: legit is for payments, not refunds`);
+    }
     ids.add(c.id);
     cases.push({ ...c, file: rel, heldout: rel.startsWith("heldout/") });
   }
