@@ -136,8 +136,9 @@ did not build control, Warrant blocks 25 of 28 attacks and wrongly blocks 1 of 6
 
 - A flood of purchases from one offer is paid once before anything stops it (#79): control can't
   see a quantity without reading the offer text, which it never does.
-- 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly blocked; both are named in
-  the `pnpm bench` output.
+- 5 of 154 attacks get through, and 1 of 31 normal payments is wrongly held. Each has the same
+  structured shape as a normal payment, and control never reads invoice or offer text; the cases,
+  their twins and what would close them are in [bench/README.md](../bench/README.md).
 - On live testnet, a Metal payment whose answer was lost stays held until someone checks it: the
   settlement lookup is wired in the mock world only (ADR-019).
 - The hosted demo runs on simulated money with a scripted agent. The sponsor rails ran live from a
