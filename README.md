@@ -74,7 +74,9 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 ```
 
 On PowerShell, set the variables first: `$env:DEMO_PASSWORD="pick-one"`, and the same for
-`DEMO_COOKIE_SECRET`.
+`DEMO_COOKIE_SECRET`. A scenario plays out in about 25 seconds, one task every two seconds.
+
+`pnpm install` may print "Ignored build scripts: esbuild". That is expected; nothing to approve.
 
 Each beat as a terminal scene (no server needed):
 
@@ -116,16 +118,20 @@ scripted and the purpose check is deterministic.
 <details>
 <summary>What to click for each beat</summary>
 
-| Beat                     | What to do                                                                                                                                                                                 |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The business runs        | **Run a scenario**. Each request flows to Paid, Held for you or Blocked, with the reason. **Activity** lists every step.                                                                   |
-| The seller checks        | The **seller's view** shows the store checking each buyer's warrant pass, refusing a buyer without one, and deciding disputes order by order.                                              |
-| The owner decides        | A second licence bill in the same month is held. Approve or deny it in the waiting card (or on the phone page).                                                                            |
-| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                      |
-| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.      |
-| Attacks                  | **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays once and the repeats are blocked (known gap, #79). |
-| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                             |
-| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                           |
+The main screen is the **Decision Desk**. **Flow** in the header shows the same run as the gate
+view; **Desk** goes back.
+
+| Beat                     | What to do                                                                                                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                           |
+| The owner decides        | **Needs you** holds a second licence bill in the same month. **Approve EUR 12.00** or **Deny** (also on the phone page).                                                                                   |
+| Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                |
+| The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                            |
+| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                      |
+| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                      |
+| Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays once and the repeats are blocked (known gap, #79). |
+| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                             |
+| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                           |
 
 </details>
 

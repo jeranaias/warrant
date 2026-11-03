@@ -20,7 +20,8 @@ export function Replay({
   proposalId: string;
   names: Names;
   version: number;
-  onClose: () => void;
+  /** Without it there is no back link: the replay sits inside the page (the desk). */
+  onClose?: () => void;
   closeLabel?: string;
 }) {
   const [data, setData] = useState<ReplayData | null>(null);
@@ -47,9 +48,11 @@ export function Replay({
   return (
     <div className="replay">
       <div className="replay-top">
-        <button className="link-btn" onClick={onClose}>
-          ← {closeLabel}
-        </button>
+        {onClose && (
+          <button className="link-btn" onClick={onClose}>
+            ← {closeLabel}
+          </button>
+        )}
         {head && <span className={`badge ${head.tone}`}>{head.text}</span>}
       </div>
       {error && !data && <p className="muted small">Couldn't load this request: {error}</p>}

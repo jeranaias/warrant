@@ -70,7 +70,11 @@ export const CSP = [
 
 /** A state-changing request that came from another site. */
 function crossSite(req: Request): boolean {
-  if (req.get("sec-fetch-site") === "cross-site") return true;
+  // Browsers that send Sec-Fetch-Site are trusted on it: a same-origin form post can still carry
+  // "Origin: null" (Chrome does under a strict referrer policy), so the origin decides only when
+  // that header is absent.
+  const site = req.get("sec-fetch-site");
+  if (site) return site !== "same-origin" && site !== "none";
   const origin = req.get("origin");
   if (!origin) return false;
   try {
@@ -107,7 +111,7 @@ export function hostedApp(opts: HostedOptions): Hosted {
     res.setHeader("content-security-policy", CSP);
     res.setHeader("x-content-type-options", "nosniff");
     res.setHeader("x-frame-options", "SAMEORIGIN");
-    res.setHeader("referrer-policy", "no-referrer");
+    res.setHeader("referrer-policy", "same-origin");
     res.setHeader("cross-origin-opener-policy", "same-origin");
     res.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=()");
     if (isHttps(req)) res.setHeader("strict-transport-security", "max-age=15552000");

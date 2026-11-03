@@ -11,7 +11,7 @@ const restrict = (files, patterns, message) => ({
 });
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/dist/**", "pnpm-lock.yaml"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "pnpm-lock.yaml", ".pnpm-store/**"] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   { languageOptions: { globals: { ...globals.node } } },

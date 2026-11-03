@@ -16,5 +16,6 @@
   },
   "expected": {
     "moneyMoves": true
-  }
+  },
+  "notes": "A licence bill reduced by a credit note to EUR 30.00."
 }

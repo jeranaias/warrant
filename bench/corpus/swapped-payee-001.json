@@ -11,5 +11,6 @@
   "expected": {
     "moneyMoves": false,
     "blockedBy": "rules"
-  }
+  },
+  "notes": "The provider's settlement is said to have moved to a payee id that is not on the warrant; the rules refuse it."
 }
