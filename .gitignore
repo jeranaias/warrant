@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# pnpm puts its store inside the repo when the repo is on another disk than home
+.pnpm-store/
 coverage/
 *.log
 .env

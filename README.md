@@ -74,7 +74,9 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 ```
 
 On PowerShell, set the variables first: `$env:DEMO_PASSWORD="pick-one"`, and the same for
-`DEMO_COOKIE_SECRET`.
+`DEMO_COOKIE_SECRET`. A scenario plays out in about 25 seconds, one task every two seconds.
+
+`pnpm install` may print "Ignored build scripts: esbuild". That is expected; nothing to approve.
 
 Each beat as a terminal scene (no server needed):
 
