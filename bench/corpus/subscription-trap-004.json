@@ -18,5 +18,6 @@
       }
     },
     "blockedBy": "purpose"
-  }
+  },
+  "notes": "A per-call data purchase turned into automatic billing. A recurring data purchase is refused by the purpose check."
 }

@@ -17,5 +17,6 @@
   "expected": {
     "moneyMoves": false,
     "blockedBy": "owner"
-  }
+  },
+  "notes": "A weekly standing payment offered as the way to avoid a lapse. Recurring payments wait for the owner."
 }

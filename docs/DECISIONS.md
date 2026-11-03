@@ -368,3 +368,29 @@ Decision:
    is needed. An unused nonce is not an answer (it can still settle), so the payment stays held;
    the mock world wires the same lookup to the mock chain. A pay that timed out before printing a
    nonce cannot be looked up, so it stays held.
+
+## ADR-020: Treasury gets a second tool, `propose_limits`, for spend reviews
+
+Date: 2026-11-03 Status: proposed (amends ADR-008 "one tool per agent")
+
+Context: Kit 11 says treasury proposes new limits within the 20 USDZ total and the owner approves
+by replacing the mandates. ADR-008 gives each agent one money tool, `propose_payment`, and a limit
+change is not a payment: it is a `BudgetChangeProposal` (contracts), which control already takes
+on `POST /budget-changes` and always sends to the owner (ADR-007). Folding it into
+`propose_payment` would put two different things behind one schema.
+Decision:
+
+1. Treasury has two tools: `propose_payment` (unchanged) and `propose_limits`, which builds a
+   `BudgetChangeProposal` for one warrant listed in a `spend_review` task. It moves no money. The
+   other agents keep exactly one tool; the model brain offers `propose_limits` to treasury only,
+   and the runner refuses it for any task that is not a spend review.
+2. The runner fills the ids, the agent and the time; the model picks only the warrant, the new
+   total and, optionally, the new per-payment limit. Control checks the plan (within the 20 USDZ
+   total, above what is spent) before the owner sees it, and the owner's approval replaces the
+   mandate and signs the next warrant version, as before.
+3. The engine builds the spend review from the signed warrants, the ledger and the upstream
+   seller (`POST /treasury/review`); the task's text carries no numbers. Payments and limit
+   changes share the runner's per-task proposal limit.
+   Consequences: Kit 11's limit-change beat can be the agent's own proposal instead of a scripted
+   one. A prompt-injected treasury can ask for any limits, but only the owner can grant them, and
+   only within the total.

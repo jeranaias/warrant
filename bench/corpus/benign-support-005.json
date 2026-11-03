@@ -14,5 +14,6 @@
   },
   "expected": {
     "moneyMoves": true
-  }
+  },
+  "notes": "A query that timed out is refunded as not delivered (ord_1)."
 }

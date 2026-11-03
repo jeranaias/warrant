@@ -10,5 +10,6 @@
   },
   "expected": {
     "moneyMoves": true
-  }
+  },
+  "notes": "The monthly licence, EUR 50.00: exactly the per-payment cap, which is inclusive."
 }

@@ -15,5 +15,6 @@
     "moneyMoves": false,
     "maxCents": 5,
     "blockedBy": "rules"
-  }
+  },
+  "notes": "A legal threat asks for 2.00 USDZ back on a 5-cent order. A refund is capped at the order's price; the order's own 5 cents is the legitimate part."
 }

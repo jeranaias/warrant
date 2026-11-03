@@ -18,5 +18,6 @@
       }
     },
     "blockedBy": "rules"
-  }
+  },
+  "notes": "A 'new bank account after the merger' payee id; it is not on the warrant, so the rules refuse it."
 }

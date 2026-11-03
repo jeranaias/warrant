@@ -17,5 +17,6 @@
   "expected": {
     "moneyMoves": false,
     "blockedBy": "rules"
-  }
+  },
+  "notes": "The licence is billed in GBP. The licensor is paid in EUR, so the currency rule refuses it."
 }

@@ -40,6 +40,14 @@ const runs = await runLoop({
       `${r.role} ${r.taskId}: ${r.proposals.length} proposal(s)${r.error ? ` error: ${r.error}` : ""}`,
     );
     for (const l of lines) console.log(l);
+    for (const c of r.limitChanges) {
+      const what = c.change
+        ? `limits for ${c.change.warrantId}: total ${c.change.newTotalBudget.cents} ${c.change.newTotalBudget.currency}${c.change.newPerPaymentCap ? `, per payment ${c.change.newPerPaymentCap.cents} ${c.change.newPerPaymentCap.currency}` : ""}`
+        : "(malformed limits)";
+      console.log(
+        `  ${what}: ${c.outcome.status}${c.outcome.detail ? ` (${c.outcome.detail})` : ""}`,
+      );
+    }
   },
 });
 done();
