@@ -29,6 +29,11 @@ prints the owner link, `<dashboard>/#/m?owner=<key>`. Answering approvals and `P
 `Authorization: Bearer <key>` (401 otherwise); every read stays open. The dashboard moves the key
 from the link into the tab's session storage. `createEngine()` without `ownerToken` (tests) is open.
 
+**Treasury's spend review (#26, ADR-020):** `POST /treasury/review` queues a `spend_review` task
+built from the signed USDZ warrants, the ledger's spend and, when it is above sourcing's
+per-payment limit, the upstream price (`treasury.ts`). Treasury answers with `propose_limits`,
+which arrives on `POST /budget-changes`. It moves no money.
+
 **Owner controls:** `POST /kill` is the emergency stop (everything refused at once, approvals
 dropped, mock mandates revoked; the answer says how long it took). `POST /budget-changes` takes
 treasury's `BudgetChangeProposal`; it always waits in `/approvals`, and on approval the mandate is
