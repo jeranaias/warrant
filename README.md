@@ -78,7 +78,8 @@ checks against a fresh run:
 
 On a held-out set written by someone who didn't build control: 26 of 28 attacks blocked, 1 of 6
 normal payments wrongly blocked. The misses are named in the `pnpm bench` output
-([bench/SCORING.md](bench/SCORING.md)).
+([bench/SCORING.md](bench/SCORING.md)). That output says "219 cases": the 155 attacks and 30
+normal payments above, plus the held-out 28 and 6.
 
 ## Run it locally
 
@@ -93,9 +94,20 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 # open http://localhost:10000, type the code you picked, press Run a scenario
 ```
 
-On PowerShell, run `git clone` and `cd` as two commands, and set the variables first:
-`$env:DEMO_PASSWORD="pick-one"`, and the same for `DEMO_COOKIE_SECRET`. A scenario plays out in
-about 25 seconds, one task every two seconds.
+The same in Windows PowerShell 5.1, where `&&` and `VAR=value command` don't work:
+
+```powershell
+git clone https://github.com/jeranaias/warrant.git   # private: needs repo access
+cd warrant
+pnpm install
+pnpm build:hosted
+$env:DEMO_PASSWORD = "pick-one"
+$env:DEMO_COOKIE_SECRET = "any 16 or more chars"
+pnpm start:hosted
+# open http://localhost:10000, type the code you picked, press Run a scenario
+```
+
+A scenario plays out in about 25 seconds, one task every two seconds.
 
 `pnpm install` may print "Ignored build scripts: esbuild". That is expected; nothing to approve.
 
@@ -147,7 +159,7 @@ view; **Desk** goes back.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                                   |
 | The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                                    |
-| The owner decides        | **Needs you** holds a second licence bill in the same month. **Approve EUR 12.00** or **Deny** (also on the phone page).                                                                                           |
+| The owner decides        | **Needs you** holds two items: a second licence bill in the same month (**Approve EUR 12.00** or **Deny**) and treasury's sweep of earnings to Airwallex, which always waits for you. Also on the phone page.      |
 | Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                        |
 | Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                              |
 | New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                              |

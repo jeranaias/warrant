@@ -28,7 +28,8 @@ view, and **Desk** goes back. **Reset** (top right) starts a fresh copy.
 2. **At our store** filters to the store's moments: warrant pass checked, buyer refused,
    disputes decided order by order. **Live runs** has the same dispute on Metal testnet, with
    links.
-3. **Needs you** holds the second licence bill of the month. **Approve EUR 12.00** or **Deny**.
+3. **Needs you** holds two items: the second licence bill of the month (**Approve EUR 12.00** or
+   **Deny**) and treasury's sweep of earnings to Airwallex, which always waits for the owner.
 4. Click any line: the right side replays it step by step (rules, purpose check, owner, funds,
    rail).
 5. **Live runs** lists the other flows on Metal testnet and the Airwallex sandbox, with links.

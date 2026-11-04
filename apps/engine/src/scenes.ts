@@ -19,6 +19,8 @@ export interface SceneStep {
   step: string;
   outcome: string;
   moneyMoved: boolean;
+  /** The payment was refused (by our rules, the rail or the chain), as opposed to a step where nothing was asked to move. */
+  blocked?: boolean;
   /** The settlement transaction when money moved. */
   tx?: string;
   /** What the step rests on, one line each (e.g. a dispute's on-chain checks). */
@@ -87,6 +89,7 @@ export async function priceRiseScene(
     step: "price now 4 cents: buy at 4",
     outcome: `${atFour.blockedBy ?? "not blocked"} (${(failedRules ?? []).join(", ")})`,
     moneyMoved: false,
+    blocked: atFour.blockedBy !== undefined,
   });
 
   // 3. An agent claiming the old price: our rules pass it, the rail sees the seller asks 4.
@@ -96,6 +99,7 @@ export async function priceRiseScene(
     step: "agent claims 2 cents anyway",
     outcome: `${lied.blockedBy ?? "not blocked"} (${lied.execution?.detail ?? ""})`,
     ...moved(engine, before),
+    blocked: lied.blockedBy !== undefined,
   });
 
   // 4. Around Warrant: only the mandate on chain is left to say no.
@@ -104,6 +108,7 @@ export async function priceRiseScene(
     step: "limits only (no Warrant): pay at 4",
     outcome: direct.kind === "refused" ? `chain refused: ${direct.reason}` : direct.kind,
     moneyMoved: direct.kind === "paid",
+    blocked: direct.kind === "refused",
     ...(direct.kind === "paid" && direct.tx ? { tx: direct.tx } : {}),
   });
   return steps;
@@ -193,6 +198,7 @@ export async function limitChangeScene(
     step: "old credential tries to pay",
     outcome: old.kind === "refused" ? `chain refused: ${old.reason}` : old.kind,
     moneyMoved: old.kind === "paid",
+    blocked: old.kind === "refused",
   });
   return steps;
 }
