@@ -120,6 +120,43 @@ the explorer at `https://testnet.metalntwx.com/tx/<hash>`. No `pnpm reset:live` 
 | support tries the same refund again                   | refused by our rules (`refund_matches_order`)                                                                                                   |
 | "my agent never agreed" on the `btc-usd` order        | `owner_authorized`: 11 of 11 checks hold                                                                                                        |
 
+## Live agent run (2026-11-04)
+
+The first payments on testnet proposed by the agents themselves (scripted brain, deterministic
+purpose check: no model calls). Before this, every live run used proposals written into the scenes.
+Run on truelumpen's own testnet world (`pnpm setup:testnet`): business
+`0x4CF3074df343aaBC5b6b0Eb881230eC864AcAD6a`, upstream `0x4913a47771943f5cDAf17E4583b722981EB2524e`.
+
+```sh
+RAILS_MODE=sandbox OWNER_TOKEN=<one-time> pnpm engine     # sourcing on its day-one 3-cent cap
+AGENT_BRAIN=scripted pnpm agents --scenario price_rise
+curl -X POST <engine>/upstream/price -d '{"cents":4}'      # the provider raises its price
+curl -X POST <engine>/treasury/review                      # treasury's spend review (ADR-020)
+AGENT_BRAIN=scripted pnpm agents
+# owner: POST /approvals/<id> with the shownHash (Authorization: Bearer <one-time>)
+AGENT_BRAIN=scripted pnpm agents --scenario price_rise
+pnpm reset:live                                            # back to the 3-cent cap
+```
+
+| Step                                                     | Result                                                                                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| sourcing agent buys a batch at 2 cents                   | paid [`0xc8603cfa…`](https://testnet.metalntwx.com/tx/0xc8603cfae4a679a01822fbd871cd73da97fa8b3f480b88f92de7e58c4895f167)                      |
+| sourcing agent buys at 4 cents                           | refused by our rules (`per_payment_cap`), no chain call                                                                                        |
+| upstream price 4 cents; treasury agent's spend review    | proposes `wrt_sourcing` per-payment 3 → 4 cents, total unchanged; waits for the owner                                                          |
+| owner approves exactly what was shown                    | `mandate replace` on chain: new mandate `0x546398b2fc8310b5ba5aa044a62e899a67cad96f274e86489b445d3280d82d1e` (cap 0.04, spend carried forward) |
+| sourcing agent claims 2 cents anyway                     | refused at the rail: the seller asks 4                                                                                                         |
+| sourcing agent buys at 4 cents (+100%, owner asked once) | paid [`0xa1b7e6ee…`](https://testnet.metalntwx.com/tx/0xa1b7e6ee7eacacf70a8378aaeb0efd841a8440f8773c35c260abb484d299753b)                      |
+
+Found on the way:
+
+- On this world `RAILS_MODE=sandbox pnpm scene` (the scripted scene) reports "buy at 4 cents under
+  the new limits: rules", where the 2026-10-31 runs paid; the same scene pays on mock rails, and
+  the agents' own 4-cent buy above passed the rules. Not yet traced.
+- Re-running `pnpm setup:testnet` after a partial run fails: `mandate bind` on an already-bound
+  mandate reverts ("execution reverted"). Finishing by hand worked: `account create --key` for
+  the customer (funded before it was deployed), then `mandate bind` for `customer-agent.json`.
+- The engine does not print the `mandate replace` transaction; the table names the new mandate.
+
 ## Windows quirks (metal-agent 0.3.3)
 
 - Run `node <cli>/dist/index.js`, not the `.cmd` shim: `execCliRunner` runs a `.js` bin under
