@@ -58,9 +58,17 @@ export interface IssuedCard {
 /** 13 to 19 digits in a row: anything that could be a card number. */
 const PAN = /\d{13,19}/g;
 
+/**
+ * A number printed the way it is on the card: groups of 4-4-4-n (n up to 7, then up to 3 more
+ * digits for 19), or the Amex 4-6-5 and Diners 4-6-4 shapes, joined by a space or a dash. Shaped
+ * groups only, so dates, ids and hashes stay readable.
+ */
+const SPACED_PAN =
+  /(?<!\d)(?:\d{4}[ -]\d{4}[ -]\d{4}[ -]\d{1,7}(?:[ -]\d{1,3})?|\d{4}[ -]\d{6}[ -]\d{4,5})(?!\d)/g;
+
 /** Strip anything that could be a card number. */
 export function redact(text: string): string {
-  return text.replace(PAN, "[redacted]");
+  return text.replace(SPACED_PAN, "[redacted]").replace(PAN, "[redacted]");
 }
 
 const codeOf = (b: any): string =>
@@ -123,6 +131,11 @@ export function controlsDiffer(have: Json | undefined, want: Json): string[] {
     out.push("merchant categories");
   }
   if (!same(have?.allowed_currencies, want.allowed_currencies)) out.push("currencies");
+  // As moments, not strings: the API answers the same instant as `.000+00:00` or `+0000`. A missing
+  // or unreadable value is NaN, which never equals anything, so it counts as different.
+  const at = (c: Json | undefined) =>
+    typeof c?.active_to === "string" ? Date.parse(c.active_to) : NaN;
+  if (at(have) !== at(want)) out.push("expiry");
   return out;
 }
 

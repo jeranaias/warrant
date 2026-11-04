@@ -96,9 +96,6 @@ export function sandboxAirwallexClient(): AirwallexClient {
   const missing = need.filter((k) => !process.env[k]);
   if (missing.length) throw new Error(`sandbox needs ${missing.join(", ")} in .env`);
   const baseUrl = String(process.env["AIRWALLEX_BASE_URL"]).replace(/\/$/, "");
-  if (!/sandbox|demo|127\.0\.0\.1|localhost/.test(baseUrl)) {
-    throw new Error("AIRWALLEX_BASE_URL must be the Airwallex sandbox, never production");
-  }
   return new AirwallexClient({
     baseUrl,
     clientId: String(process.env["AIRWALLEX_CLIENT_ID"]),
@@ -137,8 +134,9 @@ const ORDER = ["SCHEDULED", "PROCESSING", "SENT", "PAID"] as const;
  *   1. the store's earnings move off Metal to our treasury address (`mandate pull`)
  *   2. they land in Airwallex as a deposit referenced by that transaction hash
  *   3. treasury pays the EUR 50 licence fee: control approves (payee on the warrant), the adapter
- *      converts USD to EUR because the wallet has no euros, then sends a LOCAL transfer
- *   4. the bank moves it to PAID; control's ledger confirms it on the next reconcile
+ *      converts USD to EUR (mock: because the wallet has no euros; sandbox: always), then sends a
+ *      LOCAL transfer (mock) or a SWIFT one (sandbox)
+ *   4. the simulator moves it to PAID; control's ledger confirms it on the next reconcile
  */
 export async function earningsScene(
   now = () => new Date(),

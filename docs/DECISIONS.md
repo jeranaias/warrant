@@ -468,3 +468,31 @@ Decision:
    Consequences: the demo can show a real model meeting the same attacks, on the visitor's own
    account, without our key on the host. A model run differs from run to run; the published
    benchmark stays the scripted one. `pnpm engine` locally is unchanged (`.env` key).
+
+## ADR-024: An empty lookup after a doubtful transfer stays unknown for 10 minutes, then failed
+
+Date: 2026-11-03 Status: proposed
+
+Context: ADR-019 point 1 says a payment in doubt is settled only by the rail's `getStatus`. For an
+Airwallex transfer that is a list by `request_id`, and it answered `failed` the moment the list was
+empty. A create that timed out or got a 5xx may still be in progress, so an empty list does not
+prove it never happened. A `failed` answer releases the reservation: if the transfer then goes out,
+the money has left with no hold, and a retry can pay twice. We have no evidence that the list
+itself lags.
+Decision:
+
+1. A 5xx on transfer create is `unknown`, like a timeout. A 4xx stays `failed`.
+2. An empty lookup is `unknown` ("not listed yet") until `LOOKUP_GRACE_MS` (10 minutes) has passed
+   since the key was first in play, then `failed`. The clock starts at the top of `execute()`, so a
+   conversion that timed out counts. A key this process never sent (after a restart) starts its
+   window at its first empty lookup. This amends ADR-019 point 1: an empty list may settle a
+   payment as failed only once the window has ended.
+3. The 10 minutes is a chosen margin, not a measurement. Too long holds budget a little longer;
+   too short lets money leave with no hold.
+4. `AirwallexClient` refuses every airwallex.com host except `api.sandbox.airwallex.com`, the
+   sandbox API in Airwallex's docs, judged by the parsed hostname. Localhost and test hosts pass.
+   The docs name no other sandbox host; a second one is added here if it is needed.
+   Consequences: a transfer that was never created holds its amount for up to 10 minutes, and
+   after a restart its window starts again. Not done here: control giving up by reservation age
+   (it survives restarts and covers every rail), and keeping the frozen cards in STOP's report
+   when a freeze fails partway.
