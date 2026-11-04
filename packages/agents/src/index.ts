@@ -5,8 +5,8 @@
  * and runs without a key). The runner fills ids and submits to control; agents never see a rail.
  */
 export type { Brain, Propose, ProposeLimits } from "./brain.js";
-export { contextFor } from "./context.js";
-export type { AgentContext, WorldView } from "./context.js";
+export { contextFor, warrantFor } from "./context.js";
+export type { AgentContext, WarrantView, WorldView } from "./context.js";
 export { TOOL_NAME, counterIds, proposePaymentTool, toProposal } from "./tool.js";
 export type { IdSource, ProposePaymentInput, ToProposalResult } from "./tool.js";
 export { LIMITS_TOOL_NAME, proposeLimitsTool, toBudgetChange } from "./limits.js";
