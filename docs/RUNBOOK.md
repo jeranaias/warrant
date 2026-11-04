@@ -107,6 +107,13 @@ pnpm dashboard   # owner UI
 pnpm bench       # benchmark
 ```
 
+When `.env` has both the Metal testnet settings (section 4) and `AIRWALLEX_BASE_URL`,
+`AIRWALLEX_CLIENT_ID` and `AIRWALLEX_API_KEY` (section 3), `RAILS_MODE=sandbox pnpm engine` runs
+both real rails together (`Metal testnet, Airwallex sandbox`): `metal_x402` on Metal testnet and
+`airwallex_transfer` on the Airwallex sandbox (SWIFT funded from USD, with the licensor
+beneficiary found or created by nickname at startup; ADR-017). Leave the three Airwallex variables
+unset to run Metal testnet with the in-memory Airwallex rail (`Metal testnet, Airwallex mock`).
+
 ## 7. Hosted demo (Render)
 
 A link judges can open: the dashboard plus one mock engine per visitor (mock rails, simulated

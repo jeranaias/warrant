@@ -42,8 +42,16 @@ only (day-one limits). `METAL_HOME/warrant-live/owner-state.json` always names t
 pays through `MetalAdapter`, the owner's mandate changes go through `CliMetalOwnerOps`, the
 upstream provider is a real x402 seller (`@metalntwx/metal-pay`) on `UPSTREAM_PORT` paid to its
 account above, and our store runs on `STORE_PORT` (signed order + warrant pass required, orders
-in the data dir). Airwallex stays on the in-memory rail in this command; the Airwallex beat runs on
-the real sandbox with `pnpm scene:earnings --sandbox` (see "Airwallex sandbox" below).
+in the data dir).
+
+When `AIRWALLEX_BASE_URL`, `AIRWALLEX_CLIENT_ID` and `AIRWALLEX_API_KEY` are also set in `.env`,
+`RAILS_MODE=sandbox pnpm engine` wires both real rails at once
+(`Metal testnet, Airwallex sandbox`): `metal_x402` pays on Metal testnet and `airwallex_transfer`
+pays on the Airwallex sandbox (`AirwallexTransfers`, SWIFT funded from USD, with the licensor
+beneficiary resolved by nickname at startup; ADR-017). Without those three variables,
+`airwallex_transfer` stays on the in-memory rail (`Metal testnet, Airwallex mock`), and the
+stand-alone Airwallex beat can still run with `pnpm scene:earnings --sandbox` (see "Airwallex
+sandbox" below).
 
 ```sh
 RAILS_MODE=sandbox pnpm scene          # the price-rise + limit-change story, on chain (about 2 minutes)

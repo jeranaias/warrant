@@ -3,11 +3,18 @@ import { join, resolve } from "node:path";
 
 /**
  * Engine settings from the environment. `RAILS_MODE=mock` (default) needs nothing.
- * `RAILS_MODE=sandbox` runs the Metal rail on the real testnet with the owner's METAL_HOME;
- * Airwallex stays on the in-memory rail (there is no sandbox Airwallex adapter in rails yet).
+ * `RAILS_MODE=sandbox` runs the Metal rail on the real testnet with the owner's METAL_HOME, and
+ * when AIRWALLEX_BASE_URL, AIRWALLEX_CLIENT_ID and AIRWALLEX_API_KEY are all set, runs the
+ * Airwallex transfer rail on the Airwallex sandbox (otherwise Airwallex stays on the mock rail).
  */
 
 export type RailsMode = "mock" | "sandbox";
+
+export interface AirwallexConfig {
+  baseUrl: string;
+  clientId: string;
+  apiKey: string;
+}
 
 export interface LiveConfig {
   /** metal-agent 0.3.3: a `dist/index.js` path (run under node) or a binary on PATH. */
@@ -29,6 +36,11 @@ export interface LiveConfig {
   storePort: number;
   /** Outside the repo: owner state (current credential per agent) and stored orders. */
   dataDir: string;
+  /**
+   * Airwallex sandbox credentials, present only when AIRWALLEX_BASE_URL, AIRWALLEX_CLIENT_ID and
+   * AIRWALLEX_API_KEY are all set. Never logged, returned or passed to the Metal CLI.
+   */
+  airwallex?: AirwallexConfig;
 }
 
 /**
@@ -67,6 +79,20 @@ export function railsMode(env: NodeJS.ProcessEnv = process.env): RailsMode {
 const OS_VARS = ["PATH", "SYSTEMROOT", "TEMP", "TMP", "HOME", "USERPROFILE", "APPDATA"];
 const CLI_VARS = ["METAL_RPC_URL", "METAL_FAUCET_URL", "METAL_FACILITATOR_URL"];
 
+/**
+ * Reads Airwallex sandbox settings when all three of AIRWALLEX_BASE_URL, AIRWALLEX_CLIENT_ID and
+ * AIRWALLEX_API_KEY are non-empty; otherwise undefined. Never logs or echoes values.
+ */
+export function airwallexConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): AirwallexConfig | undefined {
+  const baseUrl = env["AIRWALLEX_BASE_URL"]?.trim().replace(/\/$/, "");
+  const clientId = env["AIRWALLEX_CLIENT_ID"]?.trim();
+  const apiKey = env["AIRWALLEX_API_KEY"]?.trim();
+  if (!baseUrl || !clientId || !apiKey) return undefined;
+  return { baseUrl, clientId, apiKey };
+}
+
 export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveConfig {
   const need = (k: string): string => {
     const v = env[k];
@@ -87,6 +113,7 @@ export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveCon
   const cliEnv: NodeJS.ProcessEnv = {};
   for (const k of OS_VARS) if (process.env[k]) cliEnv[k] = process.env[k];
   for (const k of CLI_VARS) if (env[k]) cliEnv[k] = env[k];
+  const airwallex = airwallexConfigFromEnv(env);
   return {
     bin: env["METAL_AGENT_BIN"] ?? (existsSync(shipped) ? shipped : "metal-agent"),
     cliEnv,
@@ -103,6 +130,7 @@ export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveCon
     upstreamPort: Number(env["UPSTREAM_PORT"] ?? 4022),
     storePort: Number(env["STORE_PORT"] ?? 4021),
     dataDir: env["WARRANT_DATA_DIR"] ?? join(home, "warrant-live"),
+    ...(airwallex ? { airwallex } : {}),
   };
 }
 

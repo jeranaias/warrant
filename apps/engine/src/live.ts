@@ -11,6 +11,7 @@ import type { AgentRole, MandateRef, Warrant } from "@warrant/contracts";
 import { AGENT_BUDGETS, PassChecker, UPSTREAM_PRICE_BEFORE, signWarrant } from "@warrant/control";
 import type { ControlEvent } from "@warrant/control";
 import {
+  AirwallexClient,
   CliMetalOwnerOps,
   MetalAdapter,
   chainSettlementLookup,
@@ -18,7 +19,7 @@ import {
   httpJsonRpc,
   x402Quote,
 } from "@warrant/rails";
-import type { MandateStatus } from "@warrant/rails";
+import type { MandateStatus, RailAdapter } from "@warrant/rails";
 import {
   METAL_TESTNET,
   OrderStore,
@@ -28,9 +29,10 @@ import {
   sampleInventory,
   settlementVerifier,
 } from "@warrant/store";
-import type { CustomerConfig, LiveConfig } from "./config.js";
+import type { AirwallexConfig, CustomerConfig, LiveConfig } from "./config.js";
 import { makeLiveCustomer } from "./customer.js";
 import type { CustomerBuyer } from "./customer.js";
+import { licensorBeneficiary, sandboxAirwallexTransfers } from "./earnings.js";
 import {
   AGENTS,
   AlwaysPaysRail,
@@ -55,10 +57,47 @@ import type { MetalRole, MetalTerms, UpstreamSeller, World } from "./world.js";
  *   current is kept in WARRANT_DATA_DIR/owner-state.json (outside the repo), so the next start
  *   uses it; `pnpm reset:live` puts sourcing back on day-one limits.
  * - Disputes check each order's settlement on chain with metal-pay's `verifyMandatePayment`.
- * - Airwallex stays on the in-memory rail: rails has no sandbox Airwallex adapter yet.
+ * - When AIRWALLEX_BASE_URL, AIRWALLEX_CLIENT_ID and AIRWALLEX_API_KEY are set, airwallex_transfer
+ *   runs `AirwallexTransfers` on the Airwallex sandbox (SWIFT, funded from USD, licensor resolved
+ *   by nickname, ADR-017); without them it stays on the in-memory `AlwaysPaysRail`.
  *
- * Never logged or returned: key material, credential contents, the RPC URL.
+ * Never logged or returned: key material, credential contents, the RPC URL, Airwallex credentials.
  */
+
+export interface LiveAirwallex {
+  rail: RailAdapter;
+  licensorRef?: string;
+}
+
+/**
+ * Builds the `airwallex_transfer` rail for live mode: the real sandbox `AirwallexTransfers`
+ * adapter (SWIFT, funding USD, licensor beneficiary found or created by nickname) when `airwallex`
+ * is configured, or `AlwaysPaysRail` when it is not.
+ */
+export async function makeLiveAirwallex(
+  airwallex?: AirwallexConfig,
+  opts: { fetch?: typeof fetch } = {},
+): Promise<LiveAirwallex> {
+  if (!airwallex) {
+    return { rail: new AlwaysPaysRail("airwallex_transfer") };
+  }
+  const client = new AirwallexClient({
+    baseUrl: airwallex.baseUrl,
+    clientId: airwallex.clientId,
+    apiKey: airwallex.apiKey,
+    timeoutMs: 30_000,
+    ...(opts.fetch ? { fetch: opts.fetch } : {}),
+  });
+  const licensorRef = await licensorBeneficiary(client);
+  const rail = sandboxAirwallexTransfers(client);
+  return { rail, licensorRef };
+}
+
+/** Startup mode label for `main.ts` (never contains secrets). */
+export function liveModeLabel(cfg?: Pick<LiveConfig, "airwallex">): string {
+  if (!cfg) return "mock rails";
+  return cfg.airwallex ? "Metal testnet, Airwallex sandbox" : "Metal testnet, Airwallex mock";
+}
 
 export interface LiveWorld extends World {
   /** Starts the upstream seller and our store. Close them when done. */
@@ -120,10 +159,15 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
     },
   };
 
+  const awx = await makeLiveAirwallex(cfg.airwallex);
+
   // A fresh owner signing key per run: warrants are re-signed from the chain at every start.
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const warrants = new Map(
-    bodies(now, terms).map((b) => [b.warrantId, signWarrant(b, privateKey, "owner-demo")]),
+    bodies(now, terms, awx.licensorRef).map((b) => [
+      b.warrantId,
+      signWarrant(b, privateKey, "owner-demo"),
+    ]),
   );
   const credentials = new Map<AgentRole, string>(METAL_ROLES.map((r) => [r, state.credentials[r]]));
 
@@ -203,7 +247,7 @@ export async function makeLiveWorld(cfg: LiveConfig, now = new Date()): Promise<
         // A pay whose answer was lost is settled from the chain by its nonce (ADR-019).
         lookupSettlement: chainSettlementLookup(httpJsonRpc(cfg.rpcUrl)),
       }),
-      airwallex_transfer: new AlwaysPaysRail("airwallex_transfer"),
+      airwallex_transfer: awx.rail,
     },
     watch: (f) => void listeners.push(f),
     listen: () => listen(cfg, upstream, orders, told),
