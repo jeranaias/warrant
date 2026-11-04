@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { WarrantRow } from "../api.js";
-import { agentName, laneName, money } from "../format.js";
+import { laneName, money, warrantName } from "../format.js";
 import { paidByCurrency, reasonsOf, tally } from "../flow.js";
 import type { Fate, Pass } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -21,11 +21,11 @@ import { usePassStream } from "./usePassStream.js";
 
 const TOP = 36;
 /** Room for the agent labels on the left and the outcome labels on the right, in pixels. */
-const LEFT = 170;
-const RIGHT = 300;
+const LEFT = 175;
+const RIGHT = 265;
 const NODE = 8;
-/** Longest outcome line before it is cut, so it never runs under the side panel. */
-const LINE_CHARS = 36;
+/** Longest outcome line before it wraps, so it never runs under the side panel. */
+const LINE_CHARS = 34;
 const TRAIL_MS = 1500;
 const FATES: Fate[] = ["paid", "asked", "blocked"];
 const FATE_COLOR: Record<Fate, string> = {
@@ -87,7 +87,7 @@ export function Gate({
     if (!el) return;
     const ro = new ResizeObserver(([e]) => {
       if (e)
-        setSize({ w: Math.max(640, e.contentRect.width), h: Math.max(380, e.contentRect.height) });
+        setSize({ w: Math.max(540, e.contentRect.width), h: Math.max(360, e.contentRect.height) });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -249,14 +249,14 @@ export function Gate({
               rx={2}
               fill={tintOf(a.i)}
             />
-            <text className="gt-name" x={AX - 20} y={a.c - 4} textAnchor="end">
+            <text className="gt-name" x={AX - 16} y={a.c - 4} textAnchor="end">
               {laneName(a.w)}
             </text>
-            <text className="gt-sub" x={AX - 20} y={a.c + 14} textAnchor="end">
+            <text className="gt-sub" x={AX - 16} y={a.c + 14} textAnchor="end">
               {a.n} {a.n === 1 ? "request" : "requests"}
             </text>
             {out && (
-              <text className="gt-sub stop" x={AX - 20} y={a.c + 30} textAnchor="end">
+              <text className="gt-sub stop" x={AX - 16} y={a.c + 30} textAnchor="end">
                 budget used up
               </text>
             )}
@@ -324,16 +324,16 @@ export function Gate({
               : {})}
           >
             <rect x={OX} y={c - h / 2} width={NODE} height={h} rx={2} />
-            <text className="gt-head" x={OX + 22} y={ty}>
+            <text className="gt-head" x={OX + 18} y={ty}>
               {head} · {outN[fate]}
             </text>
             {lines.map((l, n) => (
-              <text key={n} className="gt-line" x={OX + 22} y={ty + 20 + n * 17}>
+              <text key={n} className="gt-line" x={OX + 18} y={ty + 20 + n * 17}>
                 {l}
               </text>
             ))}
             {more > 0 && (
-              <text className="gt-line muted" x={OX + 22} y={ty + 20 + lines.length * 17}>
+              <text className="gt-line muted" x={OX + 18} y={ty + 20 + lines.length * 17}>
                 {more} other
               </text>
             )}
@@ -364,13 +364,20 @@ function clip(s: string): string {
   return s.length > LINE_CHARS ? `${s.slice(0, LINE_CHARS - 1)}…` : s;
 }
 
-/** A long label on two lines, split at " · " (or the last space) before it would be cut. */
+/** Wrap a long label across lines at " · " (or the last space) before it would be cut. */
 function wrap(s: string): string[] {
-  if (s.length <= LINE_CHARS) return [s];
-  const dot = s.lastIndexOf(" · ", LINE_CHARS);
-  const at = dot > 0 ? dot : s.lastIndexOf(" ", LINE_CHARS);
-  if (at <= 0) return [clip(s)];
-  return [s.slice(0, at), clip(`  ${s.slice(at + (dot > 0 ? 3 : 1))}`)];
+  const out: string[] = [];
+  let rem = s;
+  while (rem.length > LINE_CHARS && out.length < 2) {
+    const limit = out.length === 0 ? LINE_CHARS : LINE_CHARS - 2;
+    const dot = rem.lastIndexOf(" · ", limit);
+    const at = dot > 0 ? dot : rem.lastIndexOf(" ", limit);
+    if (at <= 0) break;
+    out.push(out.length === 0 ? rem.slice(0, at) : `  ${rem.slice(0, at)}`);
+    rem = rem.slice(at + (dot > 0 ? 3 : 1));
+  }
+  out.push(out.length === 0 ? clip(rem) : clip(`  ${rem}`));
+  return out;
 }
 
 function sumOf(t: { paid: number; asked: number; blocked: number } | undefined): number {
@@ -385,7 +392,7 @@ function heldGroups(passes: Pass[], warrants: WarrantRow[]): { text: string; n: 
     const w = warrants.find((x) => x.warrantId === p.warrantId);
     const payee =
       w?.payees.find((x) => x.payeeId === p.payee)?.displayName ?? (w ? "customer" : p.payee);
-    const who = agentName(w?.agentRole).replace(/ agent$/, "");
+    const who = warrantName(p.warrantId, w?.agentRole).replace(/ agent$/, "");
     const text = `${money(p.amount)} · ${who} → ${payee}`;
     const g = by.get(text) ?? { text, n: 0 };
     g.n += 1;

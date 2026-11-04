@@ -1,7 +1,16 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { HOSTED, isOwner } from "../api.js";
-import { agentName, cents, field, foldRepeats, isMoney, money, namesOf, time } from "../format.js";
+import {
+  cents,
+  field,
+  foldRepeats,
+  isMoney,
+  money,
+  namesOf,
+  time,
+  warrantName,
+} from "../format.js";
 import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
 import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -41,7 +50,10 @@ export function Phone({
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
   const payees = useMemo(() => payeeNodes(warrants), [warrants]);
-  const passes = useMemo(() => passesOf(engine.events, warrants), [engine.events, warrants]);
+  const passes = useMemo(
+    () => passesOf(engine.events, warrants, engine.approvals),
+    [engine.events, warrants, engine.approvals],
+  );
   const { total, lanes } = useMemo(() => tally(passes), [passes]);
   const waiting = engine.approvals;
   const [pick, setPick] = useState<string | null>(null);
@@ -61,9 +73,10 @@ export function Phone({
   const queue: { first: string; who: string; amount: string; n: number }[] = [];
   for (const a of rest) {
     const amount = field(a.view, "amount");
+    const warrantId = field(a.view, "warrant.warrantId");
     const role = field(a.view, "agent.role") ?? field(a.view, "warrant.role");
     const payee = field(a.view, "payee.displayName") ?? field(a.view, "payee.payeeId");
-    const who = `${agentName(typeof role === "string" ? role : undefined)}${payee !== undefined ? ` → ${String(payee)}` : ""}`;
+    const who = `${warrantName(typeof warrantId === "string" ? warrantId : undefined, typeof role === "string" ? role : undefined)}${payee !== undefined ? ` → ${String(payee)}` : ""}`;
     const amt = isMoney(amount) ? money(amount) : "new limits";
     const same = queue.find((q) => q.who === who && q.amount === amt);
     if (same) same.n += 1;
@@ -72,7 +85,7 @@ export function Phone({
   const owner = isOwner();
 
   const nameOf = (warrantId: string) =>
-    agentName(warrants.find((w) => w.warrantId === warrantId)?.agentRole);
+    warrantName(warrantId, warrants.find((w) => w.warrantId === warrantId)?.agentRole);
   const payeeOf = (id: string) =>
     payees.find((p) => p.id === id)?.name ?? (id === OTHER ? "customer" : id);
 
@@ -132,7 +145,13 @@ export function Phone({
           <div className="sheet-k">
             waiting · {waiting.length > 1 ? `1 of ${waiting.length}` : "1"}
           </div>
-          <ApprovalCard key={focus.proposalId} a={focus} onDone={onDone} onError={onError} />
+          <ApprovalCard
+            key={focus.proposalId}
+            a={focus}
+            onDone={onDone}
+            onError={onError}
+            roleOf={(id) => warrants.find((w) => w.agentId === id)?.agentRole}
+          />
           {queue.length > 0 && (
             <ol className="ph-queue">
               {queue.map((q) => (
@@ -156,7 +175,7 @@ export function Phone({
             return (
               <li key={w.warrantId} style={{ "--tint": tintOf(i) } as CSSProperties}>
                 <span className="agent-dot" aria-hidden="true" />
-                <span className="ph-agent">{agentName(w.agentRole)}</span>
+                <span className="ph-agent">{warrantName(w.warrantId, w.agentRole)}</span>
                 <span className="mono">
                   {cents(Math.max(0, w.totalBudget.cents - w.spentCents), w.totalBudget.currency)}
                 </span>

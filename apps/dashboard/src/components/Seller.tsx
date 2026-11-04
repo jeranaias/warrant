@@ -7,12 +7,27 @@ import type { SellerMoment } from "../seller.js";
  * Our store's side, as it happens: the buyer's warrant pass it checked before serving, and each
  * dispute it answered from its records. Shows the latest few; nothing until one happens.
  */
-export function Seller({ events, max = 3 }: { events: readonly LoggedEvent[]; max?: number }) {
+export function Seller({
+  events,
+  max = 3,
+  onClose,
+}: {
+  events: readonly LoggedEvent[];
+  max?: number;
+  onClose?: () => void;
+}) {
   const moments = sellerMoments(events).slice(-max).reverse();
   if (moments.length === 0) return null;
   return (
     <section className="sheet sheet-seller" aria-label="At our store">
-      <div className="sheet-k">at our store · seller's view</div>
+      <div className="sheet-head">
+        <div className="sheet-k">at our store · seller's view</div>
+        {onClose && (
+          <button className="drawer-x" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        )}
+      </div>
       {moments.map((m) => (
         <Moment key={m.seq} m={m} />
       ))}

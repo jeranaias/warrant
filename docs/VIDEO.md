@@ -4,7 +4,7 @@ Draft for issue #91. Eva owns the final cut (#33). Target: under 4 minutes (the 
 
 Rules for the recording (from `docs/DEMO.md`): everything shown is sandbox or testnet and says so
 in the data, not in an overlay. Never show a key, a credential file, the owner link, a card
-number or `.env`. Transaction hashes appear as data: terminal output, the **Live runs** panel or
+number or `.env`. Transaction hashes appear as data: terminal output, the **Testnet runs** panel or
 the testnet explorer.
 
 Most beats are recorded on the hosted demo (https://warrant-demo-bt31.onrender.com, simulated
@@ -14,16 +14,16 @@ scenario**, so there is room to slow down in the edit.
 
 ## Beat sheet
 
-| #   | Time      | Beat                               | Runs on                             |
-| --- | --------- | ---------------------------------- | ----------------------------------- |
-| 1   | 0:00-0:15 | Cold open on Flow                  | Hosted demo                         |
-| 2   | 0:15-0:50 | Run a scenario: the Desk fills     | Hosted demo                         |
-| 3   | 0:50-1:30 | At our store: pass and dispute     | Hosted demo, then **Live runs**     |
-| 4   | 1:30-2:10 | Needs you: the held EUR 12.00 bill | Hosted demo                         |
-| 5   | 2:10-2:45 | Why it was blocked: the replay     | Hosted demo                         |
-| 6   | 2:45-3:10 | Real rails                         | **Live runs** (testnet and sandbox) |
-| 7   | 3:10-3:30 | STOP                               | Hosted demo                         |
-| 8   | 3:30-3:55 | The numbers, close on Flow         | Benchmark, Flow view                |
+| #   | Time      | Beat                               | Runs on                                |
+| --- | --------- | ---------------------------------- | -------------------------------------- |
+| 1   | 0:00-0:15 | Cold open on Flow                  | Hosted demo                            |
+| 2   | 0:15-0:50 | Run a scenario: the Desk fills     | Hosted demo                            |
+| 3   | 0:50-1:30 | At our store: pass and dispute     | Hosted demo, then **Testnet runs**     |
+| 4   | 1:30-2:10 | Needs you: the held EUR 12.00 bill | Hosted demo                            |
+| 5   | 2:10-2:45 | Why it was blocked: the replay     | Hosted demo                            |
+| 6   | 2:45-3:10 | Real rails                         | **Testnet runs** (testnet and sandbox) |
+| 7   | 3:10-3:30 | STOP                               | Hosted demo                            |
+| 8   | 3:30-3:55 | The numbers, close on Flow         | Benchmark, Flow view                   |
 
 ## 1. Cold open on Flow (0:00-0:15)
 
@@ -58,7 +58,7 @@ signed.
 **On screen:** filter **At our store**. "Buyer's warrant pass checked" (the owner who signed, the
 mandate, the cap against the price), "Buyer refused at the store" (no warrant pass: not served,
 not charged), and a dispute decided order by order: one refunded for wrong data with its on-chain
-transaction, the others kept ("data was correct", "order not found"). Then **Live runs**, the
+transaction, the others kept ("data was correct", "order not found"). Then **Testnet runs**, the
 Metal testnet dispute row: purchases `0x32a27368…` and `0x6f658444…` with their passes, the
 refund by mandate pull `0x2314f9bc…`, the repeat refund refused, and "my agent never agreed"
 rejected with 11 of 11 checks holding. Cut to the explorer page for the refund.
@@ -69,7 +69,7 @@ records, order by order."
 
 ## 4. Needs you: the held EUR 12.00 bill (1:30-2:10)
 
-**On screen:** **Needs you** at the top: "Treasury agent → Data licensor (EUR) · EUR 12.00",
+**On screen:** **Needs you** at the top: "Treasury · licence → Data licensor (EUR) · EUR 12.00",
 reason "Data licensor (EUR) bills once a month and was already paid this month". A second item
 sits there too: treasury's sweep of earnings to Airwallex, which always waits for the owner. The card on the
 right shows exactly what is being approved and its fingerprint. Press **Approve EUR 12.00**; the
@@ -92,7 +92,7 @@ moved. Nothing to take on trust."
 
 ## 6. Real rails (2:45-3:10)
 
-**On screen:** **Live runs**. The other flows on Metal testnet and the Airwallex sandbox, with
+**On screen:** **Testnet runs**. The other flows on Metal testnet and the Airwallex sandbox, with
 dates and links: the mandate refusing a 4-cent purchase on chain,
 the EUR 50.00 licence fee by SWIFT (PAID), and the virtual Visa card (over-limit purchase declined
 by the card, STOP froze it in 627 ms). Cut to one explorer page for a hash.
@@ -128,5 +128,5 @@ TODO: re-take the numbers from the latest `pnpm bench` before recording.
 
 The terminal scenes (`pnpm scene`, `pnpm scene:dispute`, `pnpm scene:earnings --sandbox`,
 `pnpm scene:card --sandbox`) show the same beats with live hashes; use them as cutaways if
-**Live runs** isn't enough. Raising a limit (**Scenarios** → **Raise to 4 cents** → **Treasury
+**Testnet runs** isn't enough. Raising a limit (**Scenarios** → **Raise to 4 cents** → **Treasury
 asks to set the sourcing cap to …** → **Sign new limits**) fits if there is time under 4 minutes.

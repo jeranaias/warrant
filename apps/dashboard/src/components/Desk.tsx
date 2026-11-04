@@ -3,10 +3,18 @@ import type { CSSProperties, ReactNode } from "react";
 import { HOSTED, api, isOwner } from "../api.js";
 import type { PendingApproval, WarrantRow } from "../api.js";
 import bench from "../../../../bench/results.json";
-import { FILTERS, askGroups, deskRows, filterCounts, filterRows, paySentence } from "../desk.js";
+import {
+  FILTERS,
+  askGroups,
+  blockedKinds,
+  deskRows,
+  filterCounts,
+  filterRows,
+  paySentence,
+} from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
 import { OTHER, leftFraction, passesOf, payeeNodes } from "../flow.js";
-import { agentName, benchLine, cents, money, namesOf, time } from "../format.js";
+import { benchLine, cents, money, namesOf, time, warrantName } from "../format.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
@@ -46,7 +54,7 @@ const PAGES: { id: Page; label: string }[] = [
   { id: "activity", label: "Activity" },
   { id: "mandates", label: "Mandates" },
   { id: "scenarios", label: "Scenarios" },
-  { id: "live", label: "Live runs" },
+  { id: "live", label: "Testnet runs" },
 ];
 
 /** Committed with the corpus; `pnpm bench` rewrites it and CI fails when it is stale. */
@@ -68,9 +76,13 @@ export function Desk({
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
   const payees = useMemo(() => payeeNodes(warrants), [warrants]);
-  const passes = useMemo(() => passesOf(engine.events, warrants), [engine.events, warrants]);
+  const passes = useMemo(
+    () => passesOf(engine.events, warrants, engine.approvals),
+    [engine.events, warrants, engine.approvals],
+  );
   const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
-  const nameOf = (id: string) => agentName(warrants.find((w) => w.warrantId === id)?.agentRole);
+  const nameOf = (id: string) =>
+    warrantName(id, warrants.find((w) => w.warrantId === id)?.agentRole);
   const payeeOf = (id: string) =>
     id === OTHER ? "a customer" : (payees.find((p) => p.id === id)?.name ?? id);
   const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
@@ -79,11 +91,21 @@ export function Desk({
   const rows = deskRows(passes, moments, nameOf, payeeOf);
   const asks = askGroups(engine.approvals, roleOfAgent);
   const counts = filterCounts(rows);
+  const kinds = blockedKinds(rows);
+  const countText = (id: DeskFilter) =>
+    id === "blocked" && kinds > 0
+      ? `${counts[id]} · ${kinds} ${kinds === 1 ? "kind" : "kinds"}`
+      : String(counts[id]);
   const [filter, setFilter] = useState<DeskFilter>("all");
   const [page, setPage] = useState<Page | null>(null);
   const [pick, setPick] = useState<Pick>(null);
+  const [hideAskKey, setHideAskKey] = useState<string | null>(null);
+  const [hideStopAt, setHideStopAt] = useState<string | null>(null);
   const names = useMemo(() => namesOf(engine.events, warrants), [engine.events, warrants]);
-  const choose = setPick;
+  const choose = (next: Pick) => {
+    setPick(next);
+    if (next?.kind === "ask") setHideAskKey(null);
+  };
   // Every request line opens on its replay (Replay.tsx); a folded line shows its latest.
   const steps = (proposalId: string, latest = false) => (
     <div className="desk-steps">
@@ -91,26 +113,32 @@ export function Desk({
       <Replay proposalId={proposalId} names={names} version={engine.events.length} />
     </div>
   );
-  const detailOf = (r: DeskRow) => <RowDetail r={r} steps={steps} />;
+  const detailOf = (r: DeskRow) => <RowDetail r={r} steps={steps} onClose={() => choose(null)} />;
   const shown = filterRows(rows, filter);
 
   const pickedAsk = pick?.kind === "ask" ? asks.find((g) => g.key === pick.key) : undefined;
   const pickedRow = pick?.kind === "row" ? rows.find((r) => r.key === pick.key) : undefined;
   // A held request comes first unless the owner picked something else; once one is decided the
   // next one takes its place.
-  const ask = pickedAsk ?? (pickedRow ? undefined : asks[0]);
+  const defaultAsk = asks[0] && hideAskKey !== asks[0].key ? asks[0] : undefined;
+  const ask = pickedAsk ?? (pickedRow ? undefined : defaultAsk);
   // On a narrow screen held requests stay on top whatever row is open below them.
   const topAsk = pickedAsk ?? asks[0];
-  const receipt = stopped && engine.kill?.last ? engine.kill : null;
+  const stopAt = stopped ? (engine.kill?.last?.event.at ?? null) : null;
+  const receipt =
+    stopAt !== null && hideStopAt !== stopAt && engine.kill?.last ? engine.kill : null;
   const owner = isOwner();
 
-  const keys = useRef({ page });
-  keys.current = { page };
+  const keys = useRef({ page, pick, askKey: ask?.key ?? null, stopAt: receipt ? stopAt : null });
+  keys.current = { page, pick, askKey: ask?.key ?? null, stopAt: receipt ? stopAt : null };
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (keyOf(e) !== "Escape") return;
-      if (keys.current.page) setPage(null);
-      else choose(null);
+      const cur = keys.current;
+      if (cur.page) setPage(null);
+      else if (cur.pick) setPick(null);
+      else if (cur.askKey) setHideAskKey(cur.askKey);
+      else if (cur.stopAt !== null) setHideStopAt(cur.stopAt);
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
@@ -126,8 +154,16 @@ export function Desk({
       <span className={`desk-link ${engine.connected ? "on" : ""}`}>
         {engine.connected ? "live" : "connecting"}
       </span>
+      {BENCH_LINE && <span className="bench-chip mono">{BENCH_LINE}</span>}
       <span className="spacer" />
       {HOSTED && !narrow && <DemoLine onError={onError} />}
+      <button
+        className="desk-btn"
+        aria-pressed={page === "live"}
+        onClick={() => setPage(page === "live" ? null : "live")}
+      >
+        Testnet runs
+      </button>
       <button className="desk-btn" onClick={onFlow} title="Show the gate view">
         Flow
       </button>
@@ -171,6 +207,7 @@ export function Desk({
             <DemoLine onError={onError} />
           </p>
         )}
+        {pageView}
         {receipt && <StopReceipt kill={receipt} roleOf={roleOfWarrant} />}
         {topAsk && (
           <AskDetail
@@ -200,7 +237,7 @@ export function Desk({
               aria-selected={filter === f.id}
               onClick={() => setFilter(f.id)}
             >
-              {f.label} <span className="mono">{counts[f.id]}</span>
+              {f.label} <span className="mono">{countText(f.id)}</span>
             </button>
           ))}
         </div>
@@ -249,7 +286,7 @@ export function Desk({
                   setFilter(f.id);
                 }}
               >
-                {f.label} <span className="mono">{counts[f.id]}</span>
+                {f.label} <span className="mono">{countText(f.id)}</span>
               </button>
             </li>
           ))}
@@ -271,7 +308,6 @@ export function Desk({
           ))}
         </ul>
         <span className="spacer" />
-        {BENCH_LINE && <p className="desk-bench mono">{BENCH_LINE}</p>}
         <StopButton kill={engine.kill} onDone={engine.refresh} onError={onError} hotkeys terse />
       </nav>
 
@@ -303,7 +339,11 @@ export function Desk({
 
       <aside className="desk-detail" aria-live="polite">
         {receipt && !pickedRow ? (
-          <StopReceipt kill={receipt} roleOf={roleOfWarrant} />
+          <StopReceipt
+            kill={receipt}
+            roleOf={roleOfWarrant}
+            onClose={() => setHideStopAt(stopAt)}
+          />
         ) : ask ? (
           <AskDetail
             key={ask.key}
@@ -313,6 +353,10 @@ export function Desk({
             roleOf={roleOfAgent}
             steps={steps}
             hotkeys
+            onClose={() => {
+              setPick(null);
+              setHideAskKey(ask.key);
+            }}
           />
         ) : pickedRow ? (
           detailOf(pickedRow)
@@ -340,7 +384,7 @@ function Budgets({ warrants, stopped }: { warrants: WarrantRow[]; stopped: boole
         const tone = stopped ? "stop" : share < 0.2 ? "wait" : "";
         return (
           <li key={w.warrantId} className={tone} style={{ "--tint": tintOf(i) } as CSSProperties}>
-            <span className="desk-budget-name">{agentName(w.agentRole)}</span>
+            <span className="desk-budget-name">{warrantName(w.warrantId, w.agentRole)}</span>
             <span className="mono">
               {cents(Math.max(0, w.totalBudget.cents - w.spentCents), w.totalBudget.currency)}
             </span>
@@ -453,6 +497,7 @@ function AskDetail({
   roleOf,
   steps,
   hotkeys = false,
+  onClose,
 }: {
   g: AskGroup;
   onDone: () => void;
@@ -460,13 +505,21 @@ function AskDetail({
   roleOf: (agentId: string) => string | undefined;
   steps: Steps;
   hotkeys?: boolean;
+  onClose?: () => void;
 }) {
   const [first] = g.items;
   if (!first) return null;
   const n = g.items.length;
   return (
     <section className="sheet sheet-wait desk-sheet">
-      <div className="sheet-k">waiting{n > 1 ? ` · 1 of ${n} alike` : ""}</div>
+      <div className="sheet-head">
+        <div className="sheet-k">waiting{n > 1 ? ` · 1 of ${n} alike` : ""}</div>
+        {onClose && (
+          <button className="drawer-x" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        )}
+      </div>
       <ApprovalCard
         key={first.proposalId}
         a={first}
@@ -542,23 +595,53 @@ function DenyAll({
 
 type Steps = (proposalId: string, latest?: boolean) => ReactNode;
 
-function RowDetail({ r, steps }: { r: DeskRow; steps: Steps }) {
+function RowDetail({
+  r,
+  steps,
+  onClose,
+}: {
+  r: DeskRow;
+  steps: Steps;
+  onClose?: (() => void) | undefined;
+}) {
   if (r.kind === "store")
     return (
       <section className="sheet sheet-seller desk-sheet">
-        <div className="sheet-k">at our store</div>
+        <div className="sheet-head">
+          <div className="sheet-k">at our store</div>
+          {onClose && (
+            <button className="drawer-x" onClick={onClose} aria-label="Close">
+              ×
+            </button>
+          )}
+        </div>
         <Moment m={r.moment} />
       </section>
     );
-  return <PayDetail r={r} steps={steps} />;
+  return <PayDetail r={r} steps={steps} onClose={onClose} />;
 }
 
-function PayDetail({ r, steps }: { r: PayRow; steps: Steps }) {
+function PayDetail({
+  r,
+  steps,
+  onClose,
+}: {
+  r: PayRow;
+  steps: Steps;
+  onClose?: (() => void) | undefined;
+}) {
   return (
     <section className={`sheet desk-sheet ${r.fate === "blocked" ? "sheet-stop" : ""}`}>
-      <div className="sheet-k">
-        {r.fate}
-        {r.n > 1 ? ` · ${r.n} alike` : ""}
+      <div className="sheet-head">
+        <div className="sheet-k">
+          {r.fate}
+          {r.n > 1 ? ` · ${r.n} alike` : ""}
+        </div>
+        {onClose && (
+          <button className="drawer-x" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        )}
       </div>
       <p className="desk-sentence">{paySentence(r, !r.reason)}</p>
       {r.reason && (

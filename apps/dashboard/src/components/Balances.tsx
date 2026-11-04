@@ -1,5 +1,5 @@
 import type { WarrantRow } from "../api.js";
-import { agentName, cents, money, percentUsed } from "../format.js";
+import { cents, money, percentUsed, warrantName } from "../format.js";
 
 /**
  * One card per agent, answering "how much is left, and what may it do": money left against its
@@ -16,7 +16,7 @@ export function Balances({ warrants, stopped }: { warrants: WarrantRow[]; stoppe
           return (
             <article className="card agent" key={w.warrantId}>
               <header className="card-head">
-                <strong>{agentName(w.agentRole)}</strong>
+                <strong>{warrantName(w.warrantId, w.agentRole)}</strong>
                 <span className={`badge ${stopped ? "stop" : "seal"}`}>
                   {stopped ? "stopped" : `warrant v${w.version}`}
                 </span>

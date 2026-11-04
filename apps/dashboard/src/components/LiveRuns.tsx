@@ -4,7 +4,7 @@ import { LIVE_RUNS, METAL_EXPLORER } from "../liveRuns.js";
 export function LiveRuns() {
   return (
     <section className="panel live-runs">
-      <h2>Live runs</h2>
+      <h2>Testnet runs</h2>
       <p className="muted small">
         Same flows, run on the real Airwallex sandbox and Metal testnet. This page runs on simulated
         money.

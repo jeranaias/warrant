@@ -54,17 +54,25 @@ export function payeeNodes(warrants: WarrantRow[]): { id: string; name: string }
 
 /**
  * One pass per proposal. A request that waited for the owner becomes paid or blocked once the
- * owner decides; a failed execution counts as blocked by the rail.
+ * owner decides, or is dropped when it is no longer waiting (STOP clears every waiting approval);
+ * a failed execution counts as blocked by the rail.
  */
-export function passesOf(events: LoggedEvent[], warrants: WarrantRow[]): Pass[] {
+export function passesOf(
+  events: LoggedEvent[],
+  warrants: WarrantRow[],
+  approvals?: readonly { proposalId: string }[],
+): Pass[] {
   const named = new Set(warrants.flatMap((w) => w.payees.map((p) => p.payeeId)));
+  const waiting = approvals ? new Set(approvals.map((a) => a.proposalId)) : undefined;
   const decided = new Map<string, boolean>();
   const failed = new Set<string>();
-  for (const { event } of events) {
+  let stoppedAt = -1;
+  for (const { seq, event } of events) {
     if (event.type === "approval_decided" && event.ok)
       decided.set(event.proposalId, event.decision !== "denied");
     if (event.type === "execution" && event.execution.status === "failed")
       failed.add(event.proposalId);
+    if (event.type === "kill_switch") stoppedAt = seq;
   }
   const out: Pass[] = [];
   for (const { seq, at, event } of events) {
@@ -82,6 +90,7 @@ export function passesOf(events: LoggedEvent[], warrants: WarrantRow[]): Pass[] 
       fate = decided.get(p.proposalId) ? "paid" : "blocked";
       if (fate === "blocked") reason = REASONS["owner"];
     }
+    if (fate === "asked" && (seq < stoppedAt || (waiting && !waiting.has(p.proposalId)))) continue;
     if (fate === "paid" && failed.has(p.proposalId)) {
       fate = "blocked";
       // The card network's own refusal (its limits mirror the warrant) reads as the card's.

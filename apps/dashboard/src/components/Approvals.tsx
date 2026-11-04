@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import type { PendingApproval } from "../api.js";
-import { agentName, approveLabel, field, isMoney, money, time, viewRows } from "../format.js";
+import {
+  agentName,
+  approveLabel,
+  field,
+  isMoney,
+  money,
+  time,
+  viewRows,
+  warrantName,
+} from "../format.js";
 
 /**
- * "Waiting for you": each card shows every field of the view control stored, and Approve / Deny
- * sends back that view's hash. Never add, hide or reorder-by-meaning fields here: the owner must
- * approve exactly what control will hold them to. Labels live in format.ts (FIELD_LABELS). The
- * summary and the buttons come first; the full table follows them, always shown, never folded.
+ * "Waiting for you": each card shows the facts the owner approves (agent, amount, payee, reason),
+ * with raw ids and the view fingerprint folded under "Technical details". Approve / Deny sends
+ * back the server-provided `shownHash` unchanged.
  */
 export function Approvals({
   approvals,
@@ -86,6 +94,7 @@ export function ApprovalCard({
   }, [hotkeys]);
   const isBudget = a.view["kind"] === "budget_change";
   const amount = field(a.view, "amount");
+  const warrantId = field(a.view, "warrant.warrantId");
   const role = field(a.view, "agent.role") ?? field(a.view, "warrant.role");
   const payee =
     field(a.view, "payee.displayName") ??
@@ -98,7 +107,10 @@ export function ApprovalCard({
   const oldBudget = field(a.view, "from.totalBudget");
   const by = field(a.view, "proposedBy");
   const byRole = typeof by === "string" ? roleOf?.(by) : undefined;
-  const forName = agentName(typeof role === "string" ? role : undefined);
+  const forName = warrantName(
+    typeof warrantId === "string" ? warrantId : undefined,
+    typeof role === "string" ? role : undefined,
+  );
   const who =
     isBudget && byRole && byRole !== role
       ? `${agentName(byRole)} asks to change the ${forName.toLowerCase()}'s limits`
@@ -139,23 +151,26 @@ export function ApprovalCard({
         <button className="btn" disabled={sending} onClick={() => void decide("denied")}>
           Deny{hotkeys && <kbd>D</kbd>}
         </button>
-        <span
+      </footer>
+      <details className="approval-tech">
+        <summary>Technical details</summary>
+        <p
           className="fp mono muted small"
           title={`Your approval is bound to exactly what is shown here (${a.shownHash})`}
         >
           Fingerprint {fingerprint(a.shownHash)}
-        </span>
-      </footer>
-      <table className="kv" aria-label="Everything you sign">
-        <tbody>
-          {viewRows(a.view).map((r) => (
-            <tr key={r.key}>
-              <th>{r.label}</th>
-              <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        </p>
+        <table className="kv" aria-label="Everything you sign">
+          <tbody>
+            {viewRows(a.view).map((r) => (
+              <tr key={r.key}>
+                <th>{r.label}</th>
+                <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </article>
   );
 }

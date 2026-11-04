@@ -229,6 +229,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .big-number {
@@ -264,7 +265,7 @@ a {
 
 .facts {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 12px;
   margin: 0;
   font-size: 0.85rem;
@@ -272,10 +273,13 @@ a {
 
 .facts dt {
   color: var(--muted);
+  min-width: 0;
 }
 
 .facts dd {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* state pills: color means state, nothing else */
@@ -326,6 +330,7 @@ td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .kv th {
@@ -350,11 +355,15 @@ td {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ask-who {
   color: var(--muted);
   font-size: 0.9rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ask-amount {
@@ -364,6 +373,7 @@ td {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .ask-sub {
@@ -373,6 +383,8 @@ td {
 
 .ask-to {
   font-size: 1.05rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .why-box {
@@ -380,6 +392,8 @@ td {
   border-radius: var(--radius);
   padding: 10px 12px;
   font-size: 0.9rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .why-k {
@@ -404,8 +418,27 @@ td {
   flex-wrap: wrap;
 }
 
-.approval-foot .fp {
-  flex-basis: 100%;
+.approval-tech {
+  font-size: 0.84rem;
+}
+
+.approval-tech > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.approval-tech[open] > summary {
+  margin-bottom: 8px;
+}
+
+.approval-tech .fp {
+  margin: 0 0 6px;
+}
+
+.kv td {
+  overflow-wrap: anywhere;
 }
 
 /* activity */
@@ -729,13 +762,15 @@ select {
 }
 
 .gate-wrap {
-  position: absolute;
-  inset: 64px 24px 72px 290px;
+  grid-column: 2 / -1;
+  grid-row: 3;
+  position: relative;
+  min-width: 0;
+  min-height: 360px;
   display: grid;
-  transition: right 0.35s ease;
 }
 .gate-wrap.sheet-open {
-  right: 410px;
+  grid-column: 2 / 3;
 }
 
 .gt {
@@ -743,7 +778,7 @@ select {
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
   font-family: var(--num);
 }
 .gt-in {
@@ -774,7 +809,7 @@ select {
 }
 .gt-name {
   fill: var(--text);
-  font: 600 17px var(--ui);
+  font: 600 15px var(--ui);
 }
 .gt-sub {
   fill: var(--muted);
@@ -832,7 +867,7 @@ select {
   fill: var(--stop);
 }
 .gt-head {
-  font: 600 18px var(--ui);
+  font: 600 16px var(--ui);
 }
 .gt-node.paid .gt-head {
   fill: var(--ok);
@@ -845,7 +880,7 @@ select {
 }
 .gt-line {
   fill: var(--text);
-  font-size: 12.5px;
+  font-size: 12px;
   white-space: pre;
 }
 .gt-line.muted {
@@ -902,6 +937,7 @@ select {
 .gt-bar-why {
   color: var(--muted);
   font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 .gt-bar-why b {
   color: var(--text);
@@ -912,9 +948,9 @@ select {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(300px, 390px);
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 12px 18px;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 10px 16px;
   padding-block: 14px;
   padding-inline: 18px;
   pointer-events: none;
@@ -922,6 +958,7 @@ select {
 
 .hud > * {
   pointer-events: auto;
+  min-width: 0;
 }
 
 .hud-top {
@@ -960,10 +997,11 @@ select {
 
 .hud-bottom {
   grid-column: 1 / -1;
-  grid-row: 4;
+  grid-row: 5;
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
 }
 
 .hud-brand {
@@ -1150,6 +1188,7 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
 }
 
 .agent-name {
@@ -1158,12 +1197,15 @@ kbd {
   gap: 8px;
   font-weight: 600;
   font-size: 0.92rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Same colour as the agent's ring in the scene (tints.ts). */
 .agent-dot {
   width: 8px;
   height: 8px;
+  flex: none;
   border-radius: 50%;
   background: var(--tint, var(--seal));
   box-shadow: 0 0 8px var(--tint, transparent);
@@ -1206,6 +1248,7 @@ kbd {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .sheet-wait {
@@ -1226,22 +1269,26 @@ kbd {
   color: var(--muted);
 }
 
-.sheet-wait > .sheet-k {
+.sheet-wait > .sheet-k,
+.sheet-wait > .sheet-head > .sheet-k {
   color: var(--wait);
 }
 
-.sheet-stop > .sheet-k {
+.sheet-stop > .sheet-k,
+.sheet-stop > .sheet-head > .sheet-k {
   color: var(--stop);
 }
 
 .sheet-head {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
 }
 
 .sheet-head > div {
   flex: 1;
+  min-width: 0;
 }
 
 .sheet-title {
@@ -1250,6 +1297,7 @@ kbd {
   letter-spacing: -0.01em;
   text-transform: none;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .sheet-big {
@@ -1269,6 +1317,7 @@ kbd {
   margin: 0;
   color: var(--muted);
   font-size: 0.88rem;
+  overflow-wrap: anywhere;
 }
 
 .sheet .ask-amount {
@@ -1311,9 +1360,8 @@ kbd {
 }
 
 .recent-to {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .fate {
@@ -1332,14 +1380,12 @@ kbd {
 }
 
 .drawer {
-  position: absolute;
-  left: 18px;
-  bottom: 70px;
-  width: min(560px, calc(100vw - 36px));
-  max-height: calc(100vh - 170px);
+  position: relative;
+  width: 100%;
+  max-height: 100%;
   overflow: auto;
   padding: 4px;
-  z-index: 5;
+  min-width: 0;
 }
 
 .drawer .panel {
@@ -1371,6 +1417,7 @@ kbd {
 
 .hud-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   flex: none;
 }
@@ -1379,46 +1426,46 @@ kbd {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 8px 12px;
   border-radius: 9px;
   border: 1px solid var(--line);
   background: var(--solid);
   font-size: 0.82rem;
-  white-space: nowrap;
-  overflow: hidden;
 }
 
 .ticker > * {
   flex-shrink: 0;
 }
 
-/* A narrow bar shortens the names and the reason, never the amount or the outcome. */
 .ticker-who {
   font-weight: 600;
   flex-shrink: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .ticker-why {
   color: var(--muted);
   flex-shrink: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
-.hud-bench {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-size: 0.68rem;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.bench-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--seal);
+  background: var(--seal-bg);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .hud-bottom .btn.kill {
@@ -1484,6 +1531,7 @@ kbd {
   z-index: 3;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin: 0 -16px;
   padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
@@ -1542,9 +1590,8 @@ kbd {
 
 .ph-agent {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ph-n {
@@ -1554,13 +1601,13 @@ kbd {
 
 /* First visit: three steps along the bottom (components/FirstRun.tsx). */
 .firstrun {
-  position: absolute;
-  left: 50%;
-  bottom: 70px;
-  transform: translateX(-50%);
+  grid-column: 1 / -1;
+  grid-row: 4;
+  justify-self: center;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 18px;
+  gap: 8px 18px;
   margin: 0;
   padding: 6px 8px 6px 16px;
   list-style: none;
@@ -1568,8 +1615,6 @@ kbd {
   border-radius: 10px;
   background: var(--solid);
   font-size: 0.82rem;
-  white-space: nowrap;
-  z-index: 4;
 }
 
 .firstrun li {
@@ -1677,7 +1722,8 @@ kbd {
   min-height: 52px;
   padding-inline: 10px;
   font-size: 0.95rem;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ph-demo {
@@ -1729,9 +1775,8 @@ kbd {
 }
 
 .ph-q-who {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ph-queue .small {
@@ -1875,7 +1920,8 @@ kbd {
   border-color: var(--seal);
 }
 
-.sheet-seller > .sheet-k {
+.sheet-seller > .sheet-k,
+.sheet-seller > .sheet-head > .sheet-k {
   color: var(--seal);
 }
 
@@ -1885,9 +1931,11 @@ kbd {
   gap: 6px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
+  min-width: 0;
 }
 
-.sheet-k + .moment {
+.sheet-k + .moment,
+.sheet-head + .moment {
   padding-top: 0;
   border-top: 0;
 }
@@ -1903,11 +1951,13 @@ kbd {
   font-weight: 600;
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .moment-sum {
   margin: 0;
   font-size: 0.85rem;
+  overflow-wrap: anywhere;
 }
 
 .moment.refused .moment-sum {
@@ -1960,7 +2010,7 @@ button.ph-desk {
 .desk {
   --solid: var(--panel);
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 400px;
+  grid-template-columns: 240px minmax(0, 1fr) 400px;
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
     "top top top"
@@ -1972,6 +2022,10 @@ button.ph-desk {
   font-family: var(--ui);
 }
 
+.desk > * {
+  min-width: 0;
+}
+
 .desk.is-stopped .desk-top {
   box-shadow: inset 0 -2px 0 var(--stop);
 }
@@ -1980,6 +2034,7 @@ button.ph-desk {
   grid-area: top;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--line);
@@ -2032,6 +2087,12 @@ button.ph-desk {
   border-color: var(--muted);
 }
 
+.desk-btn[aria-pressed="true"] {
+  border-color: var(--seal);
+  background: var(--seal-bg);
+  color: var(--seal);
+}
+
 .desk-banner {
   grid-area: banner;
   padding: 8px 16px 0;
@@ -2070,9 +2131,10 @@ button.ph-desk {
 .desk-filter {
   width: 100%;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 8px;
+  gap: 4px 8px;
   padding: 7px 10px;
   border: 0;
   border-radius: 6px;
@@ -2081,6 +2143,7 @@ button.ph-desk {
   font: 500 0.9rem var(--ui);
   text-align: left;
   cursor: pointer;
+  min-width: 0;
 }
 
 .desk-filter .mono {
@@ -2121,9 +2184,14 @@ button.ph-desk {
 
 .desk-budgets li {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 2px 8px;
   font-size: 0.85rem;
+}
+
+.desk-budget-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .desk-bar {
@@ -2146,12 +2214,6 @@ button.ph-desk {
 
 .desk-budgets .stop .desk-bar > span {
   background: var(--stop);
-}
-
-.desk-bench {
-  margin: 0 4px;
-  color: var(--muted);
-  font-size: 0.68rem;
 }
 
 .desk-nav .stop-confirm {
@@ -2257,11 +2319,15 @@ button.ph-desk {
 
 .desk-row-text {
   font-size: 0.92rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .desk-row-why {
   font-size: 0.8rem;
   color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .desk-row.blocked .desk-row-why {
@@ -2301,6 +2367,10 @@ button.ph-desk {
   position: relative;
 }
 
+.desk-page .panel > h2 {
+  padding-right: 36px;
+}
+
 .desk-page-x {
   position: absolute;
   top: 12px;
@@ -2332,6 +2402,7 @@ button.ph-desk {
   font-family: var(--serif);
   font-size: 1.25rem;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .desk-bulk {
@@ -2373,6 +2444,11 @@ button.ph-desk {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.desk-chips .chip {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .desk-chips .chip[aria-selected="true"] {
@@ -2425,7 +2501,24 @@ button.ph-desk {
 
 @media (max-width: 1100px) {
   .desk {
-    grid-template-columns: 190px minmax(0, 1fr) 340px;
+    grid-template-columns: 200px minmax(0, 1fr) 340px;
+  }
+}
+
+@media (max-width: 700px) {
+  .desk {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  .desk-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .desk-detail {
+    border-left: 0;
+    border-top: 1px solid var(--line);
   }
 }
 
