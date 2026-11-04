@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { AgentRole, AgentTask } from "@warrant/contracts";
+import { warrantFor } from "./context.js";
 import type { AgentContext } from "./context.js";
 
 /**
@@ -25,11 +26,12 @@ export const SYSTEM_PROMPTS: Readonly<Record<AgentRole, string>> = {
  */
 export function renderTask(task: AgentTask, ctx: AgentContext): string {
   const { content, ...fields } = task;
+  const w = warrantFor(task, ctx);
   const you = {
-    warrantId: ctx.warrantId,
-    purpose: ctx.purpose,
-    allowedRails: ctx.allowedRails,
-    payees: ctx.payees,
+    warrantId: w.warrantId,
+    purpose: w.purpose,
+    allowedRails: w.allowedRails,
+    payees: w.payees,
     ...(ctx.role === "support" ? { storedOrders: ctx.orders } : {}),
   };
   return [

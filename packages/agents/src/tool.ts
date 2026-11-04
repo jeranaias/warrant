@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { Currency, PaymentProposal, Rail, Recurrence, SpendCategory } from "@warrant/contracts";
 import type { AgentTask } from "@warrant/contracts";
+import { warrantFor } from "./context.js";
 import type { AgentContext } from "./context.js";
 
 /**
@@ -107,8 +108,8 @@ export function toProposal(
     ...pick("targetCurrency"),
     justification: String(i["justification"] ?? "").slice(0, 2000),
     proposalId: ids.proposalId(),
-    // A sweep goes under treasury's sweep warrant (ADR-022); everything else under the main one.
-    warrantId: task.kind === "sweep" && ctx.sweepWarrantId ? ctx.sweepWarrantId : ctx.warrantId,
+    // The warrant the prompt showed: treasury's sweep warrant for a sweep (ADR-022), else the main one.
+    warrantId: warrantFor(task, ctx).warrantId,
     agentId: ctx.agentId,
     agentRole: ctx.role,
     idempotencyKey: ids.idempotencyKey(),

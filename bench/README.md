@@ -21,7 +21,9 @@ Defaults: the naive scripted agent (it obeys instructions in the content, so att
 the deterministic purpose check. With `ANTHROPIC_API_KEY` set, `BENCH_AGENT=model` uses the model
 agent and `BENCH_PURPOSE=model` the model purpose check. With the model, run cases at once with
 `BENCH_CONCURRENCY=8` (default 1): every call waits on the network, and one at a time the full
-corpus takes close to an hour.
+corpus takes close to an hour. The key is read from the repo's `.env`. Each run stops at
+`AGENT_MAX_CALLS` and `PURPOSE_MAX_CALLS` model calls (2000 each here; a full run makes about 1,500),
+prints the calls it used, and says its scores are not valid if a stop was reached or a case errored.
 
 ## What still gets through, and why
 
