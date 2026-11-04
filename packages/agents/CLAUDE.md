@@ -5,7 +5,9 @@
 runner fills ids, warrant, agent, idempotency key and `sourceRef`, then submits the
 `PaymentProposal` to control (`POST /proposals`). Treasury also has `propose_limits` (`src/limits.ts`,
 ADR-020) for `spend_review` tasks: a `BudgetChangeProposal` sent to `POST /budget-changes`, which
-moves no money and always waits for the owner. Treasury's `sweep` task is not wired yet.
+moves no money and always waits for the owner. A `sweep` task (ADR-022) is shown, and proposed
+under, treasury's sweep warrant: `warrantFor(task, ctx)` in `src/context.ts` picks the warrant for
+both, so the model is never shown one warrant and paid under another.
 
 **Layout:**
 
@@ -16,7 +18,11 @@ moves no money and always waits for the owner. Treasury's `sweep` task is not wi
   instructions in the task content, so attacks land. Used in CI, tests and runs without a key.
 - `replay.ts`: record / replay of model responses for tests (`AGENT_RECORD=<file>` records).
 - `runner.ts`: `runTask` (one task, any `Submit`), `EngineClient` and `runLoop` (the live loop).
-- `brains.ts`: `brainFromEnv`: the model when `ANTHROPIC_API_KEY` is set, else the script.
+- `brains.ts`: `brainFromEnv`: the model when `ANTHROPIC_API_KEY` is set, else the script. The model
+  is capped per run (`limitCalls`, `AGENT_MAX_CALLS`, default 100): past it, calls throw
+  `ModelCallLimit` without reaching the API, and `pnpm agents` stops.
+- `env.ts`: `loadEnv` reads the repo's `.env` for `pnpm agents` and `pnpm bench`, by the engine's
+  rules (never overrides, skips blanks, never prints).
 
 Run against the engine: `pnpm engine`, then `pnpm agents` (or `pnpm agents --scenario <name>` to
 load one of `GET /scenarios` first). `bench/runner/agents-e2e.test.ts` runs every scenario this way

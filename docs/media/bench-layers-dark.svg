@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 354" width="960" height="354" role="img" aria-label="What stopped the 150 blocked attacks" font-family='system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'>
+<title>What stopped the 150 blocked attacks</title>
+<rect width="960" height="354" fill="#1a1a19"/>
+<text x="40.0" y="40.0" font-size="26" font-weight="700" fill="#f0efec" text-anchor="start" dominant-baseline="middle">What stopped the 150 blocked attacks</text>
+<text x="40.0" y="74.0" font-size="16" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">The Warrant layer that stopped each attack: rules in code alone stop 74%, with no model or person asked</text>
+<text x="40.0" y="131.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Rules in code</text>
+<path d="M270.0,116.0 H806.0 Q810.0,116.0 810.0,120.0 V142.0 Q810.0,146.0 806.0,146.0 H270.0 Z" fill="#3987e5"/>
+<text x="822.0" y="131.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">111  (74%)</text>
+<text x="40.0" y="181.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Waited for the owner</text>
+<path d="M270.0,166.0 H407.1 Q411.1,166.0 411.1,170.0 V192.0 Q411.1,196.0 407.1,196.0 H270.0 Z" fill="#3987e5"/>
+<text x="423.1" y="181.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">29  (19%)</text>
+<text x="40.0" y="231.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Purpose check</text>
+<path d="M270.0,216.0 H309.8 Q313.8,216.0 313.8,220.0 V242.0 Q313.8,246.0 309.8,246.0 H270.0 Z" fill="#3987e5"/>
+<text x="325.8" y="231.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">9  (6%)</text>
+<text x="40.0" y="281.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Refused at the rail</text>
+<path d="M270.0,266.0 H272.4 Q274.9,266.0 274.9,268.4 V293.6 Q274.9,296.0 272.4,296.0 H270.0 Z" fill="#3987e5"/>
+<text x="286.9" y="281.0" font-size="17" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">1  (1%)</text>
+<text x="40.0" y="332.0" font-size="13" font-weight="400" fill="#898781" text-anchor="start" dominant-baseline="middle">Per attack, the layer that stopped most of its proposals. Scripted agent; source: pnpm bench.</text>
+</svg>
