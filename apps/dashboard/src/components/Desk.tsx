@@ -46,7 +46,7 @@ const PAGES: { id: Page; label: string }[] = [
   { id: "activity", label: "Activity" },
   { id: "mandates", label: "Mandates" },
   { id: "scenarios", label: "Scenarios" },
-  { id: "live", label: "Live runs" },
+  { id: "live", label: "Testnet runs" },
 ];
 
 /** Committed with the corpus; `pnpm bench` rewrites it and CI fails when it is stale. */
@@ -132,6 +132,13 @@ export function Desk({
       {BENCH_LINE && <span className="bench-chip mono">{BENCH_LINE}</span>}
       <span className="spacer" />
       {HOSTED && !narrow && <DemoLine onError={onError} />}
+      <button
+        className="desk-btn"
+        aria-pressed={page === "live"}
+        onClick={() => setPage(page === "live" ? null : "live")}
+      >
+        Testnet runs
+      </button>
       <button className="desk-btn" onClick={onFlow} title="Show the gate view">
         Flow
       </button>
@@ -175,6 +182,7 @@ export function Desk({
             <DemoLine onError={onError} />
           </p>
         )}
+        {pageView}
         {receipt && <StopReceipt kill={receipt} roleOf={roleOfWarrant} />}
         {topAsk && (
           <AskDetail

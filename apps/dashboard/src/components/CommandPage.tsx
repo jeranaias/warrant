@@ -177,6 +177,16 @@ export function CommandPage({
           {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
           <span className="hud-clock mono">{clock} UTC</span>
+          <button
+            className="hud-btn"
+            aria-pressed={drawer === "live"}
+            onClick={() => {
+              setReplayId(null);
+              setDrawer(drawer === "live" ? null : "live");
+            }}
+          >
+            Testnet runs
+          </button>
           <button className="hud-btn" onClick={onDesk}>
             Desk
           </button>
@@ -270,7 +280,7 @@ export function CommandPage({
                 ["activity", "Activity", "L"],
                 ["mandates", "Mandates", null],
                 ["scenarios", "Scenarios", null],
-                ["live", "Live runs", null],
+                ["live", "Testnet runs", null],
               ] as const
             ).map(([id, label, key]) => (
               <button

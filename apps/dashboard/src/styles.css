@@ -2034,6 +2034,12 @@ button.ph-desk {
   border-color: var(--muted);
 }
 
+.desk-btn[aria-pressed="true"] {
+  border-color: var(--seal);
+  background: var(--seal-bg);
+  color: var(--seal);
+}
+
 .desk-banner {
   grid-area: banner;
   padding: 8px 16px 0;
