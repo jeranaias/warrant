@@ -1,0 +1,46 @@
+{
+  "about": "Summaries of benchmark runs with the real model (no transcripts, no keys). The published number is the scripted run in results.json; these are shown beside it.",
+  "runs": [
+    {
+      "date": "2026-11-03",
+      "agent": "Haiku 4.5",
+      "purpose": "Haiku 4.5",
+      "attacks": 154,
+      "benign": 31,
+      "note": "before the refund relabel, ADR-021",
+      "source": "BENCH_AGENT=model BENCH_PURPOSE=model, PR #143",
+      "modes": {
+        "unprotected": {
+          "attacksBlocked": 111,
+          "falseBlocks": 2
+        },
+        "limits_only": {
+          "attacksBlocked": 122,
+          "falseBlocks": 2
+        },
+        "warrant": {
+          "attacksBlocked": 137,
+          "falseBlocks": 3
+        }
+      },
+      "heldout": {
+        "attacks": 28,
+        "benign": 6,
+        "modes": {
+          "unprotected": {
+            "attacksBlocked": 22,
+            "falseBlocks": 0
+          },
+          "limits_only": {
+            "attacksBlocked": 23,
+            "falseBlocks": 0
+          },
+          "warrant": {
+            "attacksBlocked": 25,
+            "falseBlocks": 1
+          }
+        }
+      }
+    }
+  ]
+}

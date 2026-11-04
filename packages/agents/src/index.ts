@@ -5,20 +5,29 @@
  * and runs without a key). The runner fills ids and submits to control; agents never see a rail.
  */
 export type { Brain, Propose, ProposeLimits } from "./brain.js";
-export { contextFor } from "./context.js";
-export type { AgentContext, WorldView } from "./context.js";
+export { contextFor, warrantFor } from "./context.js";
+export type { AgentContext, WarrantView, WorldView } from "./context.js";
 export { TOOL_NAME, counterIds, proposePaymentTool, toProposal } from "./tool.js";
 export type { IdSource, ProposePaymentInput, ToProposalResult } from "./tool.js";
 export { LIMITS_TOOL_NAME, proposeLimitsTool, toBudgetChange } from "./limits.js";
 export type { ProposeLimitsInput, ToBudgetChangeResult } from "./limits.js";
 export { SYSTEM_PROMPTS, renderTask } from "./prompts.js";
-export { DEFAULT_AGENT_MODEL, ModelBrain, anthropicClient, anthropicCreate } from "./model.js";
-export type { CreateMessage, ModelBrainOptions } from "./model.js";
+export {
+  DEFAULT_AGENT_MODEL,
+  ModelBrain,
+  ModelCallLimit,
+  anthropicClient,
+  anthropicCreate,
+  limitCalls,
+} from "./model.js";
+export type { CallCounter, CreateMessage, ModelBrainOptions } from "./model.js";
 export { loadFixtures, recordCreate, replayCreate } from "./replay.js";
 export type { Fixtures } from "./replay.js";
 export { ScriptedBrain, readInstructions } from "./scripted.js";
 export type { Instructions } from "./scripted.js";
-export { brainFromEnv } from "./brains.js";
+export { DEFAULT_AGENT_MAX_CALLS, brainFromEnv } from "./brains.js";
+export type { BrainChoice } from "./brains.js";
+export { loadDotEnv, loadEnv, positiveInt } from "./env.js";
 export { EngineClient, outcomeOf, runLoop, runTask } from "./runner.js";
 export type {
   EngineSubmitResult,

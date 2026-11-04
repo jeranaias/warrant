@@ -145,7 +145,10 @@ storage. `/#/` is the desktop view; narrow screens get the phone page by themsel
 phone, run `pnpm dashboard --host` on a network you trust.
 
 A model API key in `.env` (names in `.env.example`) is optional. Without one, the agents are
-scripted and the purpose check is deterministic.
+scripted and the purpose check is deterministic. `pnpm engine`, `pnpm agents` and `pnpm bench` all
+read it from `.env`, and each run stops after a set number of model calls (`AGENT_MAX_CALLS`,
+`PURPOSE_MAX_CALLS`). `pnpm check:secrets`, part of `pnpm verify` and CI, fails if a key is ever
+committed.
 
 </details>
 

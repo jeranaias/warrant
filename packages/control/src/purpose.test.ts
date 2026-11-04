@@ -189,3 +189,47 @@ describe("model purpose check (recorded answers, no API call)", () => {
     );
   });
 });
+
+describe("purpose model call limit", () => {
+  const consistent =
+    '{"verdict":"consistent","reasons":["matches_warrant_purpose"],"explanation":"Routine."}';
+
+  it("past the cap nothing is sent and the owner decides (uncertain): it only gets stricter", async () => {
+    let sent = 0;
+    const check = modelPurpose({
+      complete: () => {
+        sent++;
+        return Promise.resolve(consistent);
+      },
+      maxCalls: 2,
+    });
+    const verdicts = [];
+    for (let i = 0; i < 3; i++) verdicts.push((await check.check(warrant, summary(), NOW)).verdict);
+    expect(verdicts).toEqual(["consistent", "consistent", "uncertain"]);
+    expect(sent).toBe(2);
+    expect(check.usage()).toEqual({ calls: 2, max: 2 });
+  });
+
+  it("a payment the floor already refuses costs no model call", async () => {
+    let sent = 0;
+    const check = modelPurpose({
+      complete: () => {
+        sent++;
+        return Promise.resolve(consistent);
+      },
+      maxCalls: 1,
+    });
+    const v = await check.check(warrant, summary({ category: "customer_refund" }), NOW);
+    expect(v.verdict).toBe("inconsistent");
+    expect(sent).toBe(0);
+  });
+
+  it("PURPOSE_MAX_CALLS sets the cap; a bad value is refused", () => {
+    const env = { ANTHROPIC_API_KEY: "test-key" };
+    const counted = (e: NodeJS.ProcessEnv) =>
+      (purposeFromEnv(e) as ReturnType<typeof modelPurpose>).usage();
+    expect(counted(env)).toEqual({ calls: 0, max: 200 });
+    expect(counted({ ...env, PURPOSE_MAX_CALLS: "25" })).toEqual({ calls: 0, max: 25 });
+    expect(() => purposeFromEnv({ ...env, PURPOSE_MAX_CALLS: "0" })).toThrow(/PURPOSE_MAX_CALLS/);
+  });
+});

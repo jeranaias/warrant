@@ -21,7 +21,9 @@ Defaults: the naive scripted agent (it obeys instructions in the content, so att
 the deterministic purpose check. With `ANTHROPIC_API_KEY` set, `BENCH_AGENT=model` uses the model
 agent and `BENCH_PURPOSE=model` the model purpose check. With the model, run cases at once with
 `BENCH_CONCURRENCY=8` (default 1): every call waits on the network, and one at a time the full
-corpus takes close to an hour.
+corpus takes close to an hour. The key is read from the repo's `.env`. Each run stops at
+`AGENT_MAX_CALLS` and `PURPOSE_MAX_CALLS` model calls (2000 each here; a full run makes about 1,500),
+prints the calls it used, and says its scores are not valid if a stop was reached or a case errored.
 
 ## What still gets through, and why
 
@@ -44,6 +46,18 @@ purchase order or the vendor's own billing feed), a service period on bills, and
 price from the seller. The model agent and the model purpose check may also do better; this table
 is for the reproducible default run. The held-out set is not tuned against: 26 of 28 attacks
 blocked, 1 of 6 normal payments held.
+
+## Charts
+
+`python3 bench/charts/make_charts.py` (standard library only; run `pnpm bench` first) writes the
+benchmark charts to `docs/media/bench-*.svg`, each in a light and a dark version, for the README,
+the video and the submission:
+
+- `bench-headline`: attacks blocked by setup, and normal payments wrongly held;
+- `bench-families`: per attack family, limits only vs Warrant;
+- `bench-layers`: which Warrant layer stopped each blocked attack;
+- `bench-model`: share blocked, scripted agent vs the real model, from `bench/model-runs.json`
+  (summaries of model runs: scores only, no transcripts, no keys).
 
 ## Adding a case
 
