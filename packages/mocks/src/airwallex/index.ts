@@ -285,10 +285,20 @@ export async function startAirwallexMock({
     const currencies = strList(ctl.allowed_currencies);
     const categories = strList(ctl.allowed_merchant_categories);
     if (!currencies || !categories) return bad("authorization_controls");
+    // active_to is kept when sent. CONFIRMED 2026-11-03 (retrieve of a sandbox card made with
+    // 2026-11-20T00:00:00Z): answered in UTC with milliseconds, `2026-11-20T00:00:00.000+00:00`; a card
+    // made without one has none. ASSUMED: an unreadable value is 400, not probed.
+    let activeTo: string | undefined;
+    if (ctl.active_to !== undefined) {
+      const at = typeof ctl.active_to === "string" ? Date.parse(ctl.active_to) : NaN;
+      if (Number.isNaN(at)) return bad("authorization_controls");
+      activeTo = new Date(at).toISOString().replace("Z", "+00:00");
+    }
     const n = state.cards.size;
     const card = {
       alert_settings: { low_remaining_transaction_limit: { enabled: true, percent: 10 } },
       authorization_controls: {
+        ...(activeTo ? { active_to: activeTo } : {}),
         allowed_currencies: currencies,
         allowed_merchant_categories: categories,
         allowed_transaction_count: ctl.allowed_transaction_count ?? "MULTIPLE",

@@ -3,15 +3,18 @@ import type { RailAdapter, RailInstruction, RailResult } from "../types.js";
 
 /**
  * Airwallex over REST (legacy shape, no x-api-version), the same calls against the sandbox and
- * `@warrant/mocks` Airwallex. Control is the only caller. Base version (lane B polishes):
+ * `@warrant/mocks` Airwallex. Control is the only caller.
  *
- *   AirwallexClient     login once, bearer token, JSON in and out, a timeout on every call
+ *   AirwallexClient     login once, bearer token, JSON in and out, a timeout on every call; refuses
+ *                       any Airwallex host but the sandbox API
  *   AirwallexTransfers  RailAdapter for `airwallex_transfer`: convert first if the wallet is short,
- *                       then a LOCAL transfer to the payee's beneficiary id
+ *                       then a LOCAL or SWIFT transfer to the payee's beneficiary id
  *   depositEarnings     the sandbox's simulated deposit, with the Metal tx hash as the reference
+ *   globalAccountFor    the Global Account a deposit goes into
  *
- * Every write carries a request_id taken from control's idempotency key. A timeout is `unknown`
- * and is looked up by that request_id, never resent (the real API refuses a reused request_id).
+ * Every write carries a request_id taken from control's idempotency key. A timeout or a 5xx on the
+ * transfer is `unknown` and is looked up by that request_id, never resent (the real API refuses a
+ * reused request_id). An empty lookup stays `unknown` until LOOKUP_GRACE_MS has passed.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,11 +30,32 @@ export interface AirwallexClientOptions {
 
 export class AirwallexTimeout extends Error {}
 
+/** The one Airwallex API host this repo may call (docs: the sandbox API; production is api.airwallex.com). */
+const SANDBOX_HOST = "api.sandbox.airwallex.com";
+
+/**
+ * Refuses any airwallex.com host but the sandbox API, judged by the parsed hostname (so a path,
+ * query or user name saying "sandbox" counts for nothing). Localhost and test hosts pass: they are
+ * not Airwallex.
+ */
+function assertNotProduction(baseUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.replace(/\.$/, "");
+  } catch {
+    throw new Error("Airwallex base URL is not a URL");
+  }
+  if ((host === "airwallex.com" || host.endsWith(".airwallex.com")) && host !== SANDBOX_HOST) {
+    throw new Error("Airwallex base URL must be the sandbox, never production");
+  }
+}
+
 export class AirwallexClient {
   private token: string | undefined;
   private readonly fetch: typeof fetch;
 
   constructor(private readonly opts: AirwallexClientOptions) {
+    assertNotProduction(opts.baseUrl);
     this.fetch = opts.fetch ?? fetch;
   }
 
@@ -119,7 +143,16 @@ export interface AirwallexTransfersOptions {
    * LOCAL (`fee_unknown`), so the sandbox scene pays the licensor by SWIFT (ADR-017).
    */
   transferMethod?: "LOCAL" | "SWIFT";
+  /** The time source for the lookup window (`LOOKUP_GRACE_MS`). Tests move it; default is real time. */
+  clock?: () => Date;
 }
+
+/**
+ * How long an empty lookup counts as "not listed yet" before it may settle as failed. A chosen
+ * safety margin, not a measurement: too long holds budget a little longer, too short lets money
+ * leave with no hold.
+ */
+export const LOOKUP_GRACE_MS = 10 * 60 * 1000;
 
 /** Transfer status -> control's view. PAID is done; SCHEDULED, PROCESSING and SENT are on the way. */
 export function transferStatus(t: Json | undefined): RailResult {
@@ -137,17 +170,30 @@ const codeOf = (b: any): string =>
 export class AirwallexTransfers implements RailAdapter {
   readonly rail = "airwallex_transfer" as const;
 
+  /** When each idempotency key was first in play (ms): the start of the lookup window. */
+  private readonly inPlaySince = new Map<string, number>();
+
   constructor(
     private readonly client: AirwallexClient,
     private readonly opts: AirwallexTransfersOptions,
   ) {}
 
+  private now(): number {
+    return (this.opts.clock?.() ?? new Date()).getTime();
+  }
+
   async execute(i: RailInstruction): Promise<RailResult> {
     const ccy = i.amount.currency;
+    // Before any call, so a conversion that times out counts too.
+    if (!this.inPlaySince.has(i.idempotencyKey)) this.inPlaySince.set(i.idempotencyKey, this.now());
     try {
       const gap = this.opts.alwaysConvert
         ? i.amount.cents
         : await this.shortfall(ccy, i.amount.cents);
+      // Nothing has moved yet, so failed is safe. A timeout throws and stays unknown.
+      if (gap === undefined) {
+        return { status: "failed", detail: "wallet balance could not be read" };
+      }
       if (gap > 0 && ccy !== this.opts.fundingCurrency) {
         const fx = await this.client.call("POST", "/api/v1/fx/conversions/create", {
           request_id: `${i.idempotencyKey}-fx`.slice(0, 64),
@@ -175,6 +221,7 @@ export class AirwallexTransfers implements RailAdapter {
       });
       if (r.status === 201) return transferStatus(r.body);
       if (r.body?.code === "duplicate_request_id") return this.getStatus(i.idempotencyKey);
+      if (r.status >= 500) return { status: "unknown", detail: "transfer service error" };
       return { status: "failed", detail: `transfer refused: ${codeOf(r.body)}` };
     } catch (e) {
       if (e instanceof AirwallexTimeout) return { status: "unknown", detail: "timed out" };
@@ -188,6 +235,13 @@ export class AirwallexTransfers implements RailAdapter {
       const r = await this.client.call("GET", `/api/v1/transfers?request_id=${q}`);
       const items: Json[] = Array.isArray(r.body?.items) ? r.body.items : [];
       if (r.status === 200 && items.length === 0) {
+        // A create that timed out or got a 5xx may still be in progress, so an empty list does not
+        // prove it never happened: stay unknown until the window has passed. A key we never sent
+        // (a restart) starts its window now.
+        const now = this.now();
+        const since = this.inPlaySince.get(idempotencyKey) ?? now;
+        this.inPlaySince.set(idempotencyKey, since);
+        if (now - since < LOOKUP_GRACE_MS) return { status: "unknown", detail: "not listed yet" };
         return { status: "failed", detail: "no transfer with this key" };
       }
       return transferStatus(items[0]);
@@ -196,10 +250,11 @@ export class AirwallexTransfers implements RailAdapter {
     }
   }
 
-  /** How much of `ccy` the wallet is short of `need`. */
-  private async shortfall(ccy: string, need: number): Promise<number> {
+  /** How much of `ccy` the wallet is short of `need`, or undefined if the balance cannot be read. */
+  private async shortfall(ccy: string, need: number): Promise<number | undefined> {
     const r = await this.client.call("GET", "/api/v1/balances/current");
-    const rows: Json[] = Array.isArray(r.body) ? r.body : [];
+    if (r.status !== 200 || !Array.isArray(r.body)) return undefined;
+    const rows: Json[] = r.body;
     const have = cents(rows.find((x) => x.currency === ccy)?.available_amount) ?? 0;
     return Math.max(0, need - have);
   }

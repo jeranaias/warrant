@@ -283,6 +283,31 @@ describe("authorization_controls allowlists", () => {
     expect(ok.json).toMatchObject({ status: "PENDING", merchant: { category_code: "5411" } });
   });
 
+  // A caller that compares a card's expiry with its warrant's needs the mock to keep it.
+  it.each([
+    ["2026-11-20T00:00:00Z", "2026-11-20T00:00:00.000+00:00"],
+    ["2026-11-20T08:00:00+08:00", "2026-11-20T00:00:00.000+00:00"],
+  ])("keeps active_to %s, answered in UTC with milliseconds", async (sent, kept) => {
+    const res = await call(CREATE, {
+      body: cardBody(await makeHolder(), undefined, { active_to: sent }),
+    });
+    expect(res.status).toBe(201);
+    expect(res.json.authorization_controls.active_to).toBe(kept);
+    const got = await call(`/api/v1/issuing/cards/${res.json.card_id}`);
+    expect(got.json.authorization_controls.active_to).toBe(kept);
+  });
+
+  it("a card created without active_to has none, and an unreadable one is refused", async () => {
+    const id = await makeCard();
+    const got = await call(`/api/v1/issuing/cards/${id}`);
+    expect(got.json.authorization_controls).not.toHaveProperty("active_to");
+    const res = await call(CREATE, {
+      body: cardBody(await makeHolder(), undefined, { active_to: "tomorrow" }),
+    });
+    expect(res.status).toBe(400);
+    expect(res.json.source).toBe("authorization_controls");
+  });
+
   it.each([{ allowed_currencies: "USD" }, { allowed_merchant_categories: [5411] }])(
     "refuses malformed allowlist %j",
     async (extra) => {

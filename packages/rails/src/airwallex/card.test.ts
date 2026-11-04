@@ -120,6 +120,32 @@ describe("airwallex card: controls mirror the warrant", () => {
     ]);
     expect(controlsDiffer(undefined, want)).toContain("limit currency");
   });
+
+  // A card that outlives its warrant is the failure: the expiry must be compared, and compared as
+  // a moment in time, because the API answers the same instant in its own spelling.
+  it("the same expiry in the API's spellings is no difference, whatever the offset", () => {
+    const want = cardControls(warrant); // active_to "2026-11-20T00:00:00Z"
+    for (const same of [
+      "2026-11-20T00:00:00.000+00:00", // what the sandbox returns (retrieve, 2026-11-03)
+      "2026-11-20T00:00:00+0000",
+      "2026-11-20T08:00:00.000+08:00",
+    ]) {
+      expect(controlsDiffer({ ...want, active_to: same }, want)).toEqual([]);
+    }
+  });
+
+  it("a later, earlier, missing or unreadable expiry is a difference", () => {
+    const want = cardControls(warrant);
+    for (const other of ["2026-12-20T00:00:00.000+00:00", "2026-11-19T23:59:59.999+00:00"]) {
+      expect(controlsDiffer({ ...want, active_to: other }, want)).toEqual(["expiry"]);
+    }
+    const without = { ...want };
+    delete without.active_to;
+    expect(controlsDiffer(without, want)).toEqual(["expiry"]);
+    for (const bad of ["tomorrow", "", null, 1795132800000]) {
+      expect(controlsDiffer({ ...want, active_to: bad }, want)).toEqual(["expiry"]);
+    }
+  });
 });
 
 describe("airwallex card: purchase answers", () => {
@@ -154,6 +180,39 @@ describe("airwallex card: purchase answers", () => {
       "declined [redacted] and [redacted]",
     );
     expect(redact("card 9ac4a67d-0865-4b69-8dc1-d3c3d3a117d2 ok")).toContain("9ac4a67d");
+  });
+
+  // An upstream that echoes a number the way it is printed on the card.
+  // Made-up digits in each real shape: no real or published test number sits in the repo.
+  it.each([
+    ["4444 4444 4444 4444", "4-4-4-4, spaces"],
+    ["4444-4444-4444-4444", "4-4-4-4, dashes"],
+    ["4444 4444-4444 4444", "mixed"],
+    ["3333 333333 33333", "4-6-5"],
+    ["3333 333333 3333", "4-6-4"],
+    ["5555 5555 5555 5555 555", "19 digits"],
+  ])("redacts %s (%s)", (pan) => {
+    expect(redact(`declined ${pan} by the issuer`)).toBe("declined [redacted] by the issuer");
+    expect(redact(`${pan}.`)).toBe("[redacted].");
+  });
+
+  it("does not eat the text after a spaced number", () => {
+    expect(redact("4444 4444 4444 4444 on 2026-11-03")).toBe("[redacted] on 2026-11-03");
+  });
+
+  it("leaves ordinary ids, dates, amounts and hashes alone", () => {
+    for (const ok of [
+      "res_1 prop_licence_fee scene-card-seat-1",
+      "2026-11-03T14:22:05.000+00:00",
+      "from 2026-11-01 2026-11-30 inclusive",
+      "USD 12.34, EUR 50.00, 5000 cents",
+      "9820a87c-e80f-4713-a2c1-12f0a011f76f",
+      "0x2314f9bc7aebbafaa150bf413480794df92d40e73431ada76cd3354514fae8f0",
+      "3f9a 12b4 77c0 9d21",
+      "ref 1234 5678 9012", // 12 digits: not a card
+    ]) {
+      expect(redact(ok)).toBe(ok);
+    }
   });
 });
 
