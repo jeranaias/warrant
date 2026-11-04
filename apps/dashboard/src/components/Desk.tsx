@@ -68,7 +68,10 @@ export function Desk({
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
   const payees = useMemo(() => payeeNodes(warrants), [warrants]);
-  const passes = useMemo(() => passesOf(engine.events, warrants), [engine.events, warrants]);
+  const passes = useMemo(
+    () => passesOf(engine.events, warrants, engine.approvals),
+    [engine.events, warrants, engine.approvals],
+  );
   const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
   const nameOf = (id: string) => agentName(warrants.find((w) => w.warrantId === id)?.agentRole);
   const payeeOf = (id: string) =>

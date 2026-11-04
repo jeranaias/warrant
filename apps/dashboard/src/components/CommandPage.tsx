@@ -89,7 +89,10 @@ export function CommandPage({
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
   const payees = useMemo(() => payeeNodes(warrants), [warrants]);
-  const passes = useMemo(() => passesOf(engine.events, warrants), [engine.events, warrants]);
+  const passes = useMemo(
+    () => passesOf(engine.events, warrants, engine.approvals),
+    [engine.events, warrants, engine.approvals],
+  );
   const { total, lanes } = useMemo(() => tally(passes), [passes]);
 
   const [selected, setSelected] = useState<string | null>(null);

@@ -175,4 +175,39 @@ group("held for you", () => {
     expect(limitRequests(approvals)).toBe(2);
     expect(limitRequests([])).toBe(0);
   });
+
+  it("drops waiting payments when approvals are empty after STOP", () => {
+    const warrants = [warrant("w1", ["pay_a"])];
+    const events: LoggedEvent[] = [
+      {
+        seq: 1,
+        at: "2026-11-02T00:00:00Z",
+        event: {
+          type: "proposal",
+          proposal: { proposalId: "p1", warrantId: "w1", payeeId: "pay_a", amount: usd(5) },
+          result: { decision: { outcome: "needs_owner_approval" } },
+        },
+      } as unknown as LoggedEvent,
+      {
+        seq: 2,
+        at: "2026-11-02T00:00:01Z",
+        event: {
+          type: "kill_switch",
+          result: {
+            event: { reason: "stop", at: "2026-11-02T00:00:01Z", revokedWarrantIds: ["w1"] },
+            revokedMandates: [],
+            problems: [],
+            durationMs: 5,
+          },
+        },
+      },
+    ];
+    expect(tally(passesOf(events.slice(0, 1), warrants, [{ proposalId: "p1" }])).total.asked).toBe(
+      1,
+    );
+    expect(tally(passesOf(events.slice(0, 1), warrants, [])).total.asked).toBe(0);
+    const approvals: { proposalId: string; view: Record<string, unknown> }[] = [];
+    const passes = passesOf(events, warrants, approvals);
+    expect(tally(passes).total.asked + limitRequests(approvals)).toBe(0);
+  });
 });
