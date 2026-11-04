@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" width="960" height="380" role="img" aria-label="A real model resists on its own; Warrant still adds" font-family='system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'>
+<title>A real model resists on its own; Warrant still adds</title>
+<rect width="960" height="380" fill="#fcfcfb"/>
+<text x="40.0" y="40.0" font-size="26" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">A real model resists on its own; Warrant still adds</text>
+<text x="40.0" y="74.0" font-size="16" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">Share of attacks blocked: scripted agent (obeys hidden text) vs the real model</text>
+<rect x="40" y="101" width="14" height="14" rx="3" fill="#eb6834"/>
+<text x="62.0" y="108.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">Scripted agent</text>
+<rect x="222" y="101" width="14" height="14" rx="3" fill="#2a78d6"/>
+<text x="244.0" y="108.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">Real model (Haiku 4.5)</text>
+<text x="40.0" y="162.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">No protection</text>
+<path d="M210.0,165.0 H667.3 Q671.3,165.0 671.3,169.0 V183.0 Q671.3,187.0 667.3,187.0 H210.0 Z" fill="#2a78d6"/>
+<text x="220.0" y="151.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">0%</text>
+<text x="681.3" y="176.0" font-size="15" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">72%</text>
+<text x="40.0" y="232.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">Limits only</text>
+<path d="M210.0,210.0 H660.2 Q664.2,210.0 664.2,214.0 V228.0 Q664.2,232.0 660.2,232.0 H210.0 Z" fill="#eb6834"/>
+<path d="M210.0,235.0 H713.0 Q717.0,235.0 717.0,239.0 V253.0 Q717.0,257.0 713.0,257.0 H210.0 Z" fill="#2a78d6"/>
+<text x="674.2" y="221.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">71%</text>
+<text x="727.0" y="246.0" font-size="15" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">79%</text>
+<text x="40.0" y="302.0" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">Warrant</text>
+<path d="M210.0,280.0 H825.4 Q829.4,280.0 829.4,284.0 V298.0 Q829.4,302.0 825.4,302.0 H210.0 Z" fill="#eb6834"/>
+<path d="M210.0,305.0 H775.4 Q779.4,305.0 779.4,309.0 V323.0 Q779.4,327.0 775.4,327.0 H210.0 Z" fill="#2a78d6"/>
+<text x="839.4" y="291.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">97%</text>
+<text x="789.4" y="316.0" font-size="15" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">89%</text>
+<text x="40.0" y="358.0" font-size="13" font-weight="400" fill="#898781" text-anchor="start" dominant-baseline="middle">Scripted: 155 attacks, pnpm bench. Real model: 154 attacks, run on 2026-11-03 (before the refund relabel, ADR-021).</text>
+</svg>

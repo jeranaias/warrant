@@ -45,6 +45,18 @@ price from the seller. The model agent and the model purpose check may also do b
 is for the reproducible default run. The held-out set is not tuned against: 26 of 28 attacks
 blocked, 1 of 6 normal payments held.
 
+## Charts
+
+`python3 bench/charts/make_charts.py` (standard library only; run `pnpm bench` first) writes the
+benchmark charts to `docs/media/bench-*.svg`, each in a light and a dark version, for the README,
+the video and the submission:
+
+- `bench-headline`: attacks blocked by setup, and normal payments wrongly held;
+- `bench-families`: per attack family, limits only vs Warrant;
+- `bench-layers`: which Warrant layer stopped each blocked attack;
+- `bench-model`: share blocked, scripted agent vs the real model, from `bench/model-runs.json`
+  (summaries of model runs: scores only, no transcripts, no keys).
+
 ## Adding a case
 
 1. Copy a case from the same family, give it a new `id` (= file name).

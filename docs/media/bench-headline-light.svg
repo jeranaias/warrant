@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 386" width="960" height="386" role="img" aria-label="Attacks blocked, out of 155" font-family='system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'>
+<title>Attacks blocked, out of 155</title>
+<rect width="960" height="386" fill="#fcfcfb"/>
+<text x="40.0" y="40.0" font-size="26" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">Attacks blocked, out of 155</text>
+<text x="40.0" y="74.0" font-size="16" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">The same agent and the same attacks, with three levels of protection</text>
+<text x="40.0" y="134.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">No protection</text>
+<rect x="210" y="118" width="560" height="32" rx="4" fill="#e1e0d9" opacity="0.6"/>
+<text x="784.0" y="134.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">0  (0%)</text>
+<text x="40.0" y="192.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">Limits only</text>
+<rect x="210" y="176" width="560" height="32" rx="4" fill="#e1e0d9" opacity="0.6"/>
+<path d="M210.0,176.0 H603.4 Q607.4,176.0 607.4,180.0 V204.0 Q607.4,208.0 603.4,208.0 H210.0 Z" fill="#b9b7af"/>
+<text x="784.0" y="192.0" font-size="18" font-weight="400" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">110  (71%)</text>
+<text x="40.0" y="250.0" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">Warrant</text>
+<rect x="210" y="234" width="560" height="32" rx="4" fill="#e1e0d9" opacity="0.6"/>
+<path d="M210.0,234.0 H747.9 Q751.9,234.0 751.9,238.0 V262.0 Q751.9,266.0 747.9,266.0 H210.0 Z" fill="#2a78d6"/>
+<text x="784.0" y="250.0" font-size="18" font-weight="700" fill="#0b0b0b" text-anchor="start" dominant-baseline="middle">150  (97%)</text>
+<text x="40.0" y="302.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">Normal payments wrongly held, out of 30:  No protection 0 · Limits only 0 · Warrant 1</text>
+<text x="40.0" y="328.0" font-size="15" font-weight="400" fill="#52514e" text-anchor="start" dominant-baseline="middle">Held-out attacks written by someone who didn't build control: 26 of 28 blocked by Warrant</text>
+<text x="40.0" y="364.0" font-size="13" font-weight="400" fill="#898781" text-anchor="start" dominant-baseline="middle">Scripted agent that obeys instructions hidden in the text, deterministic purpose check. Source: pnpm bench.</text>
+</svg>
