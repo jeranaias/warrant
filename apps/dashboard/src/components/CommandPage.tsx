@@ -99,7 +99,11 @@ export function CommandPage({
   const [drawer, setDrawer] = useState<Drawer | null>(null);
   // The request whose replay the activity drawer shows (null: the whole feed).
   const [replayId, setReplayId] = useState<string | null>(null);
-  const atStore = useMemo(() => sellerMoments(engine.events).length > 0, [engine.events]);
+  const [hideWaitFor, setHideWaitFor] = useState<string | null>(null);
+  const [hideStopAt, setHideStopAt] = useState<string | null>(null);
+  const [hideSellerAt, setHideSellerAt] = useState<number | null>(null);
+  const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
+  const lastMomentSeq = moments.at(-1)?.seq ?? 0;
   const motion = useMotion();
   const clock = useUtcClock();
 
@@ -107,59 +111,64 @@ export function CommandPage({
     if (selected && !warrants.some((w) => w.warrantId === selected)) setSelected(null);
   }, [selected, warrants]);
 
-  const keys = useRef({ warrants, drawer, selected });
-  keys.current = { warrants, drawer, selected };
+  const last = passes[passes.length - 1];
+  const lastEvent = last && engine.events.find((e) => e.seq === last.seq);
+  const focus = engine.approvals[0];
+  const agent = warrants.find((w) => w.warrantId === selected);
+  const stopAt = stopped ? (engine.kill?.last?.event.at ?? null) : null;
+  const showStop = stopAt !== null && hideStopAt !== stopAt;
+  const showWait = Boolean(focus && hideWaitFor !== focus.proposalId);
+  const showSeller = moments.length > 0 && hideSellerAt !== lastMomentSeq;
+  const rightOpen = Boolean(drawer || agent || showStop || showWait || showSeller);
+
+  const keys = useRef({
+    warrants,
+    drawer,
+    selected,
+    showStop,
+    stopAt,
+    showWait,
+    focusId: focus?.proposalId ?? null,
+    showSeller,
+    lastMomentSeq,
+  });
+  keys.current = {
+    warrants,
+    drawer,
+    selected,
+    showStop,
+    stopAt,
+    showWait,
+    focusId: focus?.proposalId ?? null,
+    showSeller,
+    lastMomentSeq,
+  };
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       const k = keyOf(e);
       if (!k) return;
-      const { warrants: ws, drawer: d, selected: s } = keys.current;
+      const cur = keys.current;
       if (/^[1-9]$/.test(k)) {
-        const w = ws[Number(k) - 1];
-        if (w) setSelected(w.warrantId === s ? null : w.warrantId);
+        const w = cur.warrants[Number(k) - 1];
+        if (w) setSelected(w.warrantId === cur.selected ? null : w.warrantId);
       } else if (k === "Escape") {
-        if (d) setDrawer(null);
-        else setSelected(null);
-      } else if (k === "l") setDrawer(d === "activity" ? null : "activity");
+        if (cur.drawer) setDrawer(null);
+        else if (cur.selected) setSelected(null);
+        else if (cur.showStop && cur.stopAt !== null) setHideStopAt(cur.stopAt);
+        else if (cur.showWait && cur.focusId) setHideWaitFor(cur.focusId);
+        else if (cur.showSeller) setHideSellerAt(cur.lastMomentSeq);
+      } else if (k === "l") setDrawer(cur.drawer === "activity" ? null : "activity");
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
   }, []);
 
-  const last = passes[passes.length - 1];
-  const lastEvent = last && engine.events.find((e) => e.seq === last.seq);
-  const focus = engine.approvals[0];
-  const agent = warrants.find((w) => w.warrantId === selected);
   const roleOfWarrant = (id: string) => warrants.find((w) => w.warrantId === id)?.agentRole;
   const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
   const owned = ownerLine(engine.events, roleOfWarrant, last?.seq ?? 0);
 
   return (
     <div className={`cmdpage${stopped ? " is-stopped" : ""}`}>
-      <div
-        className={`gate-wrap${engine.approvals.length || selected || (stopped && engine.kill?.last) || atStore ? " sheet-open" : ""}`}
-      >
-        {engine.world && (
-          <Gate
-            warrants={warrants}
-            passes={passes}
-            stopped={stopped}
-            motion={motion}
-            selected={selected}
-            onSelect={(id) => setSelected(id === null || id === selected ? null : id)}
-            limits={limitRequests(engine.approvals)}
-            onFate={(fate) => {
-              const latest = passes.filter((p) => p.fate === fate).at(-1)?.proposalId;
-              const id =
-                latest ?? (fate === "asked" ? engine.approvals.at(-1)?.proposalId : undefined);
-              if (!id) return;
-              setReplayId(id);
-              setDrawer("activity");
-            }}
-          />
-        )}
-      </div>
-
       <div className="hud">
         <header className="hud-top">
           <div className="hud-brand">
@@ -207,13 +216,85 @@ export function CommandPage({
           />
         </nav>
 
+        <div className={`gate-wrap${rightOpen ? " sheet-open" : ""}`}>
+          {engine.world && (
+            <Gate
+              warrants={warrants}
+              passes={passes}
+              stopped={stopped}
+              motion={motion}
+              selected={selected}
+              onSelect={(id) => setSelected(id === null || id === selected ? null : id)}
+              limits={limitRequests(engine.approvals)}
+              onFate={(fate) => {
+                const latest = passes.filter((p) => p.fate === fate).at(-1)?.proposalId;
+                const id =
+                  latest ?? (fate === "asked" ? engine.approvals.at(-1)?.proposalId : undefined);
+                if (!id) return;
+                setReplayId(id);
+                setDrawer("activity");
+              }}
+            />
+          )}
+        </div>
+
         <aside className="hud-right" aria-live="polite">
-          {stopped && engine.kill?.last ? (
-            <StopReceipt kill={engine.kill} roleOf={roleOfWarrant} />
-          ) : focus ? (
+          {drawer ? (
+            <section className="drawer" aria-label={drawer}>
+              <button className="drawer-x" onClick={() => setDrawer(null)} aria-label="Close">
+                ×
+              </button>
+              {drawer === "activity" && (
+                <Activity
+                  events={engine.events}
+                  warrants={warrants}
+                  open={replayId}
+                  onOpen={setReplayId}
+                />
+              )}
+              {drawer === "mandates" &&
+                (engine.chain ? (
+                  <Chain chain={engine.chain} />
+                ) : (
+                  <p className="muted">No chain.</p>
+                ))}
+              {drawer === "scenarios" && (
+                <Scene
+                  chain={engine.chain}
+                  warrants={warrants}
+                  onDone={engine.refresh}
+                  onError={onError}
+                />
+              )}
+              {drawer === "live" && <LiveRuns />}
+            </section>
+          ) : agent ? (
+            <AgentPanel
+              w={agent}
+              passes={passes}
+              payeeName={(id) => payees.find((p) => p.id === id)?.name ?? "customer"}
+              stopped={stopped}
+              onClose={() => setSelected(null)}
+            />
+          ) : showStop && engine.kill ? (
+            <StopReceipt
+              kill={engine.kill}
+              roleOf={roleOfWarrant}
+              onClose={() => setHideStopAt(stopAt)}
+            />
+          ) : showWait && focus ? (
             <section className="sheet sheet-wait">
-              <div className="sheet-k">
-                waiting · {engine.approvals.length > 1 ? `1 of ${engine.approvals.length}` : "1"}
+              <div className="sheet-head">
+                <div className="sheet-k">
+                  waiting · {engine.approvals.length > 1 ? `1 of ${engine.approvals.length}` : "1"}
+                </div>
+                <button
+                  className="drawer-x"
+                  onClick={() => setHideWaitFor(focus.proposalId)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
               </div>
               <ApprovalCard
                 key={focus.proposalId}
@@ -224,45 +305,10 @@ export function CommandPage({
                 roleOf={roleOfAgent}
               />
             </section>
-          ) : agent ? (
-            <AgentPanel
-              w={agent}
-              passes={passes}
-              payeeName={(id) => payees.find((p) => p.id === id)?.name ?? "customer"}
-              stopped={stopped}
-              onClose={() => setSelected(null)}
-            />
-          ) : (
-            <Seller events={engine.events} />
-          )}
+          ) : showSeller ? (
+            <Seller events={engine.events} onClose={() => setHideSellerAt(lastMomentSeq)} />
+          ) : null}
         </aside>
-
-        {drawer && (
-          <section className="drawer" aria-label={drawer}>
-            <button className="drawer-x" onClick={() => setDrawer(null)} aria-label="Close">
-              ×
-            </button>
-            {drawer === "activity" && (
-              <Activity
-                events={engine.events}
-                warrants={warrants}
-                open={replayId}
-                onOpen={setReplayId}
-              />
-            )}
-            {drawer === "mandates" &&
-              (engine.chain ? <Chain chain={engine.chain} /> : <p className="muted">No chain.</p>)}
-            {drawer === "scenarios" && (
-              <Scene
-                chain={engine.chain}
-                warrants={warrants}
-                onDone={engine.refresh}
-                onError={onError}
-              />
-            )}
-            {drawer === "live" && <LiveRuns />}
-          </section>
-        )}
 
         {!drawer && (
           <FirstRun
@@ -468,15 +514,24 @@ function AgentPanel({
 export function StopReceipt({
   kill,
   roleOf,
+  onClose,
 }: {
   kill: KillState;
   roleOf: (warrantId: string) => string | undefined;
+  onClose?: () => void;
 }) {
   const r = kill.last;
   if (!r) return null;
   return (
     <section className="sheet sheet-stop" role="status">
-      <div className="sheet-k">stopped · {time(r.event.at)}</div>
+      <div className="sheet-head">
+        <div className="sheet-k">stopped · {time(r.event.at)}</div>
+        {onClose && (
+          <button className="drawer-x" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        )}
+      </div>
       <p className="sheet-big mono">
         <span className="muted">Stopped in </span>
         {r.durationMs} ms
