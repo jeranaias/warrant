@@ -4,6 +4,7 @@ import {
   AirwallexTransfers,
   LOOKUP_GRACE_MS,
   cents,
+  globalAccountFor,
   major,
   transferStatus,
 } from "./index.js";
@@ -187,6 +188,66 @@ describe("airwallex adapter: an unreadable wallet balance", () => {
       detail: "wallet balance could not be read",
     });
     expect(calls).toEqual(["/api/v1/balances/current"]);
+  });
+});
+
+describe("airwallex: finding the Global Account for a deposit", () => {
+  const clientAnswering = (res: () => Response) =>
+    new AirwallexClient({
+      baseUrl: "http://awx.test",
+      clientId: "c",
+      apiKey: "k",
+      fetch: fakeFetch((path) =>
+        Promise.resolve(
+          path.endsWith("/global_accounts") ? res() : new Response("{}", { status: 404 }),
+        ),
+      ),
+    });
+  const usdDeposit = [{ currency: "USD", type: "DEPOSIT" }];
+
+  // A key that may not list Global Accounts must not read as "this account has none": the owner
+  // would go looking for a missing account instead of a missing permission.
+  it.each([401, 403, 503])("throws, naming HTTP %i, when the list is not a 200", async (status) => {
+    const client = clientAnswering(() => new Response(JSON.stringify({ code: "x" }), { status }));
+    await expect(globalAccountFor(client, "USD")).rejects.toThrow(
+      `global accounts list refused (HTTP ${status})`,
+    );
+  });
+
+  it("answers undefined, not an error, when the list is readable and has no match", async () => {
+    const body = {
+      items: [
+        { id: "ga_inactive", status: "INACTIVE", supported_features: usdDeposit },
+        {
+          id: "ga_eur",
+          status: "ACTIVE",
+          supported_features: [{ currency: "EUR", type: "DEPOSIT" }],
+        },
+        {
+          id: "ga_usd_payout",
+          status: "ACTIVE",
+          supported_features: [{ currency: "USD", type: "PAYOUT" }],
+        },
+      ],
+    };
+    const none = clientAnswering(() => new Response(JSON.stringify(body), { status: 200 }));
+    expect(await globalAccountFor(none, "USD")).toBeUndefined();
+    const empty = clientAnswering(
+      () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    expect(await globalAccountFor(empty, "USD")).toBeUndefined();
+  });
+
+  it("picks the first ACTIVE account that takes USD deposits", async () => {
+    const body = {
+      items: [
+        { id: "ga_inactive", status: "INACTIVE", supported_features: usdDeposit },
+        { id: "ga_usd", status: "ACTIVE", supported_features: usdDeposit },
+        { id: "ga_usd_later", status: "ACTIVE", supported_features: usdDeposit },
+      ],
+    };
+    const client = clientAnswering(() => new Response(JSON.stringify(body), { status: 200 }));
+    expect(await globalAccountFor(client, "USD")).toBe("ga_usd");
   });
 });
 

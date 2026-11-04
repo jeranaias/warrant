@@ -294,6 +294,8 @@ export async function globalAccountFor(
   currency: string,
 ): Promise<string | undefined> {
   const r = await client.call("GET", "/api/v1/global_accounts");
+  // A key without the permission answers 401 or 403: that is not "no account".
+  if (r.status !== 200) throw new Error(`global accounts list refused (HTTP ${r.status})`);
   const items: Json[] = Array.isArray(r.body?.items) ? r.body.items : [];
   const hit = items.find(
     (a) =>
