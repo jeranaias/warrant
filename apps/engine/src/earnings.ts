@@ -79,12 +79,51 @@ export async function mockAirwallexWorld(
  * The licensor as the sandbox pays it: a German IBAN with a BIC, paid by SWIFT. The hackathon
  * sandbox account has no fee set up for EUR LOCAL transfers (`fee_unknown`); SWIFT works (ADR-017).
  */
-const LICENSOR_SWIFT = {
+export const LICENSOR_SWIFT = {
   name: "Data Licensor GmbH (SWIFT)",
   iban: "DE89370400440532013000",
   swiftCode: "COBADEFFXXX",
   address: { street: "Unter den Linden 1", city: "Berlin", postcode: "10117", country: "DE" },
 };
+
+const clientMethod = new WeakMap<AirwallexClient, "LOCAL" | "SWIFT">();
+
+/**
+ * Resolves the licensor's EUR beneficiary id: finds `LICENSOR_SWIFT` by nickname on the sandbox,
+ * or creates it once if missing (ADR-017). Against `@warrant/mocks` (which has no
+ * `GET /api/v1/beneficiaries` route and models `LOCAL` SEPA only), creates `LICENSOR`.
+ */
+export async function licensorBeneficiary(client: AirwallexClient): Promise<string> {
+  const found = await client.call(
+    "GET",
+    `/api/v1/beneficiaries?nick_name=${encodeURIComponent(LICENSOR_SWIFT.name)}`,
+  );
+  if (found.status === 404) {
+    clientMethod.set(client, "LOCAL");
+    return createEurBeneficiary(client, LICENSOR);
+  }
+  clientMethod.set(client, "SWIFT");
+  const items: { id?: unknown; nickname?: unknown }[] = Array.isArray(found.body?.items)
+    ? found.body.items
+    : [];
+  const known = items.find((b) => b.nickname === LICENSOR_SWIFT.name && typeof b.id === "string");
+  return typeof known?.id === "string"
+    ? known.id
+    : await createEurBeneficiary(client, LICENSOR_SWIFT);
+}
+
+/**
+ * Builds the `AirwallexTransfers` adapter for sandbox live runs: SWIFT (ADR-017), funded from USD
+ * with `alwaysConvert`. Falls back to `LOCAL` when `licensorBeneficiary` resolved against the
+ * local `@warrant/mocks` server.
+ */
+export function sandboxAirwallexTransfers(client: AirwallexClient): AirwallexTransfers {
+  return new AirwallexTransfers(client, {
+    fundingCurrency: "USD",
+    alwaysConvert: true,
+    transferMethod: clientMethod.get(client) ?? "SWIFT",
+  });
+}
 
 /**
  * An AirwallexClient on the real sandbox, with the owner's keys from .env (AIRWALLEX_BASE_URL,
@@ -106,23 +145,10 @@ export function sandboxAirwallexClient(): AirwallexClient {
 
 export async function sandboxAirwallexWorld(now = new Date()): Promise<AirwallexWorld> {
   const client = sandboxAirwallexClient();
-  const found = await client.call(
-    "GET",
-    `/api/v1/beneficiaries?nick_name=${encodeURIComponent(LICENSOR_SWIFT.name)}`,
-  );
-  const items: { id?: unknown; nickname?: unknown }[] = Array.isArray(found.body?.items)
-    ? found.body.items
-    : [];
-  const known = items.find((b) => b.nickname === LICENSOR_SWIFT.name && typeof b.id === "string");
-  const licensorRef =
-    typeof known?.id === "string" ? known.id : await createEurBeneficiary(client, LICENSOR_SWIFT);
+  const licensorRef = await licensorBeneficiary(client);
   const globalAccountId = await globalAccountFor(client, "USD");
   if (!globalAccountId) throw new Error("the sandbox account has no active USD Global Account");
-  const transfers = new AirwallexTransfers(client, {
-    fundingCurrency: "USD",
-    alwaysConvert: true,
-    transferMethod: "SWIFT",
-  });
+  const transfers = sandboxAirwallexTransfers(client);
   const world = makeWorld(now, { airwallex: { transfers, licensorRef } });
   return { world, client, globalAccountId, close: async () => undefined };
 }
