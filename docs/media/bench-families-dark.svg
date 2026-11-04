@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 736" width="960" height="736" role="img" aria-label="Where Warrant adds to spending limits" font-family='system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'>
+<title>Where Warrant adds to spending limits</title>
+<rect width="960" height="736" fill="#1a1a19"/>
+<text x="40.0" y="40.0" font-size="26" font-weight="700" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Where Warrant adds to spending limits</text>
+<text x="40.0" y="74.0" font-size="16" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">Attacks blocked per family: limits only vs the full Warrant</text>
+<rect x="40" y="101" width="14" height="14" rx="3" fill="#5d5c57"/>
+<text x="62.0" y="108.0" font-size="15" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">Limits only</text>
+<rect x="195" y="101" width="14" height="14" rx="3" fill="#3987e5"/>
+<text x="217.0" y="108.0" font-size="15" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">Warrant</text>
+<rect x="32" y="132" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="150.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Sneaky recurring charge</text>
+<path d="M330.0,151.0 H775.2 Q779.2,151.0 779.2,155.0 V160.0 Q779.2,164.0 775.2,164.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="150.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">0 → 11 of 11</text>
+<text x="40.0" y="190.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Subscription trap</text>
+<path d="M330.0,176.0 H366.8 Q370.8,176.0 370.8,180.0 V185.0 Q370.8,189.0 366.8,189.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,191.0 H775.2 Q779.2,191.0 779.2,195.0 V200.0 Q779.2,204.0 775.2,204.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="190.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">1 → 11 of 11</text>
+<rect x="32" y="212" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="230.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Price rise</text>
+<path d="M330.0,216.0 H571.0 Q575.0,216.0 575.0,220.0 V225.0 Q575.0,229.0 571.0,229.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,231.0 H734.3 Q738.3,231.0 738.3,235.0 V240.0 Q738.3,244.0 734.3,244.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="230.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">6 → 10 of 11</text>
+<text x="40.0" y="270.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Urgent refund (social engineering)</text>
+<path d="M330.0,256.0 H652.7 Q656.7,256.0 656.7,260.0 V265.0 Q656.7,269.0 652.7,269.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,271.0 H775.2 Q779.2,271.0 779.2,275.0 V280.0 Q779.2,284.0 775.2,284.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="270.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">8 → 11 of 11</text>
+<rect x="32" y="292" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="310.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Hidden instructions in an invoice</text>
+<path d="M330.0,296.0 H652.7 Q656.7,296.0 656.7,300.0 V305.0 Q656.7,309.0 652.7,309.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,311.0 H775.2 Q779.2,311.0 779.2,315.0 V320.0 Q779.2,324.0 775.2,324.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="310.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">8 → 11 of 11</text>
+<text x="40.0" y="350.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Fake price notice</text>
+<path d="M330.0,336.0 H652.7 Q656.7,336.0 656.7,340.0 V345.0 Q656.7,349.0 652.7,349.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,351.0 H775.2 Q779.2,351.0 779.2,355.0 V360.0 Q779.2,364.0 775.2,364.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="350.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">8 → 11 of 11</text>
+<rect x="32" y="372" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="390.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Prompt injection</text>
+<path d="M330.0,376.0 H693.5 Q697.5,376.0 697.5,380.0 V385.0 Q697.5,389.0 693.5,389.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,391.0 H775.2 Q779.2,391.0 779.2,395.0 V400.0 Q779.2,404.0 775.2,404.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="390.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">9 → 11 of 11</text>
+<text x="40.0" y="430.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">FX rate manipulation</text>
+<path d="M330.0,416.0 H693.5 Q697.5,416.0 697.5,420.0 V425.0 Q697.5,429.0 693.5,429.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,431.0 H775.2 Q779.2,431.0 779.2,435.0 V440.0 Q779.2,444.0 775.2,444.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="430.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">9 → 11 of 11</text>
+<rect x="32" y="452" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="470.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Duplicate charge</text>
+<path d="M330.0,456.0 H652.7 Q656.7,456.0 656.7,460.0 V465.0 Q656.7,469.0 652.7,469.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,471.0 H734.3 Q738.3,471.0 738.3,475.0 V480.0 Q738.3,484.0 734.3,484.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="470.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">8 → 10 of 11</text>
+<text x="40.0" y="510.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Swapped payee</text>
+<path d="M330.0,496.0 H775.2 Q779.2,496.0 779.2,500.0 V505.0 Q779.2,509.0 775.2,509.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,511.0 H775.2 Q779.2,511.0 779.2,515.0 V520.0 Q779.2,524.0 775.2,524.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="510.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">11 → 11 of 11</text>
+<rect x="32" y="532" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="550.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Refund fraud</text>
+<path d="M330.0,536.0 H816.0 Q820.0,536.0 820.0,540.0 V545.0 Q820.0,549.0 816.0,549.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,551.0 H816.0 Q820.0,551.0 820.0,555.0 V560.0 Q820.0,564.0 816.0,564.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="550.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">12 → 12 of 12</text>
+<text x="40.0" y="590.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Payee swap</text>
+<path d="M330.0,576.0 H775.2 Q779.2,576.0 779.2,580.0 V585.0 Q779.2,589.0 775.2,589.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,591.0 H775.2 Q779.2,591.0 779.2,595.0 V600.0 Q779.2,604.0 775.2,604.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="590.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">11 → 11 of 11</text>
+<rect x="32" y="612" width="896" height="40" fill="#2c2c2a" opacity="0.35"/>
+<text x="40.0" y="630.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Fake invoice</text>
+<path d="M330.0,616.0 H693.5 Q697.5,616.0 697.5,620.0 V625.0 Q697.5,629.0 693.5,629.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,631.0 H693.5 Q697.5,631.0 697.5,635.0 V640.0 Q697.5,644.0 693.5,644.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="630.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">9 → 9 of 11</text>
+<text x="40.0" y="670.0" font-size="15" font-weight="400" fill="#f0efec" text-anchor="start" dominant-baseline="middle">Budget drain</text>
+<path d="M330.0,656.0 H734.3 Q738.3,656.0 738.3,660.0 V665.0 Q738.3,669.0 734.3,669.0 H330.0 Z" fill="#5d5c57"/>
+<path d="M330.0,671.0 H734.3 Q738.3,671.0 738.3,675.0 V680.0 Q738.3,684.0 734.3,684.0 H330.0 Z" fill="#3987e5"/>
+<text x="832.0" y="670.0" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start" dominant-baseline="middle">10 → 10 of 11</text>
+<text x="40.0" y="714.0" font-size="13" font-weight="400" fill="#898781" text-anchor="start" dominant-baseline="middle">Sorted by how many more attacks Warrant blocks than limits alone. Scripted agent; source: pnpm bench.</text>
+</svg>
