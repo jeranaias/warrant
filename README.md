@@ -34,7 +34,9 @@ the buyer's owner, which our store verifies before serving and keeps for dispute
 
 The demo business: customers' agents buy market data from our store over x402 on Metal. A
 **sourcing** agent buys upstream data, a **support** agent settles disputed orders, and a
-**treasury** agent moves earnings to Airwallex and pays a EUR licence fee.
+**treasury** agent moves earnings to Airwallex and pays a EUR licence fee from the wallet there.
+
+ADR numbers throughout point to the decision records in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## What ran for real
 
@@ -46,13 +48,27 @@ in the demo):
 | ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Warrant pass and dispute | Metal testnet     | Pass checked before serving; bad order refunded by mandate pull `0x2314f9bc…`; repeat refused; "never agreed" rejected (11 of 11) |
 | Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace`                    |
-| Earnings and licence fee | Airwallex sandbox | Deposit, USD to EUR, EUR 50.00 by SWIFT, PAID (ADR-017)                                                                           |
-| Virtual Visa card        | Airwallex sandbox | Seat bought; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)                          |
+| Earnings and licence fee | Airwallex sandbox | Simulated deposit, USD to EUR, EUR 50.00 by SWIFT, moved to PAID by the sandbox's simulator (ADR-017)                             |
+| Virtual Visa card        | Airwallex sandbox | Simulated purchases: seat approved; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)   |
+
+The two rails have not run live in one run yet: in the Airwallex run the Metal side is the mock
+chain, so the deposit's reference is a mock transaction hash.
+
+## How Airwallex is used
+
+| Product         | What Warrant does with it                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Global Accounts | Earnings land in the USD account, referenced by the Metal transaction hash.                                                           |
+| FX              | An approved EUR bill is converted from USD before it is paid.                                                                         |
+| Transfers       | The EUR licence fee goes to a saved beneficiary by SWIFT.                                                                             |
+| Issuing         | A virtual Visa whose own limits, merchant category and expiry come from the signed warrant, so the card refuses too. STOP freezes it. |
 
 ## Benchmark
 
-`pnpm bench`: 155 attacks across 14 families and 30 normal payments, against three setups. From
-[bench/results.json](bench/results.json), which CI checks against a fresh run:
+`pnpm bench`: 155 attacks across 14 families and 30 normal payments, against three setups, with a
+scripted agent and the rule-based purpose check. A separate run with a real model is in
+[docs/SUBMISSION.md](docs/SUBMISSION.md). From [bench/results.json](bench/results.json), which CI
+checks against a fresh run:
 
 | Setup       | Attacks blocked | Normal payments wrongly blocked |
 | ----------- | --------------- | ------------------------------- |
@@ -62,11 +78,13 @@ in the demo):
 
 On a held-out set written by someone who didn't build control: 26 of 28 attacks blocked, 1 of 6
 normal payments wrongly blocked. The misses are named in the `pnpm bench` output
-([bench/SCORING.md](bench/SCORING.md)).
+([bench/SCORING.md](bench/SCORING.md)). That output says "219 cases": the 155 attacks and 30
+normal payments above, plus the held-out 28 and 6.
 
 ## Run it locally
 
-Node 24+ and pnpm 10 (`corepack enable` once). No keys and no `.env` for the mock demo.
+Node 24+ (`.nvmrc`: run `fnm use` or `nvm use`) and pnpm 10 (`corepack enable` once). No keys and
+no `.env` for the mock demo.
 
 ```sh
 git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
@@ -76,8 +94,20 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 # open http://localhost:10000, type the code you picked, press Run a scenario
 ```
 
-On PowerShell, set the variables first: `$env:DEMO_PASSWORD="pick-one"`, and the same for
-`DEMO_COOKIE_SECRET`. A scenario plays out in about 25 seconds, one task every two seconds.
+The same in Windows PowerShell 5.1, where `&&` and `VAR=value command` don't work:
+
+```powershell
+git clone https://github.com/jeranaias/warrant.git   # private: needs repo access
+cd warrant
+pnpm install
+pnpm build:hosted
+$env:DEMO_PASSWORD = "pick-one"
+$env:DEMO_COOKIE_SECRET = "any 16 or more chars"
+pnpm start:hosted
+# open http://localhost:10000, type the code you picked, press Run a scenario
+```
+
+A scenario plays out in about 25 seconds, one task every two seconds.
 
 `pnpm install` may print "Ignored build scripts: esbuild". That is expected; nothing to approve.
 
@@ -91,8 +121,9 @@ pnpm scene:card        # virtual Visa card: one purchase, one decline, STOP free
 pnpm bench             # the attack benchmark
 ```
 
-Add `RAILS_MODE=sandbox` (Metal testnet) or `--sandbox` (Airwallex sandbox) to run on the real
-rails; setup is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
+To run on the real rails: `RAILS_MODE=sandbox` before `pnpm scene` or `pnpm scene:dispute` (Metal
+testnet), `--sandbox` after `pnpm scene:earnings` or `pnpm scene:card` (Airwallex sandbox). Setup
+is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 <details>
 <summary>Development setup (engine, dashboard and agents as separate processes)</summary>
@@ -128,7 +159,7 @@ view; **Desk** goes back.
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                                   |
 | The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                                    |
-| The owner decides        | **Needs you** holds a second licence bill in the same month. **Approve EUR 12.00** or **Deny** (also on the phone page).                                                                                           |
+| The owner decides        | **Needs you** holds two items: a second licence bill in the same month (**Approve EUR 12.00** or **Deny**) and treasury's sweep of earnings to Airwallex, which always waits for you. Also on the phone page.      |
 | Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                        |
 | Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                              |
 | New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                              |

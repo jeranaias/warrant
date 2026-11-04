@@ -37,7 +37,9 @@ const hosted = hostedApp({
 });
 
 const server = hosted.app.listen(port, "0.0.0.0", () => {
-  console.log(`hosted demo on port ${port}, mock rails, dashboard from ${distDir}`);
+  console.log(
+    `hosted demo on port ${port} (open http://localhost:${port}), mock rails, dashboard from ${distDir}`,
+  );
 });
 
 function shutdown(): void {

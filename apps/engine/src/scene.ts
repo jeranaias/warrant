@@ -33,7 +33,8 @@ if (railsMode() === "sandbox") {
 try {
   const steps = await limitChangeScene(now, engine);
   for (const s of steps) {
-    console.log(`${s.moneyMoved ? "PAID   " : "STOPPED"}  ${s.step.padEnd(36)} ${s.outcome}`);
+    const label = s.moneyMoved ? "PAID   " : s.blocked ? "BLOCKED" : "       ";
+    console.log(`${label}  ${s.step.padEnd(36)} ${s.outcome}`);
     if (s.tx && railsMode() === "sandbox") {
       console.log(`         ${"".padEnd(36)} https://testnet.metalntwx.com/tx/${s.tx}`);
     }

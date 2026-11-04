@@ -13,7 +13,10 @@ describe("earnings scene (both rails, one ledger)", () => {
           "treasury pays the EUR 50 licence fee",
           "pending (SCHEDULED): USD converted to EUR, transfer sent",
         ],
-        ["the bank pays it out", "PAID; ledger confirmed"],
+        [
+          "the simulator moves it to PAID",
+          "PAID; ledger confirmed; fee paid from cash already in the wallet",
+        ],
       ]);
       expect(steps[0]?.tx).toMatch(/^0x[0-9a-f]{64}$/);
 

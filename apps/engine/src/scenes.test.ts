@@ -22,6 +22,18 @@ describe("price rise scene (Kit 11: 2 cents, then 4)", () => {
     ]);
     expect(steps.map((s) => s.moneyMoved)).toEqual([false, false, true, false]);
   });
+
+  // `pnpm scene` prints BLOCKED from this flag: a refusal must not look like the owner's steps.
+  it("marks exactly the four refusals as blocked, not the owner's steps or the payments", async () => {
+    const steps = await limitChangeScene(() => new Date("2026-11-01T12:00:00Z"));
+    expect(steps.filter((s) => s.blocked).map((s) => s.step)).toEqual([
+      "price now 4 cents: buy at 4",
+      "agent claims 2 cents anyway",
+      "limits only (no Warrant): pay at 4",
+      "old credential tries to pay",
+    ]);
+    expect(steps.filter((s) => s.blocked).every((s) => !s.moneyMoved)).toBe(true);
+  });
 });
 
 describe("dispute scene (Metal's ask: the seller proves, then decides)", () => {
