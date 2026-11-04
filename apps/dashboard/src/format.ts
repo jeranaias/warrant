@@ -45,15 +45,33 @@ export const AGENT_NAMES: Record<string, string> = {
   treasury: "Treasury agent",
 };
 
+/** Treasury holds three warrants; name each by job so they never all read as "Treasury". */
+export const WARRANT_NAMES: Record<string, string> = {
+  wrt_treasury: "Treasury · licence",
+  wrt_treasury_sweep: "Treasury · sweep",
+  wrt_treasury_card: "Treasury · card",
+};
+
 export function agentName(role: string | undefined): string {
   return (role ? AGENT_NAMES[role] : undefined) ?? role ?? "An agent";
 }
 
+/** A warrant's display name by job, falling back to its agent's role name. */
+export function warrantName(warrantId: string | undefined, role?: string): string {
+  return (warrantId ? WARRANT_NAMES[warrantId] : undefined) ?? agentName(role);
+}
+
 /**
- * A warrant's short name on the gate: "Treasury", or "Treasury card" for a warrant that pays only
- * by card, so an agent with two warrants shows two distinct lanes.
+ * A warrant's short name on the gate: its job name when one is defined, or "Treasury card" for a
+ * warrant that pays only by card, so an agent with multiple warrants shows distinct lanes.
  */
-export function laneName(w: { agentRole: string; allowedRails: string[] }): string {
+export function laneName(w: {
+  warrantId?: string;
+  agentRole: string;
+  allowedRails: string[];
+}): string {
+  const byJob = w.warrantId ? WARRANT_NAMES[w.warrantId] : undefined;
+  if (byJob) return byJob;
   const name = agentName(w.agentRole).replace(/ agent$/, "");
   const cardOnly = w.allowedRails.length > 0 && w.allowedRails.every((r) => r === "airwallex_card");
   return cardOnly ? `${name} card` : name;
@@ -94,8 +112,12 @@ const NO_NAMES: Names = { role: () => undefined, payee: () => undefined, request
 
 /** What an approval view asks, in a few words: "new limits for the Sourcing agent". */
 export function subjectOf(view: Record<string, unknown>): string {
+  const warrantId = field(view, "warrant.warrantId");
   const role = field(view, "agent.role") ?? field(view, "warrant.role");
-  const who = agentName(typeof role === "string" ? role : undefined);
+  const who = warrantName(
+    typeof warrantId === "string" ? warrantId : undefined,
+    typeof role === "string" ? role : undefined,
+  );
   if (view["kind"] === "budget_change") return `new limits for the ${who}`;
   const amount = field(view, "amount");
   const payee = field(view, "payee.displayName");
@@ -122,7 +144,7 @@ export function namesOf(
       const to = payees.get(p.payeeId);
       requests.set(
         p.proposalId,
-        `${money(p.amount)} from the ${agentName(p.agentRole)}${to ? ` to ${to}` : ""}`,
+        `${money(p.amount)} from the ${warrantName(p.warrantId, p.agentRole)}${to ? ` to ${to}` : ""}`,
       );
     } else if (e.type === "approval_requested") {
       requests.set(e.pending.proposalId, subjectOf(e.pending.view));
@@ -224,7 +246,7 @@ function describeEvent(e: ControlEvent, names: Names): { tone: Tone; text: strin
   switch (e.type) {
     case "proposal": {
       const p = e.proposal;
-      const who = agentName(p.agentRole);
+      const who = warrantName(p.warrantId, p.agentRole);
       const to = p.refundOfOrderId
         ? `a refund on order ${p.refundOfOrderId}`
         : (names.payee(p.payeeId) ?? p.payeeId);
@@ -268,7 +290,8 @@ function describeEvent(e: ControlEvent, names: Names): { tone: Tone; text: strin
       };
     case "budget_changed": {
       const role = names.role(e.warrantId);
-      const whose = role ? `the ${agentName(role)}` : e.warrantId;
+      const whose =
+        role || WARRANT_NAMES[e.warrantId] ? `the ${warrantName(e.warrantId, role)}` : e.warrantId;
       return { tone: "owner", text: `You signed new limits for ${whose} (v${e.toVersion}).` };
     }
     case "pass_checked": {
@@ -433,7 +456,7 @@ export function ownerLine(
     const e = le.event;
     if (e.type === "kill_switch") return "You pressed STOP: every payment is refused.";
     if (e.type === "budget_changed")
-      return `You signed new limits for the ${agentName(roleOf(e.warrantId))}.`;
+      return `You signed new limits for the ${warrantName(e.warrantId, roleOf(e.warrantId))}.`;
     if (e.type === "approval_decided" && e.ok) {
       const asked = events.find(
         (x) => x.event.type === "proposal" && x.event.proposal.proposalId === e.proposalId,
@@ -441,7 +464,7 @@ export function ownerLine(
       const verb = e.decision === "denied" ? "denied" : "approved";
       if (asked?.type === "proposal") {
         const p = asked.proposal;
-        return `You ${verb} ${money(p.amount)} from the ${agentName(roleOf(p.warrantId))}.`;
+        return `You ${verb} ${money(p.amount)} from the ${warrantName(p.warrantId, roleOf(p.warrantId))}.`;
       }
       return `You ${verb} new limits.`;
     }

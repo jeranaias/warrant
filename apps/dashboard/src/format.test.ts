@@ -13,7 +13,9 @@ import {
   ownerLine,
   percentUsed,
   scenarioLabel,
+  subjectOf,
   viewRows,
+  warrantName,
   whyOf,
 } from "./format.js";
 
@@ -112,7 +114,34 @@ group("describe", () => {
     );
   });
 
-  it("a card-only warrant gets its own lane name", () => {
+  it("names treasury's three warrants by job and falls back to the role name", () => {
+    expect(warrantName("wrt_treasury", "treasury")).toBe("Treasury · licence");
+    expect(warrantName("wrt_treasury_sweep", "treasury")).toBe("Treasury · sweep");
+    expect(warrantName("wrt_treasury_card", "treasury")).toBe("Treasury · card");
+    expect(warrantName("wrt_sourcing", "sourcing")).toBe("Sourcing agent");
+    expect(warrantName("wrt_support", "support")).toBe("Support agent");
+    expect(warrantName(undefined, "treasury")).toBe("Treasury agent");
+    expect(
+      laneName({
+        warrantId: "wrt_treasury",
+        agentRole: "treasury",
+        allowedRails: ["airwallex_transfer"],
+      }),
+    ).toBe("Treasury · licence");
+    expect(
+      laneName({
+        warrantId: "wrt_treasury_sweep",
+        agentRole: "treasury",
+        allowedRails: ["metal_x402"],
+      }),
+    ).toBe("Treasury · sweep");
+    expect(
+      laneName({
+        warrantId: "wrt_treasury_card",
+        agentRole: "treasury",
+        allowedRails: ["airwallex_card"],
+      }),
+    ).toBe("Treasury · card");
     expect(laneName({ agentRole: "treasury", allowedRails: ["airwallex_transfer"] })).toBe(
       "Treasury",
     );
@@ -120,6 +149,12 @@ group("describe", () => {
       "Treasury card",
     );
     expect(laneName({ agentRole: "sourcing", allowedRails: [] })).toBe("Sourcing");
+    expect(
+      subjectOf({
+        warrant: { warrantId: "wrt_treasury_sweep", role: "treasury" },
+        amount: { currency: "USDZ", cents: 20 },
+      }),
+    ).toBe("0.20 USDZ from the Treasury · sweep");
   });
 
   it("flags a decision that did not count", () => {

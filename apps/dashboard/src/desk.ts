@@ -1,5 +1,5 @@
 import type { Money, PendingApproval } from "./api.js";
-import { agentName, field, foldRepeats, isMoney, money } from "./format.js";
+import { agentName, field, foldRepeats, isMoney, money, warrantName } from "./format.js";
 import type { Fate, Pass } from "./flow.js";
 import type { SellerMoment } from "./seller.js";
 
@@ -131,8 +131,12 @@ export function askGroups(
   const out: AskGroup[] = [];
   for (const a of approvals) {
     const budget = a.view["kind"] === "budget_change";
+    const warrantId = field(a.view, "warrant.warrantId");
     const role = field(a.view, "agent.role") ?? field(a.view, "warrant.role");
-    const forName = agentName(typeof role === "string" ? role : undefined);
+    const forName = warrantName(
+      typeof warrantId === "string" ? warrantId : undefined,
+      typeof role === "string" ? role : undefined,
+    );
     const by = field(a.view, "proposedBy");
     const byRole = typeof by === "string" ? roleOfAgent(by) : undefined;
     const payee =

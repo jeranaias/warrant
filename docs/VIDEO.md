@@ -69,7 +69,7 @@ records, order by order."
 
 ## 4. Needs you: the held EUR 12.00 bill (1:30-2:10)
 
-**On screen:** **Needs you** at the top: "Treasury agent → Data licensor (EUR) · EUR 12.00",
+**On screen:** **Needs you** at the top: "Treasury · licence → Data licensor (EUR) · EUR 12.00",
 reason "Data licensor (EUR) bills once a month and was already paid this month". A second item
 sits there too: treasury's sweep of earnings to Airwallex, which always waits for the owner. The card on the
 right shows exactly what is being approved and its fingerprint. Press **Approve EUR 12.00**; the

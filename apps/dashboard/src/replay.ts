@@ -1,5 +1,5 @@
 import type { Money } from "./api.js";
-import { agentName, money, short } from "./format.js";
+import { money, short, warrantName } from "./format.js";
 import type { Names, Tone } from "./format.js";
 import { REASONS } from "./flow.js";
 
@@ -164,7 +164,7 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
   return r.steps.map((s): ReplayLine => {
     switch (s.kind) {
       case "asked": {
-        const who = agentName(s.agentRole);
+        const who = warrantName(s.warrantId, s.agentRole);
         const to = names.payee(s.payeeId);
         const text = s.refundOfOrderId
           ? `${who} asked to refund ${money(s.amount)}${to ? ` to ${to}` : ""}`
@@ -177,7 +177,7 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
         return {
           at: s.at,
           tone: "info",
-          text: `New limits asked for the ${agentName(s.agentRole)}: per payment ${money(s.from.perPaymentCap)} → ${money(s.to.perPaymentCap)}, in total ${money(s.from.totalBudget)} → ${money(s.to.totalBudget)}`,
+          text: `New limits asked for the ${warrantName(s.warrantId, s.agentRole)}: per payment ${money(s.from.perPaymentCap)} → ${money(s.to.perPaymentCap)}, in total ${money(s.from.totalBudget)} → ${money(s.to.totalBudget)}`,
           ids: [r.proposalId, s.warrantId, `asked by ${s.proposedBy}`].join(" · "),
         };
       case "malformed":

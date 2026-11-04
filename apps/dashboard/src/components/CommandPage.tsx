@@ -4,13 +4,13 @@ import { HOSTED } from "../api.js";
 import type { KillState, LoggedEvent, WarrantRow } from "../api.js";
 import bench from "../../../../bench/results.json";
 import {
-  agentName,
   agentsLine,
   benchLine,
   cents,
   money,
   ownerLine,
   time,
+  warrantName,
   whyOf,
 } from "../format.js";
 import { OTHER, leftFraction, limitRequests, passesOf, payeeNodes, tally } from "../flow.js";
@@ -301,7 +301,10 @@ export function CommandPage({
             owner={owned}
             pass={last}
             event={lastEvent}
-            agent={agentName(warrants.find((w) => w.warrantId === last?.warrantId)?.agentRole)}
+            agent={warrantName(
+              last?.warrantId,
+              warrants.find((w) => w.warrantId === last?.warrantId)?.agentRole,
+            )}
             payee={
               last
                 ? (payees.find((p) => p.id === last.payee)?.name ??
@@ -373,7 +376,7 @@ function AgentList({
                 <span className="agent-top">
                   <span className="agent-name">
                     <span className="agent-dot" aria-hidden="true" />
-                    {agentName(w.agentRole)}
+                    {warrantName(w.warrantId, w.agentRole)}
                   </span>
                   <kbd>{i + 1}</kbd>
                 </span>
@@ -419,7 +422,7 @@ function AgentPanel({
       <header className="sheet-head">
         <div>
           <div className="sheet-k">agent</div>
-          <h2 className="sheet-title">{agentName(w.agentRole)}</h2>
+          <h2 className="sheet-title">{warrantName(w.warrantId, w.agentRole)}</h2>
         </div>
         <span className={`badge ${stopped ? "stop" : "seal"}`}>
           {stopped ? "stopped" : `warrant v${w.version}`}

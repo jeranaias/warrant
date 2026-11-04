@@ -6,7 +6,7 @@ import bench from "../../../../bench/results.json";
 import { FILTERS, askGroups, deskRows, filterCounts, filterRows, paySentence } from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
 import { OTHER, leftFraction, passesOf, payeeNodes } from "../flow.js";
-import { agentName, benchLine, cents, money, namesOf, time } from "../format.js";
+import { benchLine, cents, money, namesOf, time, warrantName } from "../format.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
 import type { useEngine } from "../useEngine.js";
@@ -73,7 +73,8 @@ export function Desk({
     [engine.events, warrants, engine.approvals],
   );
   const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
-  const nameOf = (id: string) => agentName(warrants.find((w) => w.warrantId === id)?.agentRole);
+  const nameOf = (id: string) =>
+    warrantName(id, warrants.find((w) => w.warrantId === id)?.agentRole);
   const payeeOf = (id: string) =>
     id === OTHER ? "a customer" : (payees.find((p) => p.id === id)?.name ?? id);
   const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
@@ -351,7 +352,7 @@ function Budgets({ warrants, stopped }: { warrants: WarrantRow[]; stopped: boole
         const tone = stopped ? "stop" : share < 0.2 ? "wait" : "";
         return (
           <li key={w.warrantId} className={tone} style={{ "--tint": tintOf(i) } as CSSProperties}>
-            <span className="desk-budget-name">{agentName(w.agentRole)}</span>
+            <span className="desk-budget-name">{warrantName(w.warrantId, w.agentRole)}</span>
             <span className="mono">
               {cents(Math.max(0, w.totalBudget.cents - w.spentCents), w.totalBudget.currency)}
             </span>

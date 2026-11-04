@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import type { PendingApproval } from "../api.js";
-import { agentName, approveLabel, field, isMoney, money, time, viewRows } from "../format.js";
+import {
+  agentName,
+  approveLabel,
+  field,
+  isMoney,
+  money,
+  time,
+  viewRows,
+  warrantName,
+} from "../format.js";
 
 /**
  * "Waiting for you": each card shows every field of the view control stored, and Approve / Deny
@@ -86,6 +95,7 @@ export function ApprovalCard({
   }, [hotkeys]);
   const isBudget = a.view["kind"] === "budget_change";
   const amount = field(a.view, "amount");
+  const warrantId = field(a.view, "warrant.warrantId");
   const role = field(a.view, "agent.role") ?? field(a.view, "warrant.role");
   const payee =
     field(a.view, "payee.displayName") ??
@@ -98,7 +108,10 @@ export function ApprovalCard({
   const oldBudget = field(a.view, "from.totalBudget");
   const by = field(a.view, "proposedBy");
   const byRole = typeof by === "string" ? roleOf?.(by) : undefined;
-  const forName = agentName(typeof role === "string" ? role : undefined);
+  const forName = warrantName(
+    typeof warrantId === "string" ? warrantId : undefined,
+    typeof role === "string" ? role : undefined,
+  );
   const who =
     isBudget && byRole && byRole !== role
       ? `${agentName(byRole)} asks to change the ${forName.toLowerCase()}'s limits`

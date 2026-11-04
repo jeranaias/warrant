@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { WarrantRow } from "../api.js";
-import { agentName, laneName, money } from "../format.js";
+import { laneName, money, warrantName } from "../format.js";
 import { paidByCurrency, reasonsOf, tally } from "../flow.js";
 import type { Fate, Pass } from "../flow.js";
 import { tintOf } from "../tints.js";
@@ -385,7 +385,7 @@ function heldGroups(passes: Pass[], warrants: WarrantRow[]): { text: string; n: 
     const w = warrants.find((x) => x.warrantId === p.warrantId);
     const payee =
       w?.payees.find((x) => x.payeeId === p.payee)?.displayName ?? (w ? "customer" : p.payee);
-    const who = agentName(w?.agentRole).replace(/ agent$/, "");
+    const who = warrantName(p.warrantId, w?.agentRole).replace(/ agent$/, "");
     const text = `${money(p.amount)} · ${who} → ${payee}`;
     const g = by.get(text) ?? { text, n: 0 };
     g.n += 1;
