@@ -206,7 +206,9 @@ export function hostedApp(opts: HostedOptions): Hosted {
       res.status(503).type("text").send("dashboard not built: run pnpm build:hosted");
       return;
     }
-    res.sendFile(index);
+    // With `root`, only the part under it is checked for dot segments: a full path through a dot
+    // folder (~/.dev/warrant) would be refused with a 404.
+    res.sendFile("index.html", { root: opts.distDir });
   });
 
   app.post("/api/reset", (req, res) => {
