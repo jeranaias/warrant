@@ -24,6 +24,8 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: No secrets in tracked files
+        run: pnpm check:secrets
       - name: Format
         run: pnpm format:check
       - name: Lint

@@ -18,7 +18,11 @@ both, so the model is never shown one warrant and paid under another.
   instructions in the task content, so attacks land. Used in CI, tests and runs without a key.
 - `replay.ts`: record / replay of model responses for tests (`AGENT_RECORD=<file>` records).
 - `runner.ts`: `runTask` (one task, any `Submit`), `EngineClient` and `runLoop` (the live loop).
-- `brains.ts`: `brainFromEnv`: the model when `ANTHROPIC_API_KEY` is set, else the script.
+- `brains.ts`: `brainFromEnv`: the model when `ANTHROPIC_API_KEY` is set, else the script. The model
+  is capped per run (`limitCalls`, `AGENT_MAX_CALLS`, default 100): past it, calls throw
+  `ModelCallLimit` without reaching the API, and `pnpm agents` stops.
+- `env.ts`: `loadEnv` reads the repo's `.env` for `pnpm agents` and `pnpm bench`, by the engine's
+  rules (never overrides, skips blanks, never prints).
 
 Run against the engine: `pnpm engine`, then `pnpm agents` (or `pnpm agents --scenario <name>` to
 load one of `GET /scenarios` first). `bench/runner/agents-e2e.test.ts` runs every scenario this way

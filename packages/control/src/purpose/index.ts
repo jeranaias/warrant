@@ -175,13 +175,44 @@ export function purposeInput(warrant: Warrant, summary: PaymentSummary): string 
   return JSON.stringify({ warrant: purposeWarrantView(warrant), payment: summary });
 }
 
-export function modelPurpose(opts: { complete: PurposeComplete; model?: string }): PurposeChecker {
+/** A purpose checker that reports its model calls (`modelPurpose`). */
+export type CountedPurposeChecker = PurposeChecker & {
+  /** Model calls so far and the cap. */
+  usage: () => { calls: number; max: number };
+};
+
+/** Model calls a purpose checker may make unless PURPOSE_MAX_CALLS says otherwise. */
+export const DEFAULT_PURPOSE_MAX_CALLS = 200;
+
+export function modelPurpose(opts: {
+  complete: PurposeComplete;
+  model?: string;
+  /**
+   * Spending stop: at most this many model calls (default 200). Past it nothing is sent and the
+   * verdict is `uncertain`, so the owner decides: the cap can only make control stricter.
+   */
+  maxCalls?: number;
+}): CountedPurposeChecker {
   const model = opts.model ?? DEFAULT_PURPOSE_MODEL;
+  const max = opts.maxCalls ?? DEFAULT_PURPOSE_MAX_CALLS;
+  let calls = 0;
   return {
     model,
+    usage: () => ({ calls, max }),
     async check(warrant, summary, now) {
       const floor = await deterministicPurpose.check(warrant, summary, now);
       if (floor.verdict === "inconsistent") return floor;
+      if (calls >= max) {
+        return verdictOf(
+          summary,
+          "uncertain",
+          ["insufficient_information"],
+          `the purpose model's call limit (${max}) is reached; the owner decides`,
+          model,
+          now,
+        );
+      }
+      calls++;
       let answer: PurposeVerdict | undefined;
       try {
         const text = await opts.complete({
@@ -221,14 +252,29 @@ export function modelPurpose(opts: { complete: PurposeComplete; model?: string }
 
 /**
  * The model checker when ANTHROPIC_API_KEY is set (and PURPOSE_CHECK is not "deterministic"),
- * else the deterministic one. The key is read by the SDK; it is never logged here.
+ * else the deterministic one. PURPOSE_MAX_CALLS caps its model calls (default 200). The key is
+ * read by the SDK; it is never logged here.
  */
-export function purposeFromEnv(env: NodeJS.ProcessEnv = process.env): PurposeChecker {
+export function purposeFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): PurposeChecker | CountedPurposeChecker {
   if (!env["ANTHROPIC_API_KEY"] || env["PURPOSE_CHECK"] === "deterministic") {
     return deterministicPurpose;
   }
   return modelPurpose({
-    complete: anthropicComplete(),
+    // The key from `env`, not whatever process.env holds; the SDK keeps it and we never log it.
+    complete: anthropicComplete(new Anthropic({ apiKey: env["ANTHROPIC_API_KEY"] })),
     model: env["PURPOSE_MODEL"] ?? DEFAULT_PURPOSE_MODEL,
+    maxCalls: maxCallsFrom(env["PURPOSE_MAX_CALLS"]),
   });
+}
+
+/** PURPOSE_MAX_CALLS: a whole number from 1 to 100000, else the default. Bad values throw. */
+function maxCallsFrom(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return DEFAULT_PURPOSE_MAX_CALLS;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 100_000) {
+    throw new Error("PURPOSE_MAX_CALLS must be a whole number from 1 to 100000");
+  }
+  return n;
 }
