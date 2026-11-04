@@ -18,6 +18,37 @@ export type CreateMessage = (
   key: string,
 ) => Promise<Anthropic.Message>;
 
+/** Thrown once a run has used its model calls (`limitCalls`). Nothing is sent after it. */
+export class ModelCallLimit extends Error {
+  constructor(readonly max: number) {
+    super(`model call limit reached (${max} calls); raise AGENT_MAX_CALLS to allow more`);
+    this.name = "ModelCallLimit";
+  }
+}
+
+export interface CallCounter {
+  create: CreateMessage;
+  /** Calls sent so far, and the most allowed. */
+  usage: () => { calls: number; max: number };
+}
+
+/**
+ * A spending stop for one run: at most `max` model calls through `create`, then every further
+ * call throws `ModelCallLimit` without reaching the API. Per-task limits (turns, proposals) bound
+ * one task; this bounds the whole run.
+ */
+export function limitCalls(create: CreateMessage, max: number): CallCounter {
+  let calls = 0;
+  return {
+    create: (params, key) => {
+      if (calls >= max) return Promise.reject(new ModelCallLimit(max));
+      calls++;
+      return create(params, key);
+    },
+    usage: () => ({ calls, max }),
+  };
+}
+
 /** The real API. The SDK reads ANTHROPIC_API_KEY itself; we never touch or log the key. */
 export function anthropicCreate(client = new Anthropic()): CreateMessage {
   return (params) => client.messages.create(params);
