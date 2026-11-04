@@ -213,8 +213,8 @@ export async function earningsScene(
         ?.items?.[0],
     );
     steps.push({
-      step: "the bank pays it out",
-      outcome: `${last.detail ?? last.status}; ledger ${rec.confirmed.length ? "confirmed" : "still waiting"}`,
+      step: "the simulator moves it to PAID",
+      outcome: `${last.detail ?? last.status}; ledger ${rec.confirmed.length ? "confirmed" : "still waiting"}; fee paid from cash already in the wallet`,
       moneyMoved: false,
     });
     return steps;
