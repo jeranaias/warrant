@@ -134,3 +134,40 @@ describe("hosted demo: the agents run inside the session", () => {
     }
   });
 });
+
+describe("agents inside the engine: treasury's spend review (#26)", () => {
+  it("a review asked for from the dashboard is answered with a limit change for the owner", async () => {
+    const e = createEngine({ purpose: deterministicPurpose, scenario: "none" });
+    const driver = startAgents(e, { paceMs: 5, idleMs: 10 });
+    try {
+      e.world.upstream.setPrice(4);
+      await call(e, "/treasury/review", { method: "POST" });
+      type Pending = {
+        pending: { view: { kind?: string; to?: { perPaymentCap?: { cents: number } } } }[];
+      };
+      await until(async () => ((await call(e, "/approvals")) as Pending).pending.length > 0);
+      const { pending } = (await call(e, "/approvals")) as Pending;
+      expect(pending.map((p) => [p.view.kind, p.view.to?.perPaymentCap?.cents])).toEqual([
+        ["budget_change", 4],
+      ]);
+    } finally {
+      driver.stop();
+    }
+  });
+
+  it("a brain whose calls are used up takes no tasks: the queue is left alone", async () => {
+    const e = createEngine({ purpose: deterministicPurpose, scenario: "none" });
+    const driver = startAgents(e, { paceMs: 5, idleMs: 10, exhausted: () => true });
+    try {
+      const { queued } = (await call(e, "/scenario", {
+        method: "POST",
+        body: JSON.stringify({ name: "price_rise" }),
+      })) as { queued: number };
+      await new Promise((ok) => setTimeout(ok, 150));
+      const health = (await call(e, "/health")) as { queued: number };
+      expect(health.queued).toBe(queued);
+    } finally {
+      driver.stop();
+    }
+  });
+});

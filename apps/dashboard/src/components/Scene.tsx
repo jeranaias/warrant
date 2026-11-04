@@ -5,8 +5,9 @@ import { SCENARIOS, cents, scenarioLabel } from "../format.js";
 
 /**
  * Demo controls, not owner controls: change the world the agents live in. Raise the data
- * supplier's price, load a scenario (the queue of offers, tickets and invoices), or have treasury
- * ask for a sourcing cap that fits the new price (it lands in "Waiting for you").
+ * supplier's price, load a scenario (the queue of offers, tickets and invoices), or ask the
+ * treasury agent to review spending: it decides what to propose (after a price rise, a sourcing
+ * cap that fits), and that lands in "Waiting for you".
  */
 /** The prices the demo can set the data supplier to, in cents. */
 const PRICES = [2, 4];
@@ -103,28 +104,18 @@ export function Scene({
         </button>
       </div>
       {SCENARIOS[picked] && <p className="muted small">{SCENARIOS[picked].what}</p>}
-      {sourcing && treasury && price !== undefined && (
+      {sourcing && treasury && (
         <div className="row">
           <button
             className="btn"
-            disabled={sourcing.perPaymentCap.cents === price}
             onClick={() =>
               void run(async () => {
-                const r = await api.proposeBudgetChange({
-                  proposalId: `bud_${Date.now()}`,
-                  warrantId: sourcing.warrantId,
-                  agentId: treasury.agentId,
-                  newTotalBudget: sourcing.totalBudget,
-                  newPerPaymentCap: { currency: sourcing.perPaymentCap.currency, cents: price },
-                  justification: "Upstream raised its price; match the sourcing cap to it.",
-                  createdAt: new Date().toISOString(),
-                });
-                if (!r.ok) throw new Error(r.error ?? "budget change refused");
-                return "Treasury asked for a new sourcing cap. It is waiting for you.";
+                await api.reviewSpending();
+                return "Treasury is reviewing spending. Anything it proposes waits for you.";
               })
             }
           >
-            Treasury asks to set the sourcing cap to {cents(price)}
+            Ask treasury to review spending
           </button>
         </div>
       )}

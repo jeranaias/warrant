@@ -75,6 +75,36 @@ export function railsMode(env: NodeJS.ProcessEnv = process.env): RailsMode {
   return env["RAILS_MODE"] === "sandbox" ? "sandbox" : "mock";
 }
 
+/**
+ * `pnpm engine` and `pnpm live` only: real rails when the settings for them are present.
+ * RAILS_MODE=mock or =sandbox always wins. Unset, empty or `auto`: Metal testnet when METAL_HOME
+ * and METAL_RPC_URL are set and METAL_HOME holds `warrant-public.env` (written by
+ * `pnpm setup:testnet`), else mock. The Airwallex sandbox then joins on its own settings (#160).
+ * The scenes keep `railsMode`: they change real mandates, so they never pick testnet by themselves.
+ */
+export function engineRailsMode(env: NodeJS.ProcessEnv = process.env): {
+  mode: RailsMode;
+  why: string;
+} {
+  const asked = (env["RAILS_MODE"] ?? "").trim().toLowerCase();
+  if (asked === "mock") return { mode: "mock", why: "RAILS_MODE=mock" };
+  if (asked === "sandbox") return { mode: "sandbox", why: "RAILS_MODE=sandbox" };
+  if (asked !== "" && asked !== "auto") {
+    throw new Error(`RAILS_MODE must be mock, sandbox or auto (got "${asked}")`);
+  }
+  const home = env["METAL_HOME"];
+  const missing = [
+    ...(home ? [] : ["METAL_HOME"]),
+    ...(env["METAL_RPC_URL"] ? [] : ["METAL_RPC_URL"]),
+    ...(home && !existsSync(join(home, "warrant-public.env"))
+      ? ["METAL_HOME/warrant-public.env (run pnpm setup:testnet)"]
+      : []),
+  ];
+  return missing.length === 0
+    ? { mode: "sandbox", why: "testnet settings found (RAILS_MODE=auto)" }
+    : { mode: "mock", why: `no ${missing.join(", ")} (RAILS_MODE=auto)` };
+}
+
 // process.env lookups are case-insensitive on Windows, so "PATH" also finds "Path".
 const OS_VARS = ["PATH", "SYSTEMROOT", "TEMP", "TMP", "HOME", "USERPROFILE", "APPDATA"];
 const CLI_VARS = ["METAL_RPC_URL", "METAL_FAUCET_URL", "METAL_FACILITATOR_URL"];

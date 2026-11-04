@@ -68,6 +68,16 @@ answer's `ticketRef` as `sourceRef`), paid by `mandate pull`. The store keeps ev
 (`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is
 for the analyzer only: never show labels to an agent.
 
+**`pnpm live` (`--agents`) and the rails choice:** `pnpm live` runs the three agents inside the
+engine (`startAgents`, the hosted demo's driver) with `brainFromEnv()`: the model when
+`ANTHROPIC_API_KEY` is set (capped by `AGENT_MAX_CALLS`), else the script. It starts with an empty
+queue, so nothing is paid until a scenario is loaded. `pnpm engine` and `pnpm live` pick rails with
+`engineRailsMode()`: `RAILS_MODE=mock|sandbox` wins; unset or `auto` means testnet when METAL_HOME,
+METAL_RPC_URL and `METAL_HOME/warrant-public.env` exist, else mock. The scenes keep `railsMode()`
+(testnet only when `RAILS_MODE=sandbox`). The driver passes treasury's `propose_limits` to
+`POST /budget-changes`, so a spend review (the dashboard's "Ask treasury to review spending") is
+answered.
+
 **Purpose check:** `pnpm engine` uses lane A's `purposeFromEnv()` (model with `ANTHROPIC_API_KEY`, else
 the deterministic check). `createEngine()` without `purpose` keeps `placeholderPurpose` (tests).
 Pass your own `PurposeChecker` to `createEngine({ purpose })`.

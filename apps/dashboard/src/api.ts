@@ -235,6 +235,8 @@ export const api = {
   loadScenario: (name: string) => call<{ queued: number }>("POST", "/scenario", { name }),
   setUpstreamPrice: (cents: number) =>
     call<{ upstreamPriceCents: number }>("POST", "/upstream/price", { cents }),
+  /** Queue treasury's spend review (#26, ADR-020): the treasury agent decides what to propose. */
+  reviewSpending: () => call<{ taskId: string; queued: number }>("POST", "/treasury/review"),
   proposeBudgetChange: (body: {
     proposalId: string;
     warrantId: string;

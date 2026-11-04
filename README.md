@@ -128,6 +128,22 @@ is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
 <details>
 <summary>Development setup (engine, dashboard and agents as separate processes)</summary>
 
+The quickest way to drive everything from the dashboard:
+
+```sh
+pnpm live            # terminal 1: engine with the agents inside it, empty queue
+pnpm dashboard       # terminal 2: open the owner link pnpm live prints, then press Run
+```
+
+`pnpm live` uses whatever `.env` holds. With `ANTHROPIC_API_KEY` the agents and the purpose check
+are the real model (capped per run; `AGENT_BRAIN=scripted` and `PURPOSE_CHECK=deterministic` keep
+them off); without it they are scripted. With `RAILS_MODE=auto` (or unset) and the testnet settings
+from `docs/TESTNET.md`, payments run on Metal testnet and, with its keys, the Airwallex sandbox;
+otherwise on mocks. It prints which it picked and why. **Ask treasury to review spending** in the
+dashboard has the treasury agent propose limits that fit, for you to approve.
+
+Or as separate processes:
+
 ```sh
 pnpm verify          # format check, lint, typecheck, tests (what CI runs)
 pnpm engine          # terminal 1: engine on http://127.0.0.1:4000, mock rails
