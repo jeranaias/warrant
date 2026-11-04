@@ -471,7 +471,7 @@ Decision:
 
 ## ADR-024: An empty lookup after a doubtful transfer stays unknown for 10 minutes, then failed
 
-Date: 2026-11-03 Status: proposed
+Date: 2026-11-03 Status: accepted (owner, 2026-11-04)
 
 Context: ADR-019 point 1 says a payment in doubt is settled only by the rail's `getStatus`. For an
 Airwallex transfer that is a list by `request_id`, and it answered `failed` the moment the list was
