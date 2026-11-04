@@ -234,6 +234,24 @@ function made(store: SessionStore, key?: string): Session {
   return s;
 }
 
+describe("hosted demo: where it is installed", () => {
+  // Someone clones into ~/.dev/warrant or C:\Users\me\.Projects\warrant: the dashboard page must
+  // still open after sign-in, not 404 because a folder on its path starts with a dot.
+  it("serves /demo when the dashboard's path has a dot folder", async () => {
+    const dotDist = join(mkdtempSync(join(tmpdir(), "warrant-hosted-dot-")), ".hidden", "dist");
+    mkdirSync(join(dotDist, "assets"), { recursive: true });
+    writeFileSync(join(dotDist, "index.html"), "<!doctype html><title>Warrant</title>");
+    writeFileSync(join(dotDist, "assets", "app.js"), "console.log(1)");
+    const { base } = await start({ distDir: dotDist });
+    const v = visitor(base);
+    await v.enter();
+    const page = await v.send("/demo");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("<title>Warrant</title>");
+    expect((await v.send("/assets/app.js")).status).toBe(200);
+  });
+});
+
 describe("SessionStore", () => {
   const store0 = (over: Partial<SessionOptions> = {}) =>
     new SessionStore({ makeEngine, sweepMs: 0, ...over });
