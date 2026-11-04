@@ -41,7 +41,7 @@ ADR numbers throughout point to the decision records in [docs/DECISIONS.md](docs
 ## What ran for real
 
 The hosted demo runs on simulated money. The same flows were run on the real sandboxes, with
-evidence and transaction hashes in [docs/TESTNET.md](docs/TESTNET.md) (also under **Live runs**
+evidence and transaction hashes in [docs/TESTNET.md](docs/TESTNET.md) (also under **Testnet runs**
 in the demo):
 
 | Flow                     | Where             | Result                                                                                                                            |
@@ -165,7 +165,7 @@ view; **Desk** goes back.
 | New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                              |
 | Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays the one purchase the offer allows and blocks every repeat. |
 | STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                                     |
-| Live evidence            | **Live runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                                   |
+| Live evidence            | **Testnet runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                                |
 
 </details>
 
