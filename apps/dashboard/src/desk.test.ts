@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PendingApproval } from "./api.js";
-import { askGroups, deskRows, filterCounts, filterRows, paySentence } from "./desk.js";
+import {
+  askGroups,
+  blockedKinds,
+  deskRows,
+  filterCounts,
+  filterRows,
+  paySentence,
+} from "./desk.js";
 import type { PayRow } from "./desk.js";
 import type { Pass } from "./flow.js";
 import type { SellerMoment } from "./seller.js";
@@ -77,6 +84,19 @@ describe("filters", () => {
     expect(filterRows(r, "blocked").map((x) => x.seq)).toEqual([3]);
     expect(filterRows(r, "store").map((x) => x.seq)).toEqual([4]);
     expect(filterRows(r, "all")).toHaveLength(3);
+  });
+
+  it("counts distinct (agent, payee, reason) kinds among blocked rows", () => {
+    const flood = rows([
+      pass(1, { fate: "blocked", reason: "over the per-payment cap" }),
+      pass(2, { fate: "blocked", reason: "repeat of a recent payment" }),
+      pass(3, { fate: "blocked", reason: "repeat of a recent payment" }),
+      pass(4),
+      pass(5, { fate: "blocked", reason: "over the per-payment cap" }),
+      pass(6, { warrantId: "wrt_support", fate: "blocked", reason: "over the per-payment cap" }),
+    ]);
+    expect(filterCounts(flood).blocked).toBe(5);
+    expect(blockedKinds(flood)).toBe(3);
   });
 });
 

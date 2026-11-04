@@ -101,6 +101,17 @@ export function filterCounts(rows: DeskRow[]): Record<DeskFilter, number> {
   return c;
 }
 
+/** Distinct (agent, payee, reason) kinds among blocked payments, even when separated in time. */
+export function blockedKinds(rows: DeskRow[]): number {
+  const kinds = new Set<string>();
+  for (const r of rows) {
+    if (r.kind === "pay" && r.fate === "blocked") {
+      kinds.add(`${r.who}|${r.to}|${r.reason ?? ""}`);
+    }
+  }
+  return kinds.size;
+}
+
 /**
  * The row's one sentence: "Sourcing agent paid 0.02 USDZ to Upstream data provider.", or "… asked
  * to pay … Blocked: over the per-payment cap." A list row leaves the reason to its own line.

@@ -3,7 +3,15 @@ import type { CSSProperties, ReactNode } from "react";
 import { HOSTED, api, isOwner } from "../api.js";
 import type { PendingApproval, WarrantRow } from "../api.js";
 import bench from "../../../../bench/results.json";
-import { FILTERS, askGroups, deskRows, filterCounts, filterRows, paySentence } from "../desk.js";
+import {
+  FILTERS,
+  askGroups,
+  blockedKinds,
+  deskRows,
+  filterCounts,
+  filterRows,
+  paySentence,
+} from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
 import { OTHER, leftFraction, passesOf, payeeNodes } from "../flow.js";
 import { benchLine, cents, money, namesOf, time, warrantName } from "../format.js";
@@ -83,6 +91,11 @@ export function Desk({
   const rows = deskRows(passes, moments, nameOf, payeeOf);
   const asks = askGroups(engine.approvals, roleOfAgent);
   const counts = filterCounts(rows);
+  const kinds = blockedKinds(rows);
+  const countText = (id: DeskFilter) =>
+    id === "blocked" && kinds > 0
+      ? `${counts[id]} · ${kinds} ${kinds === 1 ? "kind" : "kinds"}`
+      : String(counts[id]);
   const [filter, setFilter] = useState<DeskFilter>("all");
   const [page, setPage] = useState<Page | null>(null);
   const [pick, setPick] = useState<Pick>(null);
@@ -213,7 +226,7 @@ export function Desk({
               aria-selected={filter === f.id}
               onClick={() => setFilter(f.id)}
             >
-              {f.label} <span className="mono">{counts[f.id]}</span>
+              {f.label} <span className="mono">{countText(f.id)}</span>
             </button>
           ))}
         </div>
@@ -262,7 +275,7 @@ export function Desk({
                   setFilter(f.id);
                 }}
               >
-                {f.label} <span className="mono">{counts[f.id]}</span>
+                {f.label} <span className="mono">{countText(f.id)}</span>
               </button>
             </li>
           ))}
