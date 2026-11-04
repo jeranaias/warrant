@@ -198,9 +198,7 @@ group("benchLine", () => {
         warrant: { attacksBlocked: 141, falseBlocks: 1 },
       },
     };
-    expect(benchLine(h)).toBe(
-      "Benchmark: blocks 141 of 152 attacks · limits alone 98 · 1 of 31 normal payments held",
-    );
+    expect(benchLine(h)).toBe("141 of 152 attacks blocked · limits alone 98");
   });
 
   it("shows nothing when a number is missing", () => {

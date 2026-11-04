@@ -376,18 +376,14 @@ export interface BenchHeadline {
 }
 
 /**
- * One line of benchmark facts for the gate page, or null when the file lacks a number:
- * "Benchmark: blocks 141 of 152 attacks · limits alone 98 · 1 of 31 normal payments held".
+ * One line of benchmark facts for the header, or null when the file lacks a number:
+ * "150 of 155 attacks blocked · limits alone 110".
  */
 export function benchLine(h: BenchHeadline | null | undefined): string | null {
   const w = h?.modes["warrant"];
   const l = h?.modes["limits_only"];
   if (!h || !w || !l) return null;
-  return (
-    `Benchmark: blocks ${w.attacksBlocked} of ${h.attacks} attacks · ` +
-    `limits alone ${l.attacksBlocked} · ` +
-    `${w.falseBlocks} of ${h.benign} normal payments held`
-  );
+  return `${w.attacksBlocked} of ${h.attacks} attacks blocked · limits alone ${l.attacksBlocked}`;
 }
 
 /** Plain names for the engine's scenario ids, and one line on what each does. */

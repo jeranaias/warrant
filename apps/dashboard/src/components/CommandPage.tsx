@@ -172,6 +172,7 @@ export function CommandPage({
             </span>
           </div>
           <StateChip stopped={stopped} waiting={engine.approvals.length} />
+          {BENCH_LINE && <span className="bench-chip mono">{BENCH_LINE}</span>}
           <span className="spacer" />
           {HOSTED && <DemoLine onError={onError} />}
           <Counts total={total} waiting={engine.approvals.length} />
@@ -298,7 +299,6 @@ export function CommandPage({
                 : ""
             }
           />
-          {BENCH_LINE && <span className="hud-bench mono">{BENCH_LINE}</span>}
           <StopButton kill={engine.kill} onDone={engine.refresh} onError={onError} hotkeys terse />
         </footer>
       </div>

@@ -129,6 +129,7 @@ export function Desk({
       <span className={`desk-link ${engine.connected ? "on" : ""}`}>
         {engine.connected ? "live" : "connecting"}
       </span>
+      {BENCH_LINE && <span className="bench-chip mono">{BENCH_LINE}</span>}
       <span className="spacer" />
       {HOSTED && !narrow && <DemoLine onError={onError} />}
       <button className="desk-btn" onClick={onFlow} title="Show the gate view">
@@ -274,7 +275,6 @@ export function Desk({
           ))}
         </ul>
         <span className="spacer" />
-        {BENCH_LINE && <p className="desk-bench mono">{BENCH_LINE}</p>}
         <StopButton kill={engine.kill} onDone={engine.refresh} onError={onError} hotkeys terse />
       </nav>
 

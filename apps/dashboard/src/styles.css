@@ -1411,14 +1411,16 @@ kbd {
   text-overflow: ellipsis;
 }
 
-.hud-bench {
-  flex: 0 1 auto;
-  min-width: 0;
-  font-size: 0.68rem;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.bench-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--seal);
+  background: var(--seal-bg);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 500;
 }
 
 .hud-bottom .btn.kill {
@@ -2146,12 +2148,6 @@ button.ph-desk {
 
 .desk-budgets .stop .desk-bar > span {
   background: var(--stop);
-}
-
-.desk-bench {
-  margin: 0 4px;
-  color: var(--muted);
-  font-size: 0.68rem;
 }
 
 .desk-nav .stop-confirm {
