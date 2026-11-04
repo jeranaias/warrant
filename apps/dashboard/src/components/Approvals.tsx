@@ -13,10 +13,9 @@ import {
 } from "../format.js";
 
 /**
- * "Waiting for you": each card shows every field of the view control stored, and Approve / Deny
- * sends back that view's hash. Never add, hide or reorder-by-meaning fields here: the owner must
- * approve exactly what control will hold them to. Labels live in format.ts (FIELD_LABELS). The
- * summary and the buttons come first; the full table follows them, always shown, never folded.
+ * "Waiting for you": each card shows the facts the owner approves (agent, amount, payee, reason),
+ * with raw ids and the view fingerprint folded under "Technical details". Approve / Deny sends
+ * back the server-provided `shownHash` unchanged.
  */
 export function Approvals({
   approvals,
@@ -152,23 +151,26 @@ export function ApprovalCard({
         <button className="btn" disabled={sending} onClick={() => void decide("denied")}>
           Deny{hotkeys && <kbd>D</kbd>}
         </button>
-        <span
+      </footer>
+      <details className="approval-tech">
+        <summary>Technical details</summary>
+        <p
           className="fp mono muted small"
           title={`Your approval is bound to exactly what is shown here (${a.shownHash})`}
         >
           Fingerprint {fingerprint(a.shownHash)}
-        </span>
-      </footer>
-      <table className="kv" aria-label="Everything you sign">
-        <tbody>
-          {viewRows(a.view).map((r) => (
-            <tr key={r.key}>
-              <th>{r.label}</th>
-              <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        </p>
+        <table className="kv" aria-label="Everything you sign">
+          <tbody>
+            {viewRows(a.view).map((r) => (
+              <tr key={r.key}>
+                <th>{r.label}</th>
+                <td className={r.key === "amount" ? "strong" : ""}>{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </article>
   );
 }

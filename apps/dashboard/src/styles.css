@@ -404,8 +404,27 @@ td {
   flex-wrap: wrap;
 }
 
-.approval-foot .fp {
-  flex-basis: 100%;
+.approval-tech {
+  font-size: 0.84rem;
+}
+
+.approval-tech > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.approval-tech[open] > summary {
+  margin-bottom: 8px;
+}
+
+.approval-tech .fp {
+  margin: 0 0 6px;
+}
+
+.kv td {
+  overflow-wrap: anywhere;
 }
 
 /* activity */

@@ -145,7 +145,13 @@ export function Phone({
           <div className="sheet-k">
             waiting · {waiting.length > 1 ? `1 of ${waiting.length}` : "1"}
           </div>
-          <ApprovalCard key={focus.proposalId} a={focus} onDone={onDone} onError={onError} />
+          <ApprovalCard
+            key={focus.proposalId}
+            a={focus}
+            onDone={onDone}
+            onError={onError}
+            roleOf={(id) => warrants.find((w) => w.agentId === id)?.agentRole}
+          />
           {queue.length > 0 && (
             <ol className="ph-queue">
               {queue.map((q) => (
