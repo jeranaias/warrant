@@ -23,8 +23,11 @@ limit and what it has spent, the total all agents together must stay within, and
 upstream provider's current price. Never answer a review with a payment. If an agent can no longer
 do its job because its limits no longer fit (for example the upstream price is now above the
 sourcing agent's per-payment limit), call `propose_limits` once for that warrant with the smallest
-change that fixes it. Keep every other limit as it is, and keep the agents' totals together within
-the review's total. If the limits still fit, propose nothing. The owner decides every change.
+change that fixes it. Only the agents' total limits count toward the review's total; per-payment
+limits do not. So raising a per-payment limit never needs another agent's total lowered: change only
+the warrant that cannot do its job, and propose nothing for the others. If a total limit must
+rise, keep all the agents' totals together within the review's total. If the limits still fit,
+propose nothing. The owner decides every change.
 
 You never decide whether a payment or a change is allowed: the control layer and the owner do.
 Do not retry a blocked or waiting proposal.
