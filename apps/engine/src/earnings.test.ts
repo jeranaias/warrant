@@ -1,5 +1,61 @@
 import { describe, expect, it } from "vitest";
-import { earningsScene, mockAirwallexWorld } from "./earnings.js";
+import { AirwallexClient } from "@warrant/rails";
+import { earningsScene, licensorBeneficiary, mockAirwallexWorld } from "./earnings.js";
+
+/** A client that logs in, then answers the beneficiary read as given; records every other call. */
+function beneficiaryStub(read: { status: number; body?: unknown }) {
+  const calls: string[] = [];
+  const fetch = ((url: string, init: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith("/authentication/login")) {
+      return Promise.resolve(new Response(JSON.stringify({ token: "t" }), { status: 201 }));
+    }
+    calls.push(`${init.method ?? "GET"} ${u.pathname}`);
+    if (u.pathname === "/api/v1/beneficiaries/create") {
+      return Promise.resolve(new Response(JSON.stringify({ id: "ben_new" }), { status: 201 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify(read.body ?? {}), { status: read.status }));
+  }) as typeof globalThis.fetch;
+  const client = new AirwallexClient({
+    baseUrl: "http://awx.test",
+    clientId: "c",
+    apiKey: "k",
+    fetch,
+  });
+  return { client, calls };
+}
+
+describe("licensorBeneficiary", () => {
+  it.each([401, 403, 429, 500, 503])(
+    "a %i on the beneficiary read throws naming the status and creates nothing",
+    async (status) => {
+      const { client, calls } = beneficiaryStub({ status, body: { code: "nope" } });
+      await expect(licensorBeneficiary(client)).rejects.toThrow(`HTTP ${status}`);
+      expect(calls.some((c) => c.endsWith("/beneficiaries/create"))).toBe(false);
+    },
+  );
+
+  it("a 200 that lists the licensor by nickname returns its id and creates nothing", async () => {
+    const { client, calls } = beneficiaryStub({
+      status: 200,
+      body: { items: [{ id: "ben_1", nickname: "Data Licensor GmbH (SWIFT)" }] },
+    });
+    expect(await licensorBeneficiary(client)).toBe("ben_1");
+    expect(calls.some((c) => c.endsWith("/beneficiaries/create"))).toBe(false);
+  });
+
+  it("a 200 with no match creates the licensor once", async () => {
+    const { client, calls } = beneficiaryStub({ status: 200, body: { items: [] } });
+    expect(await licensorBeneficiary(client)).toBe("ben_new");
+    expect(calls.filter((c) => c.endsWith("/beneficiaries/create"))).toHaveLength(1);
+  });
+
+  it("the mock's 404 (it has no list route) creates the licensor", async () => {
+    const { client, calls } = beneficiaryStub({ status: 404 });
+    expect(await licensorBeneficiary(client)).toBe("ben_new");
+    expect(calls.filter((c) => c.endsWith("/beneficiaries/create"))).toHaveLength(1);
+  });
+});
 
 describe("earnings scene (both rails, one ledger)", () => {
   it("sweeps Metal earnings, deposits them, pays the EUR fee by FX + transfer, then confirms", async () => {

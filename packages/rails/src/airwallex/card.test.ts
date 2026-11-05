@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Payee } from "@warrant/contracts";
 import { AirwallexClient } from "./index.js";
 import { AirwallexCards, cardControls, controlsDiffer, purchaseResult, redact } from "./card.js";
@@ -329,5 +329,72 @@ describe("airwallex card: execute, status, freeze", () => {
     expect(calls.at(-1)?.body).toEqual({ card_status: "INACTIVE" });
     ok = false;
     await expect(cards.freezeAll()).rejects.toThrow(/could not freeze c9/);
+  });
+
+  // The card number never leaves the adapter: the stub echoes a card-number-shaped value in every
+  // answer, in both the paid and the failing run of issue, purchase and freezeAll.
+  it("a card number echoed by Airwallex never reaches a result, a log line or an error", async () => {
+    const pan = "4".repeat(16);
+    const echo = { card_number: pan, message: `card ${pan}`, code: `bad ${pan}` };
+    let failing = false;
+    let refuseCreate = false;
+    let cardId = "c1";
+    const { client, calls } = fake((_m, path) => {
+      if (path === "/api/v1/issuing/cards") return json(200, { items: [], ...echo });
+      if (path === "/api/v1/issuing/cardholders") return json(200, { items: [], ...echo });
+      if (path === "/api/v1/issuing/cardholders/create")
+        return json(201, { cardholder_id: "h1", ...echo });
+      if (path === "/api/v1/issuing/cards/create")
+        return refuseCreate
+          ? json(400, echo)
+          : json(201, { card_id: cardId, card_status: "ACTIVE", ...echo });
+      if (path === "/api/v1/simulation/issuing/create")
+        return failing
+          ? json(400, echo)
+          : json(200, { transaction_id: "t1", status: "PENDING", ...echo });
+      if (path === `/api/v1/issuing/cards/${cardId}/update`)
+        return failing
+          ? json(500, echo)
+          : json(200, { card_id: cardId, card_status: "INACTIVE", ...echo });
+      return json(404, echo);
+    });
+    const logs: string[] = [];
+    const spies = (["log", "info", "warn", "error"] as const).map((k) =>
+      vi.spyOn(console, k).mockImplementation(() => undefined),
+    );
+    const seen: string[] = [];
+    const attempt = async (run: () => Promise<unknown>) => {
+      try {
+        seen.push(JSON.stringify(await run()));
+      } catch (e) {
+        seen.push(String(e), String((e as Error).cause ?? ""));
+      }
+    };
+    try {
+      const cards = new AirwallexCards(client, { log: (l) => logs.push(l) });
+      await attempt(() => cards.issue(warrant, { requestId: "r1" }));
+      await attempt(() => cards.execute(buy(1200)));
+      await attempt(() => cards.freezeAll());
+      failing = true;
+      await attempt(() => cards.execute(buy(1200, "seat-2")));
+      await attempt(() => cards.freezeAll());
+      refuseCreate = true;
+      await attempt(() => new AirwallexCards(client).issue(warrant, { requestId: "r2" }));
+      // A card whose own id is shaped like a number reaches the log line and the freeze error.
+      refuseCreate = false;
+      cardId = pan;
+      const odd = new AirwallexCards(client, { log: (l) => logs.push(l) });
+      await odd.issue(warrant, { requestId: "r3" }); // returns its own id by design: not checked
+      await attempt(() => odd.freezeAll());
+      const console_ = spies.flatMap((s) => s.mock.calls.map((c) => c.join(" ")));
+
+      // The echo reached the adapter's own text (so a leak could show), and nothing carries it.
+      expect(seen.some((s) => s.includes("[redacted]"))).toBe(true);
+      expect(calls.some((c) => c.path.includes("/details"))).toBe(false);
+      for (const text of [...seen, ...logs, ...console_]) expect(text).not.toContain(pan);
+      expect(logs.length).toBeGreaterThan(0);
+    } finally {
+      for (const s of spies) s.mockRestore();
+    }
   });
 });
