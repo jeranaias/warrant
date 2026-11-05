@@ -128,6 +128,22 @@ is in [docs/RUNBOOK.md](docs/RUNBOOK.md).
 <details>
 <summary>Development setup (engine, dashboard and agents as separate processes)</summary>
 
+The quickest way to drive everything from the dashboard:
+
+```sh
+pnpm live            # terminal 1: engine with the agents inside it, empty queue
+pnpm dashboard       # terminal 2: open the owner link pnpm live prints, then press Run
+```
+
+`pnpm live` uses whatever `.env` holds. With `ANTHROPIC_API_KEY` the agents and the purpose check
+are the real model (capped per run; `AGENT_BRAIN=scripted` and `PURPOSE_CHECK=deterministic` keep
+them off); without it they are scripted. With `RAILS_MODE=auto` (or unset) and the testnet settings
+from `docs/TESTNET.md`, payments run on Metal testnet and, with its keys, the Airwallex sandbox;
+otherwise on mocks. It prints which it picked and why. **Ask treasury to review spending** in the
+dashboard has the treasury agent propose limits that fit, for you to approve.
+
+Or as separate processes:
+
 ```sh
 pnpm verify          # format check, lint, typecheck, tests (what CI runs)
 pnpm engine          # terminal 1: engine on http://127.0.0.1:4000, mock rails
@@ -158,17 +174,17 @@ committed.
 The main screen is the **Decision Desk**. **Flow** in the header shows the same run as the gate
 view; **Desk** goes back.
 
-| Beat                     | What to do                                                                                                                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                                   |
-| The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                                    |
-| The owner decides        | **Needs you** holds two items: a second licence bill in the same month (**Approve EUR 12.00** or **Deny**) and treasury's sweep of earnings to Airwallex, which always waits for you. Also on the phone page.      |
-| Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                        |
-| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                              |
-| New limits               | **Scenarios** → **Raise to 4 cents**, then **Treasury asks to set the sourcing cap to 0.04 USDZ** → **Sign new limits**. The mandate is replaced and a new warrant version is signed.                              |
-| Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays the one purchase the offer allows and blocks every repeat. |
-| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                                     |
-| Live evidence            | **Testnet runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                                |
+| Beat                     | What to do                                                                                                                                                                                                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The business runs        | **Run a scenario**. Each request arrives as one sentence: paid, or blocked with the reason. Repeats fold into one line ("× 19").                                                                                                                                             |
+| The seller checks        | **At our store**: the store checks each buyer's warrant pass, refuses a buyer without one, and decides disputes order by order.                                                                                                                                              |
+| The owner decides        | **Needs you** holds two items: a second licence bill in the same month (**Approve EUR 12.00** or **Deny**) and treasury's sweep of earnings to Airwallex, which always waits for you. Also on the phone page.                                                                |
+| Why it was blocked       | Click any line. The right side replays it step by step: each rule, the purpose check, the owner, funds held or released, the rail's result.                                                                                                                                  |
+| Price rises, money stops | **Scenarios** → **Supplier raises the price** → **Run**. The 4-cent purchase is blocked by the per-payment cap before any chain call.                                                                                                                                        |
+| New limits               | **Scenarios** → **Raise to 4 cents**, then **Ask treasury to review spending** (needs the agents running: `pnpm live`, or `pnpm agents` in the 3-terminal setup, to reach **Needs you**) → **Sign new limits**. The mandate is replaced and a new warrant version is signed. |
+| Attacks                  | **Scenarios** → **Attacks on the agents** → **Run**. A swapped payee, a fake invoice and a refund to another wallet are blocked. "Buy 200 batches" pays the one purchase the offer allows and blocks every repeat.                                                           |
+| STOP                     | **STOP** → **Yes, stop all money now**. Every warrant and mandate is revoked; every later proposal is refused.                                                                                                                                                               |
+| Live evidence            | **Testnet runs** lists the sandbox and testnet runs with links to the transactions.                                                                                                                                                                                          |
 
 </details>
 

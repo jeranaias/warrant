@@ -19,6 +19,9 @@ import { anthropicClients, keyProblem, modelStatus, sessionModel } from "./hoste
 import type { ModelClientFactory } from "./hosted-model.js";
 import { SessionStore } from "./hosted-sessions.js";
 import type { Session, SessionOptions } from "./hosted-sessions.js";
+import { crossSite } from "./server.js";
+
+export { crossSite };
 
 /**
  * The hosted demo (issue #89): the built dashboard and a per-visitor engine API behind one shared
@@ -76,22 +79,6 @@ export const CSP = [
   "form-action 'self'",
   "frame-ancestors 'self'",
 ].join("; ");
-
-/** A state-changing request that came from another site. */
-function crossSite(req: Request): boolean {
-  // Browsers that send Sec-Fetch-Site are trusted on it: a same-origin form post can still carry
-  // "Origin: null" (Chrome does under a strict referrer policy), so the origin decides only when
-  // that header is absent.
-  const site = req.get("sec-fetch-site");
-  if (site) return site !== "same-origin" && site !== "none";
-  const origin = req.get("origin");
-  if (!origin) return false;
-  try {
-    return new URL(origin).host !== req.get("host");
-  } catch {
-    return true;
-  }
-}
 
 export interface Hosted {
   app: Express;

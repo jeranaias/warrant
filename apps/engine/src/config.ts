@@ -75,6 +75,78 @@ export function railsMode(env: NodeJS.ProcessEnv = process.env): RailsMode {
   return env["RAILS_MODE"] === "sandbox" ? "sandbox" : "mock";
 }
 
+const LIVE_VARS = [
+  "METAL_HOME",
+  "METAL_RPC_URL",
+  "METAL_STORE_ADDRESS",
+  "METAL_UPSTREAM_ADDRESS",
+] as const;
+
+function withPublicEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const home = env["METAL_HOME"]?.trim();
+  if (!home) return env;
+  const pub = join(home, "warrant-public.env");
+  if (!existsSync(pub)) return env;
+  const merged: NodeJS.ProcessEnv = { ...env };
+  for (const line of readFileSync(pub, "utf8").split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (!m?.[1] || merged[m[1]] !== undefined) continue;
+    const value = (m[2] ?? "").replace(/^["']|["']$/g, "");
+    if (value) merged[m[1]] = value;
+  }
+  return merged;
+}
+
+export interface EngineRailsOptions {
+  /** True when started as `pnpm live` (`--agents`): auto-picks sandbox when settings exist. */
+  live?: boolean;
+  agents?: boolean;
+}
+
+/**
+ * Rails choice for `pnpm engine` and `pnpm live` (`--agents`).
+ *
+ * - Plain `pnpm engine` (`live` false): mock unless `RAILS_MODE=sandbox` is set explicitly.
+ * - `pnpm live` (`live` true): `RAILS_MODE=mock` stays mock; otherwise (unset, `auto`, or
+ *   `sandbox`) uses Metal testnet when `METAL_HOME`, `METAL_RPC_URL`, `METAL_STORE_ADDRESS` and
+ *   `METAL_UPSTREAM_ADDRESS` (in `env` or `METAL_HOME/warrant-public.env`) are all present, and
+ *   falls back to mock naming the missing settings (names only, never values) when any is missing.
+ */
+export function engineRailsMode(
+  env: NodeJS.ProcessEnv = process.env,
+  opts: boolean | EngineRailsOptions = false,
+): {
+  mode: RailsMode;
+  why: string;
+} {
+  const live = typeof opts === "boolean" ? opts : Boolean(opts.live ?? opts.agents);
+  const asked = (env["RAILS_MODE"] ?? "").trim().toLowerCase();
+  if (asked === "mock") return { mode: "mock", why: "RAILS_MODE=mock" };
+  if (asked !== "" && asked !== "auto" && asked !== "sandbox") {
+    throw new Error("RAILS_MODE must be mock, sandbox or auto");
+  }
+  if (!live) {
+    return asked === "sandbox"
+      ? { mode: "sandbox", why: "RAILS_MODE=sandbox" }
+      : {
+          mode: "mock",
+          why: asked === "auto" ? "RAILS_MODE=auto (plain engine uses mock)" : "default (mock)",
+        };
+  }
+  const full = withPublicEnv(env);
+  const missing = LIVE_VARS.filter((k) => !full[k]?.trim());
+  if (missing.length > 0) {
+    return {
+      mode: "mock",
+      why: `no ${missing.join(", ")} (RAILS_MODE=${asked || "auto"})`,
+    };
+  }
+  return {
+    mode: "sandbox",
+    why: asked === "sandbox" ? "RAILS_MODE=sandbox" : "testnet settings found (pnpm live)",
+  };
+}
+
 // process.env lookups are case-insensitive on Windows, so "PATH" also finds "Path".
 const OS_VARS = ["PATH", "SYSTEMROOT", "TEMP", "TMP", "HOME", "USERPROFILE", "APPDATA"];
 const CLI_VARS = ["METAL_RPC_URL", "METAL_FAUCET_URL", "METAL_FACILITATOR_URL"];
@@ -94,8 +166,9 @@ export function airwallexConfigFromEnv(
 }
 
 export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveConfig {
+  const full = withPublicEnv(env);
   const need = (k: string): string => {
-    const v = env[k];
+    const v = full[k]?.trim();
     if (!v) throw new Error(`${k} is required for RAILS_MODE=sandbox (see docs/TESTNET.md)`);
     return v;
   };
@@ -112,24 +185,24 @@ export function liveConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LiveCon
   );
   const cliEnv: NodeJS.ProcessEnv = {};
   for (const k of OS_VARS) if (process.env[k]) cliEnv[k] = process.env[k];
-  for (const k of CLI_VARS) if (env[k]) cliEnv[k] = env[k];
-  const airwallex = airwallexConfigFromEnv(env);
+  for (const k of CLI_VARS) if (full[k]) cliEnv[k] = full[k];
+  const airwallex = airwallexConfigFromEnv(full);
   return {
-    bin: env["METAL_AGENT_BIN"] ?? (existsSync(shipped) ? shipped : "metal-agent"),
+    bin: full["METAL_AGENT_BIN"] ?? (existsSync(shipped) ? shipped : "metal-agent"),
     cliEnv,
     home,
     rpcUrl,
-    ...(env["METAL_FACILITATOR_URL"] ? { facilitatorUrl: env["METAL_FACILITATOR_URL"] } : {}),
+    ...(full["METAL_FACILITATOR_URL"] ? { facilitatorUrl: full["METAL_FACILITATOR_URL"] } : {}),
     business: need("METAL_STORE_ADDRESS"),
     upstream: need("METAL_UPSTREAM_ADDRESS"),
-    ownerKey: env["METAL_OWNER_KEY_FILE"] ?? "business-owner.json",
+    ownerKey: full["METAL_OWNER_KEY_FILE"] ?? "business-owner.json",
     credentials: {
-      sourcing: env["METAL_SOURCING_CREDENTIAL"] ?? "sourcing.json",
-      support: env["METAL_SUPPORT_CREDENTIAL"] ?? "support.json",
+      sourcing: full["METAL_SOURCING_CREDENTIAL"] ?? "sourcing.json",
+      support: full["METAL_SUPPORT_CREDENTIAL"] ?? "support.json",
     },
-    upstreamPort: Number(env["UPSTREAM_PORT"] ?? 4022),
-    storePort: Number(env["STORE_PORT"] ?? 4021),
-    dataDir: env["WARRANT_DATA_DIR"] ?? join(home, "warrant-live"),
+    upstreamPort: Number(full["UPSTREAM_PORT"] ?? 4022),
+    storePort: Number(full["STORE_PORT"] ?? 4021),
+    dataDir: full["WARRANT_DATA_DIR"] ?? join(home, "warrant-live"),
     ...(airwallex ? { airwallex } : {}),
   };
 }

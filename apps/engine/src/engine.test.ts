@@ -303,24 +303,75 @@ describe("engine: tasks in, decisions out", () => {
 });
 
 describe("the owner's key (phone page sign-in)", () => {
-  it("approving and the emergency stop need the owner's key; reading stays open", async () => {
+  it("approving, the emergency stop and the triggers need the owner's key; reading stays open", async () => {
     const { app } = createEngine({ scenario: "none", clock: () => NOW, ownerToken: "owner-key-1" });
     const s = app.listen(0, "127.0.0.1");
     await new Promise<void>((ok) => s.once("listening", () => ok()));
     const a = s.address();
     const at = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
-    const kill = (auth?: string) =>
-      fetch(`${at}/kill`, {
+    const send = (path: string, body: unknown, auth?: string) =>
+      fetch(`${at}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", ...(auth ? { authorization: auth } : {}) },
-        body: JSON.stringify({ reason: "test" }),
+        body: JSON.stringify(body),
       });
     try {
       expect((await fetch(`${at}/approvals`)).status).toBe(200);
-      expect((await kill()).status).toBe(401);
-      expect((await kill("Bearer wrong")).status).toBe(401);
+      expect((await send("/kill", { reason: "test" })).status).toBe(401);
+      expect((await send("/kill", { reason: "test" }, "Bearer wrong")).status).toBe(401);
       expect((await fetch(`${at}/approvals/prop_x`, { method: "POST" })).status).toBe(401);
-      expect((await kill("Bearer owner-key-1")).status).toBe(200);
+      for (const [path, body] of [
+        ["/scenario", { name: "normal" }],
+        ["/treasury/review", {}],
+        ["/upstream/price", { cents: 4 }],
+        ["/limits-only/pay", {}],
+      ] as const) {
+        expect((await send(path, body)).status, `${path} without token`).toBe(401);
+        expect((await send(path, body, "Bearer wrong")).status, `${path} wrong token`).toBe(401);
+        expect((await send(path, body, "Bearer owner-key-1")).status, `${path} with token`).toBe(
+          200,
+        );
+      }
+      expect((await send("/kill", { reason: "test" }, "Bearer owner-key-1")).status).toBe(200);
+    } finally {
+      await new Promise<void>((ok) => s.close(() => ok()));
+    }
+  });
+
+  it("refuses cross-site state-changing requests on the local engine; same-origin passes", async () => {
+    const { app } = createEngine({ scenario: "none", clock: () => NOW, ownerToken: "owner-key-1" });
+    const s = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => s.once("listening", () => ok()));
+    const a = s.address();
+    const at = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
+    const host = new URL(at).host;
+    const post = (path: string, headers: Record<string, string>) =>
+      fetch(`${at}${path}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer owner-key-1",
+          ...headers,
+        },
+        body: JSON.stringify({ name: "normal", cents: 4 }),
+      });
+    try {
+      for (const path of ["/scenario", "/treasury/review", "/upstream/price", "/limits-only/pay"]) {
+        const crossSite = await post(path, { "sec-fetch-site": "cross-site" });
+        expect(crossSite.status, `${path} sec-fetch-site: cross-site`).toBe(403);
+        expect(await crossSite.json()).toEqual({ error: "cross-site request refused" });
+        expect((await post(path, { "sec-fetch-site": "same-site" })).status).toBe(403);
+        expect((await post(path, { origin: "https://evil.example" })).status).toBe(403);
+        expect((await post(path, { origin: "null" })).status).toBe(403);
+        expect((await post(path, { "sec-fetch-site": "same-origin" })).status).toBe(200);
+        expect((await post(path, { origin: "null", "sec-fetch-site": "same-origin" })).status).toBe(
+          200,
+        );
+        expect((await post(path, { origin: `http://${host}` })).status).toBe(200);
+      }
+      expect(
+        (await fetch(`${at}/world`, { headers: { "sec-fetch-site": "cross-site" } })).status,
+      ).toBe(200);
     } finally {
       await new Promise<void>((ok) => s.close(() => ok()));
     }

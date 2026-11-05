@@ -16,6 +16,7 @@
     "verify": "pnpm check:secrets && pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
     "mocks": "pnpm --filter @warrant/mocks dev",
     "engine": "pnpm --filter @warrant/engine dev",
+    "live": "pnpm --filter @warrant/engine dev --agents",
     "scene": "pnpm --filter @warrant/engine scene",
     "scene:earnings": "pnpm --filter @warrant/engine scene:earnings",
     "scene:dispute": "pnpm --filter @warrant/engine scene:dispute",
