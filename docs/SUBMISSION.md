@@ -99,7 +99,8 @@ that the agent was acting for a real person who agreed to it.
   `POST /api/v1/fx/conversions/create`, `POST /api/v1/beneficiaries/create`,
   `POST /api/v1/transfers/create`, `GET /api/v1/transfers?request_id=`,
   `POST /api/v1/simulation/deposit/create` (earnings arrive with the Metal transaction hash as
-  the reference), and the sandbox transfer simulation.
+  the reference; in the sandbox run Metal was the mock chain, so that hash is a mock one), and the
+  sandbox transfer simulation.
 - Every write carries a `request_id` from control's idempotency key. A timeout leaves the transfer
   unconfirmed with its amount held; a status check by that id settles it before the next decision,
   and it is never resent (ADR-019, tested against the Airwallex mock's timeout and duplicate
@@ -111,19 +112,21 @@ that the agent was acting for a real person who agreed to it.
   of that request from the event log: each of the 9 rules with pass or fail, the purpose check,
   the owner's decision with the hash of what was shown, funds held, confirmed or released, and
   the rail's result (`GET /api/replay`, #132, #133).
-- Live on the sandbox (2026-11-02): earnings deposited into our USD Global Account, converted USD to
-  EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID; control's ledger confirmed it.
-  EUR SEPA is refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT
-  (ADR-017, evidence in docs/TESTNET.md).
+- Run on the sandbox (2026-11-02): a simulated deposit of earnings into our USD Global Account,
+  converted USD to EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID by the sandbox's
+  simulator; control's ledger confirmed it. Metal was the mock chain in this run, so the deposit's
+  reference is a mock hash, and the two rails have not run live in one run yet. EUR SEPA is
+  refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT (ADR-017,
+  evidence in docs/TESTNET.md).
 
 **Visa**
 
 - An agent buys a design tool seat with an Airwallex virtual Visa card whose limits are the
   warrant's: USD 15.00 per purchase, USD 50.00 in all, merchant category 5734 only (ADR-018).
-- Live on the sandbox (2026-11-02): the USD 12.00 seat was approved; a USD 40.00 purchase was
-  blocked by control (`per_payment_cap`) and, sent straight to the card, declined by the card
-  itself (`LIMIT_EXCEEDED`); STOP froze the card in 627 ms, and the next purchase was declined as
-  `CARD_INACTIVE` (`pnpm scene:card --sandbox`, evidence in `docs/TESTNET.md`).
+- Run on the sandbox (2026-11-02), with the purchases simulated by the sandbox: the USD 12.00 seat
+  was approved; a USD 40.00 purchase was blocked by control (`per_payment_cap`) and, sent straight
+  to the card, declined by the card itself (`LIMIT_EXCEEDED`); STOP froze the card in 627 ms, and
+  the next purchase was declined as `CARD_INACTIVE` (`pnpm scene:card --sandbox`, evidence in `docs/TESTNET.md`).
 - The card number and CVV are never fetched; the agent never sees them.
 
 ## Benchmark
@@ -160,7 +163,9 @@ scripted results did not change. The case ids and the reason are in
 - The hosted demo runs on simulated money with a scripted agent, unless a visitor pastes their own
   Anthropic key: then that session's agents and purpose check run on Haiku, still on simulated
   money (ADR-023). The sponsor rails ran live from a laptop (`docs/TESTNET.md`), not from the
-  hosted demo.
+  hosted demo. On Metal testnet the proposals came from scripted scenes, except one run
+  (2026-11-04) where the agents' own scripted brain proposed them, with the deterministic purpose
+  check and no model calls.
 - The licence's "once a month" is 28 days, so a second bill on day 29 to 31 of a long month is not
   caught by that rule (ADR-015).
 
