@@ -16,7 +16,11 @@ async function call(e: Engine, path: string, init: RequestInit = {}) {
   try {
     const r = await fetch(`http://127.0.0.1:${port}${path}`, {
       ...init,
-      headers: { "content-type": "application/json", ...(init.headers ?? {}) },
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer owner-key",
+        ...(init.headers ?? {}),
+      },
     });
     return (await r.json()) as Record<string, unknown>;
   } finally {

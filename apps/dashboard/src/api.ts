@@ -232,11 +232,12 @@ export const api = {
   killState: () => call<KillState>("GET", "/kill"),
   chain: () => call<ChainView>("GET", "/chain"),
   scenarios: () => call<{ scenarios: string[] }>("GET", "/scenarios"),
-  loadScenario: (name: string) => call<{ queued: number }>("POST", "/scenario", { name }),
+  loadScenario: (name: string) => call<{ queued: number }>("POST", "/scenario", { name }, true),
   setUpstreamPrice: (cents: number) =>
-    call<{ upstreamPriceCents: number }>("POST", "/upstream/price", { cents }),
+    call<{ upstreamPriceCents: number }>("POST", "/upstream/price", { cents }, true),
   /** Queue treasury's spend review (#26, ADR-020): the treasury agent decides what to propose. */
-  reviewSpending: () => call<{ taskId: string; queued: number }>("POST", "/treasury/review"),
+  reviewSpending: () =>
+    call<{ taskId: string; queued: number }>("POST", "/treasury/review", undefined, true),
   proposeBudgetChange: (body: {
     proposalId: string;
     warrantId: string;
@@ -245,7 +246,7 @@ export const api = {
     newPerPaymentCap?: Money;
     justification: string;
     createdAt: string;
-  }) => call<{ ok: boolean; error?: string }>("POST", "/budget-changes", body),
+  }) => call<{ ok: boolean; error?: string }>("POST", "/budget-changes", body, true),
   replay: (proposalId: string) =>
     call<Replay>("GET", `/replay?proposalId=${encodeURIComponent(proposalId)}`),
   /** Hosted demo only: a fresh engine for this visitor. */

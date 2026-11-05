@@ -35,8 +35,9 @@ export interface EngineOptions {
   /** The world to run in; default a fresh mock world. */
   world?: World;
   /**
-   * The owner's key. When set, the owner's actions (answering approvals, the emergency stop) need
-   * `Authorization: Bearer <key>`; reading stays open. `pnpm engine` always sets one.
+   * The owner's key. When set, the owner's actions (answering approvals, the emergency stop, and
+   * the scenario/review/price/limits-only triggers) need `Authorization: Bearer <key>`; reading
+   * stays open. `pnpm engine` always sets one.
    */
   ownerToken?: string;
 }
@@ -102,6 +103,10 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   const app = express();
   app.disable("x-powered-by");
+  app.use((req, res, next) => {
+    if (req.method === "GET" || req.method === "HEAD" || !crossSite(req)) return next();
+    res.status(403).json({ error: "cross-site request refused" });
+  });
   app.use(express.json({ limit: "100kb" }));
   const owner = ownerOnly(opts.ownerToken);
 
@@ -145,7 +150,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   });
 
   // Replace the queue with a scenario's tasks.
-  app.post("/scenario", (req, res) => {
+  app.post("/scenario", owner, (req, res) => {
     const name = (req.body as { name?: string } | undefined)?.name;
     if (!SCENARIOS.includes(name as ScenarioName)) {
       res.status(400).json({ error: `name must be one of ${SCENARIOS.join(", ")}` });
@@ -200,7 +205,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   // Queue a spend review for treasury (#26): each USDZ warrant's limits and spend from the ledger,
   // the Kit 11 total and, when it is over sourcing's limit, the upstream price. Moves no money.
   let reviews = 0;
-  app.post("/treasury/review", (_req, res) => {
+  app.post("/treasury/review", owner, (_req, res) => {
     const item = spendReview({
       n: ++reviews,
       at: clock(),
@@ -315,7 +320,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   });
 
   // Scene control: the upstream provider changes its price (Kit 11: 2 cents, then 4).
-  app.post("/upstream/price", (req, res) => {
+  app.post("/upstream/price", owner, (req, res) => {
     const cents = Number((req.body as { cents?: unknown } | undefined)?.cents);
     try {
       world.upstream.setPrice(cents);
@@ -327,7 +332,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   // Benchmark "limits only" mode: the sourcing agent pays upstream straight through its mandate,
   // around control. Only the chain's mandate can refuse it.
-  app.post("/limits-only/pay", async (_req, res) => {
+  app.post("/limits-only/pay", owner, async (_req, res) => {
     const cred = world.credentials.get("sourcing") ?? "sourcing.json";
     const r = await world.payAround(cred);
     res.json({ outcome: classifyPay(r) });
@@ -375,6 +380,22 @@ export function fileDispute(disputes: Map<string, DisputeCase>, t: AgentTask): v
     ticketRef: t.sourceRef,
     openedAt: t.at,
   });
+}
+
+/** A state-changing request that came from another site. */
+export function crossSite(req: Request): boolean {
+  // Browsers that send Sec-Fetch-Site are trusted on it: a same-origin form post can still carry
+  // "Origin: null" (Chrome does under a strict referrer policy), so the origin decides only when
+  // that header is absent.
+  const site = req.get("sec-fetch-site");
+  if (site) return site !== "same-origin" && site !== "none";
+  const origin = req.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== req.get("host");
+  } catch {
+    return true;
+  }
 }
 
 /** Only the owner's key passes. Compared as hashes, in constant time. */
