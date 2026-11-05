@@ -35,8 +35,9 @@ view, and **Desk** goes back. **Reset** (top right) starts a fresh copy.
 5. **Testnet runs** lists the other flows on Metal testnet and the Airwallex sandbox, with links.
 6. **STOP**, then **Yes, stop all money now**. The receipt shows the time and what was revoked.
 
-For beat 5 (new limits): **Scenarios** → **Raise to 4 cents** → **Treasury asks to set the
-sourcing cap to …** → **Sign new limits**.
+For beat 5 (new limits): **Scenarios** → **Raise to 4 cents** → **Ask treasury to review
+spending** (needs the agents running: `pnpm live`, or `pnpm agents` in the 3-terminal setup, to
+reach **Needs you**) → **Sign new limits**.
 
 ## Attack moments to weave in
 

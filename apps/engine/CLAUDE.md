@@ -25,9 +25,12 @@ The hash is required (ADR-007): an answer is bound to exactly what the owner saw
 is a 400 and a stale or different one is refused.
 
 **Owner's key:** `pnpm engine` makes a fresh owner key each start (or uses `OWNER_TOKEN`) and
-prints the owner link, `<dashboard>/#/m?owner=<key>`. Answering approvals and `POST /kill` need
-`Authorization: Bearer <key>` (401 otherwise); every read stays open. The dashboard moves the key
-from the link into the tab's session storage. `createEngine()` without `ownerToken` (tests) is open.
+prints the owner link, `<dashboard>/#/m?owner=<key>`. Answering approvals, `POST /kill` and the
+triggers (`POST /scenario`, `POST /treasury/review`, `POST /upstream/price`,
+`POST /limits-only/pay`) need `Authorization: Bearer <key>` (401 otherwise), and every
+state-changing request is checked against cross-site origins (`crossSite`); every read stays open.
+The dashboard moves the key from the link into the tab's session storage. `createEngine()` without
+`ownerToken` (tests) is open.
 
 **Treasury's spend review (#26, ADR-020):** `POST /treasury/review` queues a `spend_review` task
 built from the signed USDZ warrants, the ledger's spend and, when it is above sourcing's
@@ -65,18 +68,21 @@ answer's `ticketRef` as `sourceRef`), paid by `mandate pull`. The store keeps ev
 `sourceRef`); a refund may only cover the orders of the dispute its `sourceRef` names (#84). `pnpm scene:dispute` plays the dispute beat start to finish (mock chain).
 
 **Scenarios:** `POST /scenario {"name":"normal|price_rise|dispute|attacks|all"}` replaces the queue
-(`all` loads at startup). `GET /labels` says which tasks are attacks and what should happen. It is
-for the analyzer only: never show labels to an agent.
+(`all` loads at startup on mock rails without `--agents`; empty on real rails or `--agents`).
+`GET /labels` says which tasks are attacks and what should happen. It is for the analyzer only:
+never show labels to an agent.
 
 **`pnpm live` (`--agents`) and the rails choice:** `pnpm live` runs the three agents inside the
 engine (`startAgents`, the hosted demo's driver) with `brainFromEnv()`: the model when
 `ANTHROPIC_API_KEY` is set (capped by `AGENT_MAX_CALLS`), else the script. It starts with an empty
-queue, so nothing is paid until a scenario is loaded. `pnpm engine` and `pnpm live` pick rails with
-`engineRailsMode()`: `RAILS_MODE=mock|sandbox` wins; unset or `auto` means testnet when METAL_HOME,
-METAL_RPC_URL and `METAL_HOME/warrant-public.env` exist, else mock. The scenes keep `railsMode()`
-(testnet only when `RAILS_MODE=sandbox`). The driver passes treasury's `propose_limits` to
-`POST /budget-changes`, so a spend review (the dashboard's "Ask treasury to review spending") is
-answered.
+queue, so nothing is paid until a scenario is loaded. Plain `pnpm engine` stays on mock rails
+unless `RAILS_MODE=sandbox` is set explicitly. `pnpm live` picks rails with
+`engineRailsMode(env, { live: true })`: `RAILS_MODE=mock` stays mock; unset, `auto` or `sandbox`
+uses testnet when `METAL_HOME`, `METAL_RPC_URL`, `METAL_STORE_ADDRESS` and
+`METAL_UPSTREAM_ADDRESS` (or `METAL_HOME/warrant-public.env`) exist, and falls back to mock
+naming what is missing when incomplete. The scenes keep `railsMode()` (testnet only when
+`RAILS_MODE=sandbox`). The driver passes treasury's `propose_limits` to `POST /budget-changes`,
+so a spend review (the dashboard's "Ask treasury to review spending") is answered.
 
 **Purpose check:** `pnpm engine` uses lane A's `purposeFromEnv()` (model with `ANTHROPIC_API_KEY`, else
 the deterministic check). `createEngine()` without `purpose` keeps `placeholderPurpose` (tests).

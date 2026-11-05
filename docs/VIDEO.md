@@ -128,5 +128,7 @@ TODO: re-take the numbers from the latest `pnpm bench` before recording.
 
 The terminal scenes (`pnpm scene`, `pnpm scene:dispute`, `pnpm scene:earnings --sandbox`,
 `pnpm scene:card --sandbox`) show the same beats with live hashes; use them as cutaways if
-**Testnet runs** isn't enough. Raising a limit (**Scenarios** → **Raise to 4 cents** → **Treasury
-asks to set the sourcing cap to …** → **Sign new limits**) fits if there is time under 4 minutes.
+**Testnet runs** isn't enough. Raising a limit (**Scenarios** → **Raise to 4 cents** → **Ask
+treasury to review spending** — needs the agents running (`pnpm live`, or `pnpm agents` in the
+3-terminal setup) to reach **Needs you** → **Sign new limits**) fits if there is time under 4
+minutes.
