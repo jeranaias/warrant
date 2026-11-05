@@ -91,7 +91,8 @@ const clientMethod = new WeakMap<AirwallexClient, "LOCAL" | "SWIFT">();
 /**
  * Resolves the licensor's EUR beneficiary id: finds `LICENSOR_SWIFT` by nickname on the sandbox,
  * or creates it once if missing (ADR-017). Against `@warrant/mocks` (which has no
- * `GET /api/v1/beneficiaries` route and models `LOCAL` SEPA only), creates `LICENSOR`.
+ * `GET /api/v1/beneficiaries` route and models `LOCAL` SEPA only), creates `LICENSOR`. A read that
+ * is neither a 200 nor that 404 throws, naming the status.
  */
 export async function licensorBeneficiary(client: AirwallexClient): Promise<string> {
   const found = await client.call(
@@ -101,6 +102,11 @@ export async function licensorBeneficiary(client: AirwallexClient): Promise<stri
   if (found.status === 404) {
     clientMethod.set(client, "LOCAL");
     return createEurBeneficiary(client, LICENSOR);
+  }
+  // Any other non-200 (an expired key, a rate limit, a 5xx) does not show the licensor is missing:
+  // creating one then would leave a duplicate beneficiary.
+  if (found.status !== 200) {
+    throw new Error(`licensor beneficiary read refused (HTTP ${found.status})`);
   }
   clientMethod.set(client, "SWIFT");
   const items: { id?: unknown; nickname?: unknown }[] = Array.isArray(found.body?.items)
