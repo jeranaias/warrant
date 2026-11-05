@@ -9,11 +9,12 @@ import { createEngine } from "./server.js";
 /**
  * `pnpm engine`: the engine on ENGINE_PORT (default 4000).
  *
- * Rails (`engineRailsMode`): Metal testnet when the testnet settings are in .env and METAL_HOME
- * (RAILS_MODE unset or `auto`), mock otherwise; RAILS_MODE=mock or =sandbox always wins. On testnet
- * the Airwallex transfer rail is the Airwallex sandbox when its keys are in .env (#160), and the
- * upstream provider (UPSTREAM_PORT) and our store (STORE_PORT) start next to it; see
- * docs/TESTNET.md "Running live".
+ * Rails (`engineRailsMode`): plain `pnpm engine` runs mock rails unless `RAILS_MODE=sandbox` is
+ * set explicitly. `pnpm live` (`--agents`) uses Metal testnet when the testnet settings are in
+ * .env and METAL_HOME (`RAILS_MODE` unset or `auto`), and falls back to mock naming any missing
+ * settings when incomplete. On testnet the Airwallex transfer rail is the Airwallex sandbox when
+ * its keys are in .env (#160), and the upstream provider (UPSTREAM_PORT) and our store
+ * (STORE_PORT) start next to it; see docs/TESTNET.md "Running live".
  *
  * `pnpm live` (`--agents`): the three agents run inside the engine, so the dashboard's Run drives
  * them with no other process. They are the model when ANTHROPIC_API_KEY is in .env (capped at
@@ -23,7 +24,7 @@ import { createEngine } from "./server.js";
 loadEnv();
 const port = Number(process.env["ENGINE_PORT"] ?? 4000);
 const withAgents = process.argv.includes("--agents");
-const rails = engineRailsMode();
+const rails = engineRailsMode(process.env, { live: withAgents });
 const cfg = rails.mode === "sandbox" ? liveConfigFromEnv() : undefined;
 const world = cfg ? await makeLiveWorld(cfg) : undefined;
 if (world) await world.listen();
@@ -32,13 +33,13 @@ const purpose = purposeFromEnv();
 // The owner's key for this run: approving and the emergency stop need it. A fresh one each start
 // unless OWNER_TOKEN is set (e.g. for a hosted demo).
 const ownerToken = process.env["OWNER_TOKEN"] || randomBytes(18).toString("base64url");
-// With the agents inside, start with an empty queue (as the hosted demo does): nothing is paid
-// until someone presses Run. Without them, every scenario is queued for `pnpm agents`, as before.
+// With the agents inside, or on real rails, start with an empty queue: nothing is paid until
+// someone presses Run. On mock rails without --agents, every scenario is queued for `pnpm agents`.
 const engine = createEngine({
   purpose,
   ownerToken,
   ...(world ? { world } : {}),
-  ...(withAgents ? { scenario: "none" as const } : {}),
+  ...(withAgents || rails.mode === "sandbox" ? { scenario: "none" as const } : {}),
 });
 
 const agents = withAgents ? brainFromEnv() : undefined;

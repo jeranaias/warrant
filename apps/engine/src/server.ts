@@ -97,7 +97,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   // Sandbox: our store's warrant pass checks, as they happen.
   world.watch?.(record);
 
-  const initial = opts.scenario ?? "all";
+  const initial = opts.scenario ?? (world.mode === "sandbox" ? "none" : "all");
   if (initial !== "none") feed.load(scenario(initial, clock()));
 
   const app = express();
