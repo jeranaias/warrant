@@ -44,15 +44,17 @@ The hosted demo runs on simulated money. The same flows were run on the real san
 evidence and transaction hashes in [docs/TESTNET.md](docs/TESTNET.md) (also under **Testnet runs**
 in the demo):
 
-| Flow                     | Where             | Result                                                                                                                            |
-| ------------------------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Warrant pass and dispute | Metal testnet     | Pass checked before serving; bad order refunded by mandate pull `0x2314f9bc…`; repeat refused; "never agreed" rejected (11 of 11) |
-| Price rise, cap on chain | Metal testnet     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace`                    |
-| Earnings and licence fee | Airwallex sandbox | Simulated deposit, USD to EUR, EUR 50.00 by SWIFT, moved to PAID by the sandbox's simulator (ADR-017)                             |
-| Virtual Visa card        | Airwallex sandbox | Simulated purchases: seat approved; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)   |
+| Flow                              | Where                             | Result                                                                                                                                                                    |
+| --------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Warrant pass and dispute          | Metal testnet                     | Pass checked before serving; bad order refunded by mandate pull `0x2314f9bc…`; repeat refused; "never agreed" rejected (11 of 11)                                         |
+| Price rise, cap on chain          | Metal testnet                     | 4-cent purchase refused by the rules, and by the mandate on chain; owner raises the cap with `mandate replace`                                                            |
+| Earnings and licence fee          | Airwallex sandbox                 | Simulated deposit, USD to EUR, EUR 50.00 by SWIFT, moved to PAID by the sandbox's simulator (ADR-017)                                                                     |
+| Virtual Visa card                 | Airwallex sandbox                 | Simulated purchases: seat approved; USD 40 blocked by control and declined by the card; STOP froze the card in 627 ms (ADR-018)                                           |
+| The agents on a model, both rails | Metal testnet + Airwallex sandbox | Claude Haiku agents from the dashboard: 5 Metal payments, EUR 50.00 SWIFT transfer (scheduled), a second bill held and denied, blocks, STOP revoked the mandates on chain |
 
-The two rails have not run live in one run yet: in the Airwallex run the Metal side is the mock
-chain, so the deposit's reference is a mock transaction hash.
+Both rails ran live in one run on 2026-11-09 (`pnpm live`, the agents on Claude Haiku). In that run
+the treasury sweep was not offered (the live world has no sweep warrant yet), and in the earnings
+run above the Metal side is the mock chain, so that deposit's reference is a mock hash.
 
 ## How Airwallex is used
 
