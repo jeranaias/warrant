@@ -151,7 +151,7 @@ export function Desk({
       <span className="desk-name">Warrant</span>
       <StateChip stopped={stopped} waiting={engine.approvals.length} />
       <span className={`desk-link ${engine.connected ? "on" : ""}`}>
-        {engine.connected ? "live" : "connecting"}
+        {engine.connected ? "connected" : "connecting"}
       </span>
       {BENCH_LINE && <span className="bench-chip mono">{BENCH_LINE}</span>}
       <span className="spacer" />
