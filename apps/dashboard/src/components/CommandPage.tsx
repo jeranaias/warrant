@@ -181,7 +181,7 @@ export function CommandPage({
             </span>
             <span className="hud-name">Warrant</span>
             <span className={`hud-link ${engine.connected ? "on" : ""}`}>
-              {engine.connected ? "live" : "connecting"}
+              {engine.connected ? "connected" : "connecting"}
             </span>
           </div>
           <StateChip stopped={stopped} waiting={engine.approvals.length} />

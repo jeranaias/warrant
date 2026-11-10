@@ -6,7 +6,7 @@ The owner signs a **warrant** for each agent: who it may pay, how much per payme
 on which rails, and until when. Every payment an agent asks for is checked against it before any
 money moves. Risky requests wait for the owner, and one STOP button stops everything.
 
-![Warrant demo: agents' requests flow through the warrant to paid, held or blocked; the store checks a buyer's warrant pass and settles a dispute; the owner approves a held bill; STOP revokes every warrant](docs/media/warrant-demo.gif)
+![Warrant demo (mock rails, scripted agents): Run a scenario; payments are paid or blocked with the reason; the owner denies a second licence bill and approves the treasury sweep; STOP revokes every warrant](docs/media/warrant-demo.gif)
 
 **Try it:** https://warrant-demo-bt31.onrender.com (access code from the team). Press **Run a
 scenario**, decide what is held for you, then press **STOP**. Simulated money; each visitor gets
