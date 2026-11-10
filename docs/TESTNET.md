@@ -51,7 +51,8 @@ pays on the Airwallex sandbox (`AirwallexTransfers`, SWIFT funded from USD, with
 beneficiary resolved by nickname at startup; ADR-017). Without those three variables,
 `airwallex_transfer` stays on the in-memory rail (`Metal testnet, Airwallex mock`), and the
 stand-alone Airwallex beat can still run with `pnpm scene:earnings --sandbox` (see "Airwallex
-sandbox" below).
+sandbox" below). Treasury's sweep warrant (`wrt_treasury_sweep`, ADR-022) runs on the mock world
+only for now; live runs omit it and skip the sweep task.
 
 ```sh
 RAILS_MODE=sandbox pnpm scene          # the price-rise + limit-change story, on chain (about 2 minutes)

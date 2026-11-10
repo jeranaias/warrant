@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AgentTask, PaymentProposal } from "@warrant/contracts";
 import { createEngine, fileDispute } from "./server.js";
 import type { ControlEvent } from "@warrant/control";
-import { AGENTS, makeWorld } from "./world.js";
+import { AGENTS, SWEEP_WARRANT_ID, makeWorld } from "./world.js";
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 let server: Server;
@@ -182,6 +182,48 @@ describe("engine: tasks in, decisions out", () => {
     expect((await post<Result>("/proposals", big)).body.blockedBy).toBe("rules");
     const elsewhere = { ...proposalFor(sweep), payeeId: "0x" + "d".repeat(40) };
     expect((await post<Result>("/proposals", elsewhere)).body.blockedBy).toBe("rules");
+  });
+
+  it("when the world has no sweep warrant, /world omits sweepWarrantId and scenarios skip the sweep task", async () => {
+    const world = makeWorld(NOW);
+    world.warrants.delete(SWEEP_WARRANT_ID);
+    const { app } = createEngine({ scenario: "all", clock: () => NOW, world });
+    const s = app.listen(0, "127.0.0.1");
+    await new Promise<void>((ok) => s.once("listening", () => ok()));
+    const a = s.address();
+    const at = `http://127.0.0.1:${typeof a === "object" && a ? a.port : 0}`;
+    try {
+      const w = (await (await fetch(`${at}/world`)).json()) as {
+        agents: { treasury: { warrantId: string; sweepWarrantId?: string } };
+        warrants: { warrantId: string }[];
+      };
+      expect(w.warrants.map((x) => x.warrantId)).toEqual([
+        "wrt_sourcing",
+        "wrt_support",
+        "wrt_treasury",
+      ]);
+      expect(w.agents.treasury.warrantId).toBe("wrt_treasury");
+      expect("sweepWarrantId" in w.agents.treasury).toBe(false);
+
+      const allTasks = (await (await fetch(`${at}/tasks?role=treasury&limit=20`)).json()) as {
+        tasks: AgentTask[];
+      };
+      expect(allTasks.tasks.length).toBeGreaterThan(0);
+      expect(allTasks.tasks.some((t) => t.kind === "sweep")).toBe(false);
+
+      await fetch(`${at}/scenario`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "normal" }),
+      });
+      const normalTasks = (await (await fetch(`${at}/tasks?role=treasury&limit=20`)).json()) as {
+        tasks: AgentTask[];
+      };
+      expect(normalTasks.tasks.length).toBeGreaterThan(0);
+      expect(normalTasks.tasks.some((t) => t.kind === "sweep")).toBe(false);
+    } finally {
+      await new Promise<void>((ok) => s.close(() => ok()));
+    }
   });
 
   it("price rise, payee swap and a fake vendor are refused by the rules", async () => {
