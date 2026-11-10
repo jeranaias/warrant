@@ -48,8 +48,8 @@ export const OTHER = "_customers";
 /** True only when a proposal or payee id is a customer refund, not an unlisted payee. */
 export function isCustomerPayee(p: {
   payeeId: string;
-  category?: string;
-  refundOfOrderId?: string;
+  category?: string | undefined;
+  refundOfOrderId?: string | undefined;
 }): boolean {
   return (
     Boolean(p.refundOfOrderId) ||
@@ -67,7 +67,7 @@ export function isCustomerPayee(p: {
 export function payeeName(
   payeeId: string,
   warrants: readonly { payees: readonly { payeeId: string; displayName: string }[] }[],
-  proposal?: { category?: string; refundOfOrderId?: string },
+  proposal?: { category?: string | undefined; refundOfOrderId?: string | undefined },
 ): string {
   for (const w of warrants) {
     const found = w.payees.find((p) => p.payeeId === payeeId);

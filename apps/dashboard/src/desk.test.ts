@@ -152,7 +152,6 @@ describe("paySentence", () => {
           proposalId: "prop_lic_1",
           execution: {
             reservationId: "res_lic_1",
-            rail: "airwallex",
             status: "pending",
             detail: "SCHEDULED",
           },
@@ -168,13 +167,12 @@ describe("paySentence", () => {
             warrantId: "wrt_treasury",
             payeeId: "pay_licensor_eur",
             amount: { currency: "EUR", cents: 5_000 },
-            rail: "airwallex",
+            rail: "airwallex_transfer",
           },
           result: {
             decision: { outcome: "execute" },
             execution: {
               reservationId: "res_lic_1",
-              rail: "airwallex",
               status: "pending",
               detail: "SCHEDULED",
             },
@@ -207,7 +205,6 @@ describe("paySentence", () => {
           proposalId: "prop_lic_1",
           execution: {
             reservationId: "res_lic_1",
-            rail: "airwallex",
             status: "succeeded",
             detail: "status check",
           },
