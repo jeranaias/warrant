@@ -143,7 +143,7 @@ describe("paySentence", () => {
         spentCents: 0,
       },
     ];
-    const events: LoggedEvent[] = [
+    const events = [
       {
         seq: 1,
         at,
@@ -179,7 +179,7 @@ describe("paySentence", () => {
           },
         },
       },
-    ];
+    ] as unknown as LoggedEvent[];
     const treasuryName = (id: string) =>
       id === "wrt_treasury" ? "Treasury · licence" : nameOf(id);
     const licensorPayee = (id: string) =>
