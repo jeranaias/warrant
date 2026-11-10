@@ -191,8 +191,10 @@ pnpm dashboard                                 # terminal 2: owner link, Run a s
 Found on the way:
 
 - The live world has no sweep warrant yet (`wrt_treasury_sweep` is mock only), so the model filed
-  the sweep under the licence warrant and control refused it. Being fixed.
-- The dashboard showed the SCHEDULED Airwallex transfer as "paid". Being fixed.
+  the sweep under the licence warrant and control refused it. Live runs now skip the sweep task
+  and do not offer the sweep warrant to the model.
+- The dashboard showed the SCHEDULED Airwallex transfer as "paid". It now reads "sent …
+  Scheduled." until a later status check says it succeeded.
 - The scenario's disputes name the mock world's orders, so on testnet the store finds none and pays
   nothing. The live dispute run (2026-11-02) above uses real orders.
 
