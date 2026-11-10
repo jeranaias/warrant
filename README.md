@@ -87,7 +87,7 @@ Node 24+ (`.nvmrc`: run `fnm use` or `nvm use`) and pnpm 10 (`corepack enable` o
 no `.env` for the mock demo.
 
 ```sh
-git clone https://github.com/jeranaias/warrant.git && cd warrant   # private: needs repo access
+git clone https://github.com/jeranaias/warrant.git && cd warrant
 pnpm install
 pnpm build:hosted
 DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
@@ -97,7 +97,7 @@ DEMO_PASSWORD=pick-one DEMO_COOKIE_SECRET=any-16-or-more-chars pnpm start:hosted
 The same in Windows PowerShell 5.1, where `&&` and `VAR=value command` don't work:
 
 ```powershell
-git clone https://github.com/jeranaias/warrant.git   # private: needs repo access
+git clone https://github.com/jeranaias/warrant.git
 cd warrant
 pnpm install
 pnpm build:hosted
