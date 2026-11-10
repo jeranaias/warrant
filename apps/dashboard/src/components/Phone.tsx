@@ -33,7 +33,12 @@ import { StopButton } from "./StopButton.js";
  *   recent   the last payments; tap one for its replay
  *   bottom   STOP, always in reach
  */
-const FATE_WORD: Record<Fate, string> = { paid: "paid", blocked: "blocked", asked: "waiting" };
+const FATE_WORD: Record<Fate, string> = {
+  paid: "paid",
+  pending: "scheduled",
+  blocked: "blocked",
+  asked: "waiting",
+};
 
 export function Phone({
   engine,

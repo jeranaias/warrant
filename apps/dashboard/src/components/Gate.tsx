@@ -27,9 +27,11 @@ const NODE = 8;
 /** Longest outcome line before it wraps, so it never runs under the side panel. */
 const LINE_CHARS = 34;
 const TRAIL_MS = 1500;
-const FATES: Fate[] = ["paid", "asked", "blocked"];
+type GateFate = "paid" | "asked" | "blocked";
+const FATES: GateFate[] = ["paid", "asked", "blocked"];
 const FATE_COLOR: Record<Fate, string> = {
   paid: "var(--ok)",
+  pending: "var(--wait)",
   asked: "var(--wait)",
   blocked: "var(--stop)",
 };
@@ -131,24 +133,24 @@ export function Gate({
   });
 
   // Right: three outcome nodes; each agent's band splits into its share of each.
-  const outN: Record<Fate, number> = {
+  const outN: Record<GateFate, number> = {
     paid: total.paid,
     asked: total.asked + limits,
     blocked: total.blocked,
   };
   const outSlot = PLOT / 3;
-  const outTop: Record<Fate, number> = { paid: 0, asked: 0, blocked: 0 };
-  const outH: Record<Fate, number> = { paid: 0, asked: 0, blocked: 0 };
+  const outTop: Record<GateFate, number> = { paid: 0, asked: 0, blocked: 0 };
+  const outH: Record<GateFate, number> = { paid: 0, asked: 0, blocked: 0 };
   for (const [j, fate] of FATES.entries()) {
     outH[fate] = agents.reduce((s, a) => s + share(a, fate), 0);
     outTop[fate] = TOP + (j + 0.5) * outSlot - outH[fate] / 2;
   }
-  function share(a: (typeof agents)[number], fate: Fate): number {
+  function share(a: (typeof agents)[number], fate: GateFate): number {
     const lane = lanes.get(a.w.warrantId);
     if (!lane || a.n === 0) return 0;
     return ((a.band.y1 - a.band.y0) * lane[fate]) / a.n;
   }
-  const fill: Record<Fate, number> = { ...outTop };
+  const fill: Record<GateFate, number> = { ...outTop };
   const splits = agents.map((a, i) => {
     const g = atGate[i] ?? a.band;
     let gy = g.y0;
@@ -177,7 +179,8 @@ export function Gate({
           const i = g.agents.findIndex((a) => a.w.warrantId === p.warrantId);
           const a = g.agents[i];
           const at = g.atGate[i];
-          const s = g.splits[i]?.find((x) => x.fate === p.fate);
+          const gateFate: GateFate = p.fate === "pending" ? "asked" : p.fate;
+          const s = g.splits[i]?.find((x) => x.fate === gateFate);
           if (!a || !at || !s) return;
           const y0 = (a.band.y0 + a.band.y1) / 2;
           const d =

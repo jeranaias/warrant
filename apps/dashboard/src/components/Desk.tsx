@@ -631,7 +631,9 @@ function PayDetail({
   onClose?: (() => void) | undefined;
 }) {
   return (
-    <section className={`sheet desk-sheet ${r.fate === "blocked" ? "sheet-stop" : ""}`}>
+    <section
+      className={`sheet desk-sheet ${r.fate === "blocked" ? "sheet-stop" : r.fate === "pending" ? "sheet-wait" : ""}`}
+    >
       <div className="sheet-head">
         <div className="sheet-k">
           {r.fate}
@@ -646,7 +648,7 @@ function PayDetail({
       <p className="desk-sentence">{paySentence(r, !r.reason)}</p>
       {r.reason && (
         <div className="why-box">
-          <span className="why-k">Reason</span>
+          <span className="why-k">{r.fate === "pending" ? "Status" : "Reason"}</span>
           <span>{r.reason}</span>
         </div>
       )}

@@ -96,7 +96,7 @@ export function filterCounts(rows: DeskRow[]): Record<DeskFilter, number> {
     const n = r.kind === "pay" ? r.n : 1;
     c.all += n;
     if (r.kind === "store") c.store += 1;
-    else c[r.fate] += n;
+    else if (r.fate === "paid" || r.fate === "blocked") c[r.fate] += n;
   }
   return c;
 }
@@ -113,14 +113,17 @@ export function blockedKinds(rows: DeskRow[]): number {
 }
 
 /**
- * The row's one sentence: "Sourcing agent paid 0.02 USDZ to Upstream data provider.", or "… asked
- * to pay … Blocked: over the per-payment cap." A list row leaves the reason to its own line.
+ * The row's one sentence: "Sourcing agent paid 0.02 USDZ to Upstream data provider.", "… sent …
+ * Scheduled.", or "… asked to pay … Blocked: over the per-payment cap." A list row leaves the
+ * reason to its own line.
  */
 export function paySentence(r: PayRow, withReason = true): string {
   const times = r.n > 1 ? `, ${r.n} times` : "";
-  return r.fate === "paid"
-    ? `${r.who} paid ${money(r.amount)} to ${r.to}${times}.`
-    : `${r.who} asked to pay ${money(r.amount)} to ${r.to}${times}. Blocked${withReason && r.reason ? `: ${r.reason}` : ""}.`;
+  if (r.fate === "paid") return `${r.who} paid ${money(r.amount)} to ${r.to}${times}.`;
+  if (r.fate === "pending") {
+    return `${r.who} sent ${money(r.amount)} to ${r.to}${times}.${withReason ? ` ${r.reason ?? "Pending"}.` : ""}`;
+  }
+  return `${r.who} asked to pay ${money(r.amount)} to ${r.to}${times}. Blocked${withReason && r.reason ? `: ${r.reason}` : ""}.`;
 }
 
 /** Requests waiting for the owner, alike ones together (same ask, payee, amount and reasons). */

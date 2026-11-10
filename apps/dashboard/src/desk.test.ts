@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PendingApproval } from "./api.js";
+import type { LoggedEvent, PendingApproval, WarrantRow } from "./api.js";
 import {
   askGroups,
   blockedKinds,
@@ -9,6 +9,7 @@ import {
   paySentence,
 } from "./desk.js";
 import type { PayRow } from "./desk.js";
+import { passesOf } from "./flow.js";
 import type { Pass } from "./flow.js";
 import type { SellerMoment } from "./seller.js";
 
@@ -116,6 +117,109 @@ describe("paySentence", () => {
   it("says a blocked payment was blocked, why, and how many times", () => {
     expect(paySentence(blocked as PayRow)).toBe(
       "Sourcing agent asked to pay 0.04 USDZ to Upstream data provider, 2 times. Blocked: over the per-payment cap.",
+    );
+  });
+
+  it("shows a pending transfer as sent (not paid) until a later execution for the reservation succeeds", () => {
+    const warrants: WarrantRow[] = [
+      {
+        warrantId: "wrt_treasury",
+        version: 1,
+        agentId: "agt_treasury",
+        agentRole: "treasury",
+        purpose: "",
+        allowedRails: ["airwallex"],
+        payees: [
+          {
+            payeeId: "pay_licensor_eur",
+            displayName: "Data licensor (EUR)",
+            rail: "airwallex",
+            currency: "EUR",
+          },
+        ],
+        perPaymentCap: { currency: "EUR", cents: 6_000 },
+        totalBudget: { currency: "EUR", cents: 15_000 },
+        spentCents: 0,
+      },
+    ];
+    const events: LoggedEvent[] = [
+      {
+        seq: 1,
+        at,
+        event: {
+          type: "execution",
+          proposalId: "prop_lic_1",
+          execution: {
+            reservationId: "res_lic_1",
+            rail: "airwallex",
+            status: "pending",
+            detail: "SCHEDULED",
+          },
+        },
+      },
+      {
+        seq: 2,
+        at,
+        event: {
+          type: "proposal",
+          proposal: {
+            proposalId: "prop_lic_1",
+            warrantId: "wrt_treasury",
+            payeeId: "pay_licensor_eur",
+            amount: { currency: "EUR", cents: 5_000 },
+            rail: "airwallex",
+          },
+          result: {
+            decision: { outcome: "execute" },
+            execution: {
+              reservationId: "res_lic_1",
+              rail: "airwallex",
+              status: "pending",
+              detail: "SCHEDULED",
+            },
+          },
+        },
+      },
+    ];
+    const treasuryName = (id: string) =>
+      id === "wrt_treasury" ? "Treasury · licence" : nameOf(id);
+    const licensorPayee = (id: string) =>
+      id === "pay_licensor_eur" ? "Data licensor (EUR)" : payeeOf(id);
+
+    const pendingRows = deskRows(passesOf(events, warrants), [], treasuryName, licensorPayee);
+    const [pendingRow] = pendingRows as PayRow[];
+    expect(pendingRow?.fate).toBe("pending");
+    expect(pendingRow?.fate).not.toBe("paid");
+    expect(filterCounts(pendingRows)).toEqual({ all: 1, paid: 0, blocked: 0, store: 0 });
+    expect(filterRows(pendingRows, "paid")).toEqual([]);
+    expect(paySentence(pendingRow as PayRow)).toBe(
+      "Treasury · licence sent EUR 50.00 to Data licensor (EUR). Scheduled.",
+    );
+
+    const settledEvents: LoggedEvent[] = [
+      ...events,
+      {
+        seq: 3,
+        at,
+        event: {
+          type: "execution",
+          proposalId: "prop_lic_1",
+          execution: {
+            reservationId: "res_lic_1",
+            rail: "airwallex",
+            status: "succeeded",
+            detail: "status check",
+          },
+        },
+      },
+    ];
+    const paidRows = deskRows(passesOf(settledEvents, warrants), [], treasuryName, licensorPayee);
+    const [paidRow] = paidRows as PayRow[];
+    expect(paidRow?.fate).toBe("paid");
+    expect(filterCounts(paidRows)).toEqual({ all: 1, paid: 1, blocked: 0, store: 0 });
+    expect(filterRows(paidRows, "paid")).toHaveLength(1);
+    expect(paySentence(paidRow as PayRow)).toBe(
+      "Treasury · licence paid EUR 50.00 to Data licensor (EUR).",
     );
   });
 });

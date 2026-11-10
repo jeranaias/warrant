@@ -48,7 +48,12 @@ type Drawer = "activity" | "mandates" | "scenarios" | "live";
 /** Committed with the corpus; `pnpm bench` rewrites it and CI fails when it is stale. */
 const BENCH_LINE = benchLine(bench);
 
-const FATE_WORD: Record<Fate, string> = { paid: "paid", blocked: "blocked", asked: "waiting" };
+const FATE_WORD: Record<Fate, string> = {
+  paid: "paid",
+  pending: "scheduled",
+  blocked: "blocked",
+  asked: "waiting",
+};
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
 /** Animation follows the system setting: off when the viewer asks for reduced motion. */
