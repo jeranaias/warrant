@@ -11,7 +11,7 @@ import {
   time,
   warrantName,
 } from "../format.js";
-import { OTHER, leftFraction, passesOf, payeeNodes, tally } from "../flow.js";
+import { leftFraction, passesOf, payeeName, tally } from "../flow.js";
 import type { Fate } from "../flow.js";
 import { tintOf } from "../tints.js";
 import type { EngineState } from "../useEngine.js";
@@ -54,7 +54,6 @@ export function Phone({
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
-  const payees = useMemo(() => payeeNodes(warrants), [warrants]);
   const passes = useMemo(
     () => passesOf(engine.events, warrants, engine.approvals),
     [engine.events, warrants, engine.approvals],
@@ -91,8 +90,7 @@ export function Phone({
 
   const nameOf = (warrantId: string) =>
     warrantName(warrantId, warrants.find((w) => w.warrantId === warrantId)?.agentRole);
-  const payeeOf = (id: string) =>
-    payees.find((p) => p.id === id)?.name ?? (id === OTHER ? "customer" : id);
+  const payeeOf = (id: string) => payeeName(id, warrants);
 
   return (
     <div className={`ph${stopped ? " is-stopped" : ""}`}>

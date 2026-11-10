@@ -45,6 +45,37 @@ export const REASONS: Record<string, string> = {
 /** The node for payees that are not named on any warrant: customers getting refunds. */
 export const OTHER = "_customers";
 
+/** True only when a proposal or payee id is a customer refund, not an unlisted payee. */
+export function isCustomerPayee(p: {
+  payeeId: string;
+  category?: string;
+  refundOfOrderId?: string;
+}): boolean {
+  return (
+    Boolean(p.refundOfOrderId) ||
+    p.category === "customer_refund" ||
+    p.payeeId === OTHER ||
+    p.payeeId === "customer" ||
+    p.payeeId.startsWith("cus_")
+  );
+}
+
+/**
+ * Name a payee from any warrant in the world that lists it; only use "a customer" for real
+ * refund/customer payees, and otherwise show the payee id.
+ */
+export function payeeName(
+  payeeId: string,
+  warrants: readonly { payees: readonly { payeeId: string; displayName: string }[] }[],
+  proposal?: { category?: string; refundOfOrderId?: string },
+): string {
+  for (const w of warrants) {
+    const found = w.payees.find((p) => p.payeeId === payeeId);
+    if (found) return found.displayName;
+  }
+  return isCustomerPayee({ payeeId, ...proposal }) ? "a customer" : payeeId;
+}
+
 export function payeeNodes(warrants: WarrantRow[]): { id: string; name: string }[] {
   const seen = new Map<string, string>();
   for (const w of warrants) for (const p of w.payees) seen.set(p.payeeId, p.displayName);
@@ -123,7 +154,7 @@ export function passesOf(
       at,
       proposalId: p.proposalId,
       warrantId: p.warrantId,
-      payee: named.has(p.payeeId) ? p.payeeId : OTHER,
+      payee: named.has(p.payeeId) ? p.payeeId : isCustomerPayee(p) ? OTHER : p.payeeId,
       fate,
       amount: p.amount,
       ...(reason ? { reason } : {}),

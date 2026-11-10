@@ -11,9 +11,10 @@ import {
   filterCounts,
   filterRows,
   paySentence,
+  payeeName,
 } from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
-import { OTHER, leftFraction, passesOf, payeeNodes } from "../flow.js";
+import { leftFraction, passesOf } from "../flow.js";
 import { benchLine, cents, money, namesOf, time, warrantName } from "../format.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
@@ -75,7 +76,6 @@ export function Desk({
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
-  const payees = useMemo(() => payeeNodes(warrants), [warrants]);
   const passes = useMemo(
     () => passesOf(engine.events, warrants, engine.approvals),
     [engine.events, warrants, engine.approvals],
@@ -83,8 +83,7 @@ export function Desk({
   const moments = useMemo(() => sellerMoments(engine.events), [engine.events]);
   const nameOf = (id: string) =>
     warrantName(id, warrants.find((w) => w.warrantId === id)?.agentRole);
-  const payeeOf = (id: string) =>
-    id === OTHER ? "a customer" : (payees.find((p) => p.id === id)?.name ?? id);
+  const payeeOf = (id: string) => payeeName(id, warrants);
   const roleOfAgent = (id: string) => warrants.find((w) => w.agentId === id)?.agentRole;
   const roleOfWarrant = (id: string) => warrants.find((w) => w.warrantId === id)?.agentRole;
 

@@ -1,7 +1,10 @@
 import type { Money, PendingApproval } from "./api.js";
 import { agentName, field, foldRepeats, isMoney, money, warrantName } from "./format.js";
+import { isCustomerPayee, payeeName } from "./flow.js";
 import type { Fate, Pass } from "./flow.js";
 import type { SellerMoment } from "./seller.js";
+
+export { isCustomerPayee, payeeName };
 
 /**
  * The decision desk's data (components/Desk.tsx): what waits for the owner, grouped when alike,

@@ -7,9 +7,10 @@ import {
   filterCounts,
   filterRows,
   paySentence,
+  payeeName,
 } from "./desk.js";
 import type { PayRow } from "./desk.js";
-import { passesOf } from "./flow.js";
+import { OTHER, passesOf } from "./flow.js";
 import type { Pass } from "./flow.js";
 import type { SellerMoment } from "./seller.js";
 
@@ -262,5 +263,145 @@ describe("askGroups", () => {
       title: "Treasury agent asks for new limits for the sourcing agent",
       amount: "new limits",
     });
+  });
+});
+
+describe("payeeName", () => {
+  const wrtTreasury: WarrantRow = {
+    warrantId: "wrt_treasury",
+    version: 1,
+    agentId: "agt_treasury",
+    agentRole: "treasury",
+    purpose: "",
+    allowedRails: ["airwallex"],
+    payees: [
+      {
+        payeeId: "pay_licensor_eur",
+        displayName: "Data licensor (EUR)",
+        rail: "airwallex",
+        currency: "EUR",
+      },
+    ],
+    perPaymentCap: { currency: "EUR", cents: 6_000 },
+    totalBudget: { currency: "EUR", cents: 15_000 },
+    spentCents: 0,
+  };
+  const wrtSweep: WarrantRow = {
+    warrantId: "wrt_treasury_sweep",
+    version: 1,
+    agentId: "agt_treasury",
+    agentRole: "treasury",
+    purpose: "",
+    allowedRails: ["metal_x402"],
+    payees: [
+      {
+        payeeId: "pay_treasury",
+        displayName: "Our treasury (to Airwallex)",
+        rail: "metal_x402",
+        currency: "USDZ",
+      },
+    ],
+    perPaymentCap: usdz(50),
+    totalBudget: usdz(50),
+    spentCents: 0,
+  };
+
+  it("names a payee from any warrant in the world that lists it, even when proposed under another warrant", () => {
+    const warrants = [wrtTreasury, wrtSweep];
+    const events: LoggedEvent[] = [
+      {
+        seq: 1,
+        at,
+        event: {
+          type: "proposal",
+          proposal: {
+            proposalId: "prop_sweep_1",
+            warrantId: "wrt_treasury",
+            payeeId: "pay_treasury",
+            amount: usdz(15),
+            rail: "metal_x402",
+            category: "treasury_sweep",
+          },
+          result: {
+            decision: {
+              outcome: "blocked",
+              rules: { checks: [{ rule: "rail_allowed", pass: false, detail: "" }] },
+            },
+            blockedBy: "rules",
+          },
+        },
+      } as unknown as LoggedEvent,
+    ];
+    const [row] = deskRows(
+      passesOf(events, warrants),
+      [],
+      () => "Treasury · licence",
+      (id) => payeeName(id, warrants),
+    ) as PayRow[];
+    expect(row?.to).toBe("Our treasury (to Airwallex)");
+    expect(paySentence(row as PayRow)).toBe(
+      "Treasury · licence asked to pay 0.15 USDZ to Our treasury (to Airwallex). Blocked: rail not on the warrant.",
+    );
+  });
+
+  it("uses 'a customer' only for real refund/customer payees and otherwise shows the payee id", () => {
+    const liveWarrants = [wrtTreasury];
+    expect(payeeName("pay_treasury", liveWarrants)).toBe("pay_treasury");
+    expect(payeeName("pay_rogue", liveWarrants)).toBe("pay_rogue");
+    expect(payeeName("customer", liveWarrants)).toBe("a customer");
+    expect(payeeName("cus_1001", liveWarrants)).toBe("a customer");
+    expect(payeeName(OTHER, liveWarrants)).toBe("a customer");
+    expect(payeeName("ord_payer", liveWarrants, { refundOfOrderId: "ord_1001" })).toBe(
+      "a customer",
+    );
+
+    const events: LoggedEvent[] = [
+      {
+        seq: 1,
+        at,
+        event: {
+          type: "proposal",
+          proposal: {
+            proposalId: "prop_sweep_live",
+            warrantId: "wrt_treasury",
+            payeeId: "pay_treasury",
+            amount: usdz(15),
+            rail: "metal_x402",
+            category: "treasury_sweep",
+          },
+          result: {
+            decision: {
+              outcome: "blocked",
+              rules: { checks: [{ rule: "rail_allowed", pass: false, detail: "" }] },
+            },
+            blockedBy: "rules",
+          },
+        },
+      } as unknown as LoggedEvent,
+      {
+        seq: 2,
+        at,
+        event: {
+          type: "proposal",
+          proposal: {
+            proposalId: "prop_refund_1",
+            warrantId: "wrt_support",
+            payeeId: "customer",
+            amount: usdz(2),
+            rail: "metal_x402",
+            category: "customer_refund",
+            refundOfOrderId: "ord_1001",
+          },
+          result: { decision: { outcome: "execute" } },
+        },
+      } as unknown as LoggedEvent,
+    ];
+    const built = deskRows(
+      passesOf(events, liveWarrants),
+      [],
+      (id) => (id === "wrt_treasury" ? "Treasury · licence" : "Support agent"),
+      (id) => payeeName(id, liveWarrants),
+    ) as PayRow[];
+    expect(built.map((r) => r.to)).toEqual(["a customer", "pay_treasury"]);
   });
 });

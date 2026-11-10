@@ -13,7 +13,7 @@ import {
   warrantName,
   whyOf,
 } from "../format.js";
-import { OTHER, leftFraction, limitRequests, passesOf, payeeNodes, tally } from "../flow.js";
+import { leftFraction, limitRequests, passesOf, payeeName, tally } from "../flow.js";
 import type { Fate, Pass, Tally } from "../flow.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
@@ -93,7 +93,6 @@ export function CommandPage({
 }) {
   const warrants = useMemo(() => engine.world?.warrants ?? [], [engine.world]);
   const stopped = engine.kill?.engaged ?? false;
-  const payees = useMemo(() => payeeNodes(warrants), [warrants]);
   const passes = useMemo(
     () => passesOf(engine.events, warrants, engine.approvals),
     [engine.events, warrants, engine.approvals],
@@ -277,7 +276,7 @@ export function CommandPage({
             <AgentPanel
               w={agent}
               passes={passes}
-              payeeName={(id) => payees.find((p) => p.id === id)?.name ?? "customer"}
+              payeeName={(id) => payeeName(id, warrants)}
               stopped={stopped}
               onClose={() => setSelected(null)}
             />
@@ -356,12 +355,7 @@ export function CommandPage({
               last?.warrantId,
               warrants.find((w) => w.warrantId === last?.warrantId)?.agentRole,
             )}
-            payee={
-              last
-                ? (payees.find((p) => p.id === last.payee)?.name ??
-                  (last.payee === OTHER ? "customer" : last.payee))
-                : ""
-            }
+            payee={last ? payeeName(last.payee, warrants) : ""}
           />
           <StopButton kill={engine.kill} onDone={engine.refresh} onError={onError} hotkeys terse />
         </footer>
