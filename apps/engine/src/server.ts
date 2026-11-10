@@ -10,7 +10,14 @@ import { SCENARIOS, TaskFeed, scenario } from "@warrant/mocks/feed";
 import type { ScenarioName } from "@warrant/mocks/feed";
 import { answerDispute } from "./disputes.js";
 import { spendReview } from "./treasury.js";
-import { AGENTS, CUSTOMER_ADDRESS, OWNER_ID, makeWorld, placeholderPurpose } from "./world.js";
+import {
+  AGENTS,
+  CUSTOMER_ADDRESS,
+  OWNER_ID,
+  SWEEP_WARRANT_ID,
+  makeWorld,
+  placeholderPurpose,
+} from "./world.js";
 import type { World } from "./world.js";
 
 /**
@@ -98,8 +105,12 @@ export function createEngine(opts: EngineOptions = {}): Engine {
   // Sandbox: our store's warrant pass checks, as they happen.
   world.watch?.(record);
 
+  const hasSweep = () => world.warrants.has(SWEEP_WARRANT_ID);
+  const scenarioTasks = (name: ScenarioName) =>
+    scenario(name, clock()).filter((it) => hasSweep() || it.task.kind !== "sweep");
+
   const initial = opts.scenario ?? (world.mode === "sandbox" ? "none" : "all");
-  if (initial !== "none") feed.load(scenario(initial, clock()));
+  if (initial !== "none") feed.load(scenarioTasks(initial));
 
   const app = express();
   app.disable("x-powered-by");
@@ -116,9 +127,11 @@ export function createEngine(opts: EngineOptions = {}): Engine {
 
   // Who the agents are and what they may pay. Agents use these ids in their proposals.
   app.get("/world", (_req, res) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { sweepWarrantId, ...treasury } = AGENTS.treasury;
     res.json({
       ownerId: OWNER_ID,
-      agents: AGENTS,
+      agents: hasSweep() ? AGENTS : { ...AGENTS, treasury },
       warrants: [...world.warrants.values()].map((w) => ({
         warrantId: w.warrantId,
         version: w.version,
@@ -157,7 +170,7 @@ export function createEngine(opts: EngineOptions = {}): Engine {
       return;
     }
     feed.clear();
-    const queued = feed.load(scenario(name as ScenarioName, clock()));
+    const queued = feed.load(scenarioTasks(name as ScenarioName));
     // Mock world: buyers at our store's door first, so the seller's side of a warrant pass shows.
     // The customer's agent buys with its owner's pass; in the attacks, a buyer with none.
     if (world.storeSale) {

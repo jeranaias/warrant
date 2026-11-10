@@ -1,12 +1,13 @@
-import type { LoggedEvent, Money, WarrantRow } from "./api.js";
+import type { Execution, LoggedEvent, Money, WarrantRow } from "./api.js";
+import { pendingLabel } from "./format.js";
 
 /**
  * The gate's data (components/Gate.tsx): every payment an agent asks for, what the warrant did
  * with it, and why. Pure, so flow.test.ts can pin it.
  */
 
-/** What happened at the seal: money moved, control said no, or it is waiting for the owner. */
-export type Fate = "paid" | "blocked" | "asked";
+/** What happened at the seal: money moved, sent and pending, control said no, or waiting for the owner. */
+export type Fate = "paid" | "pending" | "blocked" | "asked";
 
 export interface Pass {
   seq: number;
@@ -44,6 +45,37 @@ export const REASONS: Record<string, string> = {
 /** The node for payees that are not named on any warrant: customers getting refunds. */
 export const OTHER = "_customers";
 
+/** True only when a proposal or payee id is a customer refund, not an unlisted payee. */
+export function isCustomerPayee(p: {
+  payeeId: string;
+  category?: string | undefined;
+  refundOfOrderId?: string | undefined;
+}): boolean {
+  return (
+    Boolean(p.refundOfOrderId) ||
+    p.category === "customer_refund" ||
+    p.payeeId === OTHER ||
+    p.payeeId === "customer" ||
+    p.payeeId.startsWith("cus_")
+  );
+}
+
+/**
+ * Name a payee from any warrant in the world that lists it; only use "a customer" for real
+ * refund/customer payees, and otherwise show the payee id.
+ */
+export function payeeName(
+  payeeId: string,
+  warrants: readonly { payees: readonly { payeeId: string; displayName: string }[] }[],
+  proposal?: { category?: string | undefined; refundOfOrderId?: string | undefined },
+): string {
+  for (const w of warrants) {
+    const found = w.payees.find((p) => p.payeeId === payeeId);
+    if (found) return found.displayName;
+  }
+  return isCustomerPayee({ payeeId, ...proposal }) ? "a customer" : payeeId;
+}
+
 export function payeeNodes(warrants: WarrantRow[]): { id: string; name: string }[] {
   const seen = new Map<string, string>();
   for (const w of warrants) for (const p of w.payees) seen.set(p.payeeId, p.displayName);
@@ -65,13 +97,25 @@ export function passesOf(
   const named = new Set(warrants.flatMap((w) => w.payees.map((p) => p.payeeId)));
   const waiting = approvals ? new Set(approvals.map((a) => a.proposalId)) : undefined;
   const decided = new Map<string, boolean>();
-  const failed = new Set<string>();
+  const executions = new Map<string, Execution>();
+  const byReservation = new Map<string, string>();
   let stoppedAt = -1;
+  for (const { event } of events) {
+    if (event.type === "proposal" && event.result.execution) {
+      const ex = event.result.execution;
+      if (ex.reservationId) byReservation.set(ex.reservationId, event.proposal.proposalId);
+      executions.set(event.proposal.proposalId, ex);
+    }
+  }
   for (const { seq, event } of events) {
     if (event.type === "approval_decided" && event.ok)
       decided.set(event.proposalId, event.decision !== "denied");
-    if (event.type === "execution" && event.execution.status === "failed")
-      failed.add(event.proposalId);
+    if (event.type === "execution") {
+      const ex = event.execution;
+      const id = (ex.reservationId && byReservation.get(ex.reservationId)) || event.proposalId;
+      if (ex.reservationId && id) byReservation.set(ex.reservationId, id);
+      if (id) executions.set(id, ex);
+    }
     if (event.type === "kill_switch") stoppedAt = seq;
   }
   const out: Pass[] = [];
@@ -91,10 +135,14 @@ export function passesOf(
       if (fate === "blocked") reason = REASONS["owner"];
     }
     if (fate === "asked" && (seq < stoppedAt || (waiting && !waiting.has(p.proposalId)))) continue;
-    if (fate === "paid" && failed.has(p.proposalId)) {
+    const ex = executions.get(p.proposalId);
+    if (fate === "paid" && ex?.status === "failed") {
       fate = "blocked";
       // The card network's own refusal (its limits mirror the warrant) reads as the card's.
       reason = REASONS[p.rail === "airwallex_card" ? "card" : "rail"];
+    } else if (fate === "paid" && (ex?.status === "pending" || ex?.status === "unknown")) {
+      fate = "pending";
+      reason = pendingLabel(ex.detail);
     }
     if (fate === "blocked" && !reason) {
       const rule = d?.rules?.checks.find((c) => !c.pass)?.rule;
@@ -106,7 +154,7 @@ export function passesOf(
       at,
       proposalId: p.proposalId,
       warrantId: p.warrantId,
-      payee: named.has(p.payeeId) ? p.payeeId : OTHER,
+      payee: named.has(p.payeeId) ? p.payeeId : isCustomerPayee(p) ? OTHER : p.payeeId,
       fate,
       amount: p.amount,
       ...(reason ? { reason } : {}),
@@ -147,9 +195,10 @@ export function tally(passes: Pass[]) {
   const lanes = new Map<string, Tally>();
   const paidTo = new Map<string, Money>();
   for (const p of passes) {
-    total[p.fate] += 1;
+    const bucket: keyof Tally = p.fate === "pending" ? "asked" : p.fate;
+    total[bucket] += 1;
     const lane = lanes.get(p.warrantId) ?? { paid: 0, blocked: 0, asked: 0 };
-    lane[p.fate] += 1;
+    lane[bucket] += 1;
     lanes.set(p.warrantId, lane);
     if (p.fate === "paid") {
       const was = paidTo.get(p.payee);

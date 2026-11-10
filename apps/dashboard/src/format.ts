@@ -193,6 +193,14 @@ export function short(h: string): string {
   return h.length > 13 ? `${h.slice(0, 10)}...` : h;
 }
 
+/** A rail's pending status ("SCHEDULED", "PROCESSING") as a short label ("Scheduled"). */
+export function pendingLabel(detail?: string): string {
+  const d = detail?.trim();
+  if (!d) return "Pending";
+  if (/^[A-Z_]+$/.test(d)) return d.slice(0, 1) + d.slice(1).toLowerCase().replaceAll("_", " ");
+  return d.slice(0, 1).toUpperCase() + d.slice(1);
+}
+
 const words = (code: string) => code.replaceAll("_", " ");
 
 function pathOf(url: string): string {

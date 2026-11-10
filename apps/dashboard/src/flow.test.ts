@@ -61,7 +61,7 @@ group("flow map data", () => {
     );
     expect(passes.map((p) => [p.payee, p.fate])).toEqual([
       ["pay_a", "paid"],
-      [OTHER, "blocked"],
+      ["pay_x", "blocked"],
       [OTHER, "asked"],
       [OTHER, "blocked"],
     ]);

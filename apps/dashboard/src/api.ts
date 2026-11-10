@@ -96,6 +96,7 @@ export interface SubmitResult {
     /** The purpose check's verdict, null when the rules already blocked. */
     purpose?: { verdict: string; explanation: string } | null;
   };
+  execution?: Execution;
   blockedBy?: "malformed" | "rules" | "purpose" | "owner" | "rail";
   error?: string;
 }
