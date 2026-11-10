@@ -15,7 +15,7 @@ against it before any money moves.
 
 ## Demo link
 
-https://warrant-demo-bt31.onrender.com (access code in the form's private notes field, not here).
+https://warrant-demo-bt31.onrender.com (access code in the submission's description on HackerEarth, not here).
 Each visitor gets their own demo engine on mock rails, reset with one button. It runs on a free
 host, so the first visit after a quiet spell can take up to a minute to wake.
 
@@ -176,11 +176,20 @@ scripted results did not change. The case ids and the reason are in
 
 ## Team
 
-- truelumpen: AI Engineer
-- Eva, Max, Jesse: TODO: confirm names and roles as they should appear.
+Boots2Bytes: four transitioning service members with backgrounds in security, intelligence
+analysis and AI engineering.
+
+- Jesse Morgan ([@jeranaias](https://github.com/jeranaias)): team lead; control core, Metal
+  mandates and ledger; code review
+- Elisei Khmelev ([@truelumpen](https://github.com/truelumpen)): AI engineer; the agents, the
+  purpose check and the attack benchmark
+- Max Goudy ([@GoudyMT](https://github.com/GoudyMT)): Airwallex rails; transfers, FX and the virtual
+  card
+- Eva Catalina Valencia ([@evacatalina123-cyber](https://github.com/evacatalina123-cyber)): design;
+  the dashboard, the demo and the video
 
 ## Links
 
-- Live demo: https://warrant-demo-bt31.onrender.com (access code in the form's private notes).
-- Repo: TODO (public link, or confirm judges can access a private repo).
+- Live demo: https://warrant-demo-bt31.onrender.com (access code in the submission's description on HackerEarth).
+- Repo: https://github.com/jeranaias/warrant (public).
 - Video: TODO (see `docs/VIDEO.md`).
