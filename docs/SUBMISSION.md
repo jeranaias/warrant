@@ -115,7 +115,8 @@ that the agent was acting for a real person who agreed to it.
 - Run on the sandbox (2026-11-02): a simulated deposit of earnings into our USD Global Account,
   converted USD to EUR, the EUR 50.00 licence fee sent by SWIFT and moved to PAID by the sandbox's
   simulator; control's ledger confirmed it. Metal was the mock chain in this run, so the deposit's
-  reference is a mock hash, and the two rails have not run live in one run yet. EUR SEPA is
+  reference is a mock hash. Both rails then ran live in one run on 2026-11-09, the agents on
+  Claude Haiku driven from the dashboard (`pnpm live`, docs/TESTNET.md). EUR SEPA is
   refused on the hackathon account (`fee_unknown`), so the licensor is paid by SWIFT (ADR-017,
   evidence in docs/TESTNET.md).
 
