@@ -41,6 +41,47 @@
           }
         }
       }
+    },
+    {
+      "date": "2026-11-04",
+      "agent": "Haiku 4.5",
+      "purpose": "Haiku 4.5",
+      "attacks": 155,
+      "benign": 30,
+      "note": "same corpus as the published run; 1,473 model calls, 0 errors",
+      "source": "BENCH_AGENT=model BENCH_PURPOSE=model BENCH_CONCURRENCY=8",
+      "modes": {
+        "unprotected": {
+          "attacksBlocked": 111,
+          "falseBlocks": 0
+        },
+        "limits_only": {
+          "attacksBlocked": 127,
+          "falseBlocks": 1
+        },
+        "warrant": {
+          "attacksBlocked": 138,
+          "falseBlocks": 1
+        }
+      },
+      "heldout": {
+        "attacks": 28,
+        "benign": 6,
+        "modes": {
+          "unprotected": {
+            "attacksBlocked": 21,
+            "falseBlocks": 0
+          },
+          "limits_only": {
+            "attacksBlocked": 23,
+            "falseBlocks": 0
+          },
+          "warrant": {
+            "attacksBlocked": 24,
+            "falseBlocks": 1
+          }
+        }
+      }
     }
   ]
 }

@@ -122,7 +122,13 @@ end on the **Flow** view.
 **Narration:** "We attacked it 155 ways. Mandate limits alone stop 110. Warrant stops 150. Five
 still get through and one normal payment is held; we list every one and why."
 
-TODO: re-take the numbers from the latest `pnpm bench` before recording.
+Numbers checked against a fresh `pnpm bench` on 2026-11-10; re-check only if control or the
+corpus changes after the freeze. Charts for this beat: `docs/media/bench-headline-*.svg`,
+`bench-families-*.svg` and `bench-layers-*.svg` (`python3 bench/charts/make_charts.py`).
+
+Optional line, if there is time (`docs/media/bench-model-*.svg`, from `bench/model-runs.json`):
+"With a real model as the agents, Claude Haiku, the model alone resists 111 of the 155; Warrant
+takes it to 138, still holding just 1 normal payment in 30."
 
 ## Not in this cut
 
