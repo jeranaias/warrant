@@ -85,18 +85,17 @@ Gotchas (from the team's first run, 2026-10-29):
 Reference: https://docs.metalntwx.com/agents/metal-agent.md (every command),
 https://docs.metalntwx.com/agents/require-signed-order.md (our store's route).
 
-## 5. Claude Code + Airwallex MCPs
+## 5. Airwallex MCP servers
 
-The repo's `.mcp.json` registers two Airwallex sandbox MCP servers:
+We build against Airwallex's two sandbox MCP servers:
 
 | Name                  | URL                                         | Use                                  |
 | --------------------- | ------------------------------------------- | ------------------------------------ |
 | `airwallex-docs`      | https://mcp.sandbox.airwallex.com/docs      | Search Airwallex API docs            |
 | `airwallex-developer` | https://mcp.sandbox.airwallex.com/developer | Developer tools against your sandbox |
 
-Open Claude Code in the repo root, approve the project MCP servers when prompted, then run `/mcp`
-to check both are connected. The docs MCP needs no login. The developer MCP uses OAuth: pick it
-in `/mcp` and sign in with **your own sandbox account**. Use the docs MCP before writing any rails or
+Add both to your MCP client. The docs MCP needs no login. The developer MCP uses OAuth: sign in
+with **your own sandbox account**. Use the docs MCP before writing any rails or
 mock code, so API shapes match the real sandbox.
 
 ## 6. Run things

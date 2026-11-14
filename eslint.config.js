@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import globals from "globals";
 
-// Package boundaries are enforced here, not by convention. See each package's CLAUDE.md.
+// Package boundaries are enforced here, not by convention. See each package's RULES.md.
 const restrict = (files, patterns, message) => ({
   files,
   rules: {

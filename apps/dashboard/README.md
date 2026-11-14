@@ -41,7 +41,7 @@ control (raise the price, load a scenario, have treasury ask for a new cap).
 
 ## Rules
 
-See `CLAUDE.md`. In short: never import rails or agents; the approval card shows every field of
+See `RULES.md`. In short: never import rails or agents; the approval card shows every field of
 what is approved; the stop is one click plus a confirm; no card numbers or keys on screen.
 
 ## Phone view on a real phone
