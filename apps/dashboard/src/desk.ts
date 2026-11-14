@@ -21,6 +21,8 @@ export interface PayRow {
   fate: Exclude<Fate, "asked">;
   who: string;
   to: string;
+  /** The payee as the request named it, for technical details. */
+  payeeId: string;
   amount: Money;
   reason?: string;
   n: number;
@@ -69,6 +71,7 @@ export function deskRows(
       fate: p.fate,
       who: nameOf(p.warrantId),
       to: payeeOf(p.payee),
+      payeeId: p.payee,
       amount: p.amount,
       ...(p.reason ? { reason: p.reason } : {}),
       n: 1,

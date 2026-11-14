@@ -86,7 +86,9 @@ describe("replay wording", () => {
     };
     const lines = replayLines(r, names);
     expect(outcomeLine(r)).toEqual({ tone: "stop", text: "Blocked by the rules" });
-    expect(lines[1]?.text).toBe("Rules: 2 of 3 failed");
+    expect(lines[1]?.text).toBe(
+      "Rules: 2 of 3 failed: over the per-payment cap, payee not on the warrant",
+    );
     expect(lines[1]?.checks?.find((c) => !c.ok)).toMatchObject({
       label: "over the per-payment cap",
       detail: "0.04 USDZ > 0.03 USDZ",
@@ -95,6 +97,25 @@ describe("replay wording", () => {
     expect(lines[1]?.why).toBeUndefined();
     // A detail that only repeats its label is left out.
     expect(lines[1]?.checks?.at(-1)).toEqual({ ok: false, label: "payee not on the warrant" });
+  });
+
+  it("an unlisted payee is said plainly; its raw id stays in the ids", () => {
+    const dead = "0x000000000000000000000000000000000000dEaD";
+    const r: Replay = {
+      proposalId: "prop_9",
+      found: true,
+      outcome: "blocked",
+      stoppedBy: "rules",
+      steps: [{ ...asked, payeeId: dead }],
+    };
+    const [line] = replayLines(r, names);
+    expect(line?.text).toBe("Sourcing agent asked to pay 0.02 USDZ to 0x0000…dEaD");
+    expect(line?.ids).toContain(dead);
+    const vendor = replayLines(
+      { ...r, steps: [{ ...asked, payeeId: "pay_unknown_vendor" }] },
+      names,
+    );
+    expect(vendor[0]?.text).toBe("Sourcing agent asked to pay 0.02 USDZ to unknown vendor");
   });
 
   it("held, denied; and a timeout settled by a status check", () => {
