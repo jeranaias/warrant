@@ -22,10 +22,23 @@ agent). Created 2026-10-29 by the owner; mandates expire 2026-11-19.
 | treasury       | business  | 6    | 6      | earnings only | `0x03494d9106f39f4203f106576672ef262193772455be52064e4b6d7907f22eda` |
 | customer-agent | customer  | 0.05 | 2      | business only | `0x6908b0a2e62a939f6c16f3e899e4757d46033213fc9e57c50cb41c642c096374` |
 
-The sourcing mandate above was replaced by the live scene runs on 2026-10-31 (see "Live scene
-runs"). Current sourcing mandate: `sourcing-v5-1793415327805.json`, id
-`0xd1549f88af4f7222126e7c51c8edc9abb45ed692f152b1e1b278a9c4622b8735`, cap 0.03, budget 10, upstream
-only (day-one limits). `METAL_HOME/warrant-live/owner-state.json` always names the current one.
+The table is the day-one set. Since then the live scene runs replaced sourcing (2026-10-31, see
+"Live scene runs"), and each STOP on a live run revoked sourcing and support on chain, after which
+`pnpm setup:testnet` bound fresh ones (procedure under "Running live"). The last STOP was the live
+run in the demo video (2026-11-14: Claude Haiku 4.5 agents on Metal testnet and the Airwallex
+sandbox; 3 warrants and 2 mandates revoked in 20.1 s). `mandate status` on 2026-11-14:
+
+| Mandate  | State                       | Cap  | Budget | Expires    | Mandate id                                                           |
+| -------- | --------------------------- | ---- | ------ | ---------- | -------------------------------------------------------------------- |
+| sourcing | bound, current              | 0.03 | 10     | 2026-12-05 | `0x7aa06e3fd018e5935e5a599c932fa256ae0ecf65e8418e656bcf2e010f3b22ea` |
+| support  | bound, current              | 4    | 4      | 2026-12-05 | `0x7db81f1c57c71dcb4cb7e96b312e29e472573a534c20804e7d721d88a7ecaf51` |
+| sourcing | revoked by STOP, 2026-11-14 | 0.03 | 10     | 2026-12-05 | `0x73b0f2e400723baa928cf8f890f47a339200f9542880e298a27ada037fa792c7` |
+| support  | revoked by STOP, 2026-11-14 | 4    | 4      | 2026-12-05 | `0x27b90df94fea591a9b788f6f495edc249880151ceaa8a4497aa45e1ee251ca88` |
+| treasury | bound (day-one)             | 6    | 6      | 2026-11-20 | `0x03494d9106f39f4203f106576672ef262193772455be52064e4b6d7907f22eda` |
+
+`METAL_HOME/warrant-public.env` always names the current ones. Paid on chain in that run, for
+example: `0x1ca34acd08d649712ed99cb6137b9943374dd9405124e2eaf02d414d225b8ae6` (sourcing, 2 cents
+to upstream, x402).
 
 ## Evidence (2026-10-29)
 
