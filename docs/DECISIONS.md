@@ -100,7 +100,7 @@ SDK (no LangGraph), Haiku for sourcing/support and the cheapest purpose model th
 block rate, Batch API for benchmark runs, record/replay of model responses in tests, prompt
 caching for the system prompt + warrant. The project name is **Warrant** (not Warden).
 Consequences: the money path (reserve -> pay -> confirm) is one language and one process; no
-Python-to-Node bridge. Teammates who know Python better review TypeScript drafted with Claude.
+Python-to-Node bridge. Teammates who know Python better review the TypeScript.
 
 ## ADR-009: Kit 11 numbers are code constants; warrants sit on top of Metal mandates
 

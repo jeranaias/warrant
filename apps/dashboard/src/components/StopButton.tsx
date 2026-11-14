@@ -4,7 +4,7 @@ import type { KillState } from "../api.js";
 import { keyOf } from "./Approvals.js";
 
 /**
- * The emergency stop: one click, then one confirm (apps/dashboard/CLAUDE.md: never more).
+ * The emergency stop: one click, then one confirm (apps/dashboard/RULES.md: never more).
  * Shows how long the engine took to stop everything.
  */
 export function StopButton({

@@ -1,5 +1,5 @@
 /**
- * USDZ unit conversion. The ONLY place cents meet USDZ base units (CLAUDE.md money rules).
+ * USDZ unit conversion. The ONLY place cents meet USDZ base units (CONTRIBUTING.md money rules).
  * 1 USDZ = 10^18 base units; 1 cent = 10^16 base units. Mandates pay whole cents only.
  */
 
