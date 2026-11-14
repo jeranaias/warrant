@@ -1,8 +1,7 @@
 # Demo script (under 5 minutes)
 
 Built around the official Kit 11 and Kit 2 demo checklists (see `docs/kits/HACKATHON.md`). Every
-checklist item has a beat. Rehearse Nov 9 and Nov 10; record backup footage of every beat on
-Nov 11.
+checklist item has a beat.
 
 The pass and the dispute come right after the business runs (Metal's ask, #88): beats 2 and 3, with
 the testnet hashes from `docs/TESTNET.md` on screen as data.

@@ -122,7 +122,7 @@ end on the **Flow** view.
 **Narration:** "We attacked it 155 ways. Mandate limits alone stop 110. Warrant stops 150. Five
 still get through and one normal payment is held; we list every one and why."
 
-TODO: re-take the numbers from the latest `pnpm bench` before recording.
+The numbers are from the latest `pnpm bench` (`bench/results.json`).
 
 ## Not in this cut
 

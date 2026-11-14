@@ -7,7 +7,7 @@ Airwallex. A control layer decides whether any payment happens. See `README.md` 
 
 ## Status: BUILD PHASE (shortlisted 2026-10-29)
 
-Submission due 2026-11-15, 11:59 PM PST (ADR-012); we ship 2026-11-12. Work by lane (`docs/LANES.md`);
+Submission due 2026-11-15, 10:29 AM PT (HackerEarth build-phase close). Work by lane (`docs/LANES.md`);
 Kit 11 and Kit 2 facts are in `docs/kits/HACKATHON.md`; the demo checklist is `docs/DEMO.md`.
 Everything that existed before the build phase is tagged `pre-build-2026-10-23`.
 

@@ -2,7 +2,7 @@
 
 Chain `eip155:63825`. Explorer: https://testnet.metalntwx.com. Everything here is public on chain.
 Keys and credentials live only in the owner's `METAL_HOME` (never in the repo, never given to an
-agent). Created 2026-10-29 by the owner; mandates expire 2026-11-19.
+agent). Created 2026-10-29 by the owner. Expiry per mandate: see the current table below.
 
 ## Accounts
 

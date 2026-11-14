@@ -1,8 +1,7 @@
-# Submission form: draft
+# Submission
 
-Text for the hackathon submission form (target Nov 12). Every number and transaction here is in
-the repo (`bench/results.json`, `docs/TESTNET.md`, `docs/DECISIONS.md`). Anything marked TODO is
-still open.
+Text for the hackathon submission form. Every number and transaction here is in the repo
+(`bench/results.json`, `docs/TESTNET.md`, `docs/DECISIONS.md`).
 
 ## Project name
 
@@ -71,7 +70,8 @@ that the agent was acting for a real person who agreed to it.
 
 - `metal-agent` CLI 0.3.3: `account create`, `fund`, `mandate credential create`, `mandate bind`,
   `mandate status`, `mandate replace` (owner raises the cap), `mandate revoke` (STOP),
-  `mandate pull` (refunds, and treasury moving earnings under its own sweep mandate, ADR-022), and `pay` with the warrant pass sent as a header.
+  `mandate pull` (refunds), and `pay` with the warrant pass sent as a header. Treasury's sweep
+  warrant (ADR-022) runs on the simulated rails only; it has no testnet mandate yet.
 - `@metalntwx/metal-pay`: `requireSignedOffer` and `SIGNED_OFFER_REQUIRED` on our store's route,
   `signedOfferOf`, `onAfterSettle` to store each signed order with its transaction hash and a hash
   of what we delivered.
@@ -100,7 +100,12 @@ that the agent was acting for a real person who agreed to it.
   `POST /api/v1/transfers/create`, `GET /api/v1/transfers?request_id=`,
   `POST /api/v1/simulation/deposit/create` (earnings arrive with the Metal transaction hash as
   the reference; in the sandbox run Metal was the mock chain, so that hash is a mock one), and the
-  sandbox transfer simulation.
+  sandbox transfer simulation; `GET /api/v1/global_accounts`.
+- Issuing (`pnpm scene:card --sandbox`): `POST /api/v1/issuing/cardholders/create`,
+  `GET /api/v1/issuing/cardholders`, `POST /api/v1/issuing/cards/create`, `GET /api/v1/issuing/cards`,
+  `GET /api/v1/issuing/cards/{id}`, `POST /api/v1/issuing/cards/{id}/update` (limits, and
+  freeze on STOP), `GET /api/v1/issuing/cards/{id}/limits`, `GET /api/v1/issuing/transactions`,
+  and `POST /api/v1/simulation/issuing/create` for the sandbox purchases.
 - Every write carries a `request_id` from control's idempotency key. A timeout leaves the transfer
   unconfirmed with its amount held; a status check by that id settles it before the next decision,
   and it is never resent (ADR-019, tested against the Airwallex mock's timeout and duplicate
@@ -193,4 +198,4 @@ analysis and AI engineering.
 
 - Live demo: https://warrant-demo-bt31.onrender.com (access code in the submission's description on HackerEarth).
 - Repo: https://github.com/jeranaias/warrant (public).
-- Video: TODO (see `docs/VIDEO.md`).
+- Video: linked in the submission's description on HackerEarth (script: `docs/VIDEO.md`).

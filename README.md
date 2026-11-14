@@ -14,8 +14,7 @@ their own copy. The first visit after a quiet spell can take a minute to wake. T
 scripted; **Agents** in the top line runs them on Haiku with your own Anthropic key instead
 (memory only, never stored, at most 150 calls; ADR-023).
 
-Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents) ·
-[task board](https://github.com/users/jeranaias/projects/1)
+Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents).
 
 ## How it works
 
@@ -212,7 +211,7 @@ docs/                architecture, decisions, demo script, runbook, testnet evid
 
 [Architecture](docs/ARCHITECTURE.md) · [Decisions (ADRs)](docs/DECISIONS.md) ·
 [Runbook](docs/RUNBOOK.md) · [Testnet evidence](docs/TESTNET.md) · [Demo script](docs/DEMO.md) ·
-[Contracts](docs/CONTRACTS.md) · [Submission draft](docs/SUBMISSION.md) ·
-[Video draft](docs/VIDEO.md)
+[Contracts](docs/CONTRACTS.md) · [Submission](docs/SUBMISSION.md) ·
+[Video script](docs/VIDEO.md)
 
 Everything here is sandbox or testnet. Nothing points at production Airwallex or mainnet.
