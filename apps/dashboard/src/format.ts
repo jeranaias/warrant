@@ -188,6 +188,21 @@ export function proposalIdOf(e: ControlEvent): string | undefined {
   }
 }
 
+/** A long hex address as its ends, e.g. "0x0000…dEaD"; anything else unchanged. */
+export function shortAddress(a: string): string {
+  return /^0x[0-9a-fA-F]{20,}$/.test(a) ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
+}
+
+/**
+ * A payee no warrant lists, said plainly: an address by its ends ("0x0000…dEaD"), a payee id by
+ * its words ("pay_unknown_vendor" -> "unknown vendor"). The raw id stays in technical details.
+ */
+export function unlistedPayee(payeeId: string): string {
+  if (payeeId.startsWith("0x")) return shortAddress(payeeId);
+  const m = /^pay_([a-z0-9_]+)$/.exec(payeeId);
+  return m?.[1] ? m[1].replaceAll("_", " ") : payeeId;
+}
+
 /** A hash or id cut to its first 10 characters, e.g. "0x6908b0a2...". */
 export function short(h: string): string {
   return h.length > 13 ? `${h.slice(0, 10)}...` : h;
@@ -257,7 +272,7 @@ function describeEvent(e: ControlEvent, names: Names): { tone: Tone; text: strin
       const who = warrantName(p.warrantId, p.agentRole);
       const to = p.refundOfOrderId
         ? `a refund on order ${p.refundOfOrderId}`
-        : (names.payee(p.payeeId) ?? p.payeeId);
+        : (names.payee(p.payeeId) ?? unlistedPayee(p.payeeId));
       const ask = `${who} asked to pay ${money(p.amount)} to ${to}`;
       if (e.result.blockedBy) {
         const by = BLOCKED_BY[e.result.blockedBy] ?? e.result.blockedBy;

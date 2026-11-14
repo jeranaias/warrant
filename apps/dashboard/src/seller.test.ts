@@ -71,11 +71,12 @@ describe("sellerMoments", () => {
         ],
       }),
     ]);
-    expect(m?.title).toBe("Dispute dsp_1 · wrong data");
+    expect(m?.title).toBe("Dispute · wrong data");
     expect(m?.summary).toBe("2 orders · refund 1 · kept 1 · 0.05 USDZ back to the payer");
     expect(m?.rows).toEqual([
       { label: "ord_1", value: "refund 0.05 USDZ · data was wrong · on chain 0xdddddddd..." },
       { label: "ord_404", value: "kept · order not found" },
+      { label: "Dispute", value: "dsp_1", mono: true },
     ]);
   });
 

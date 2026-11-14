@@ -63,7 +63,7 @@ group("describe", () => {
     };
     expect(describe(blocked)).toMatchObject({ seq: 1, tone: "stop" });
     expect(describe(blocked).text).toBe(
-      "Sourcing agent asked to pay 0.04 USDZ to pay_upstream. Blocked by the rules in its warrant.",
+      "Sourcing agent asked to pay 0.04 USDZ to upstream. Blocked by the rules in its warrant.",
     );
 
     const waiting: LoggedEvent = {

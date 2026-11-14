@@ -16,7 +16,8 @@ function dismissedBefore(): boolean {
 
 /**
  * Three steps for a first visit, along the bottom: run a scenario, decide what is held, press
- * STOP. Each ticks off as it happens. Gone after STOP or when dismissed (remembered per browser).
+ * STOP. A step that has happened shrinks to a tick, so only what is left reads as text. Gone
+ * after STOP or when dismissed (remembered per browser).
  */
 export function FirstRun({
   events,
@@ -56,20 +57,37 @@ export function FirstRun({
     }
   };
 
+  const tick = (label: string) => (
+    <>
+      <span className="fr-n" aria-hidden="true">
+        ✓
+      </span>
+      <span className="sr-only">{label}: done</span>
+    </>
+  );
+
   return (
     <ol className="firstrun" aria-label="First steps">
       <li className={ran ? "done" : ""}>
-        <span className="fr-n">1</span>
         {ran ? (
-          "Run a scenario"
+          tick("Run a scenario")
         ) : (
-          <button className="btn link" disabled={loading} onClick={() => void run()}>
-            Run a scenario
-          </button>
+          <>
+            <span className="fr-n">1</span>
+            <button className="btn link" disabled={loading} onClick={() => void run()}>
+              Run a scenario
+            </button>
+          </>
         )}
       </li>
       <li className={decided ? "done" : ""}>
-        <span className="fr-n">2</span>Decide what's held for you
+        {decided ? (
+          tick("Decide what's held for you")
+        ) : (
+          <>
+            <span className="fr-n">2</span>Decide what's held for you
+          </>
+        )}
       </li>
       <li>
         <span className="fr-n">3</span>Press STOP

@@ -7,7 +7,8 @@ import type { Replay as ReplayData } from "../replay.js";
 
 /**
  * One request, step by step (GET /replay): what the agent asked, each rule, the purpose check,
- * the owner, the ledger and the rail. One plain line per step; ids in the small line under it.
+ * the owner, the ledger and the rail. One plain line per step; the rules step opens to its full
+ * list of checks, and every id sits under "Technical details" at the end.
  * `version` refetches when the log moves (a held request gets decided while it is open).
  */
 export function Replay({
@@ -45,6 +46,7 @@ export function Replay({
   }, [proposalId, version]);
 
   const head = data ? outcomeLine(data) : null;
+  const lines = data ? replayLines(data, names) : [];
   return (
     <div className="replay">
       <div className="replay-top">
@@ -58,29 +60,42 @@ export function Replay({
       {error && !data && <p className="muted small">Couldn't load this request: {error}</p>}
       {!data && !error && <p className="muted small">Loading…</p>}
       {data && (
-        <ol className="replay-steps">
-          {replayLines(data, names).map((l, i) => (
-            <li key={i} className={`tone-${l.tone}`}>
-              <span className="replay-dot" aria-hidden="true" />
-              <span className="feed-time mono">{time(l.at)}</span>
-              <span className="feed-text">
-                {l.text}
-                {l.why && <span className="feed-why">{l.why}</span>}
-                {l.checks && (
-                  <ul className="replay-checks">
-                    {l.checks.map((c) => (
-                      <li key={c.label} className={c.ok ? "ok" : "stop"}>
-                        <span aria-hidden="true">{c.ok ? "✓" : "✕"}</span> {c.label}
-                        {c.detail && <span className="muted"> · {c.detail}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {l.ids && <span className="replay-ids mono">{l.ids}</span>}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <>
+          <ol className="replay-steps">
+            {lines.map((l, i) => (
+              <li key={i} className={`tone-${l.tone}`}>
+                <span className="replay-dot" aria-hidden="true" />
+                <span className="feed-time mono">{time(l.at)}</span>
+                <span className="feed-text">
+                  {l.checks ? (
+                    <details className="replay-rules">
+                      <summary>{l.text}</summary>
+                      <ul className="replay-checks">
+                        {l.checks.map((c, k) => (
+                          <li key={k} className={c.ok ? "ok" : "stop"}>
+                            <span aria-hidden="true">{c.ok ? "✓" : "✕"}</span> {c.label}
+                            {c.detail && <span className="muted"> · {c.detail}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : (
+                    l.text
+                  )}
+                  {l.why && <span className="feed-why">{l.why}</span>}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {lines.some((l) => l.ids) && (
+            <details className="approval-tech replay-tech">
+              <summary>Technical details</summary>
+              <ul className="replay-ids mono">
+                {lines.map((l, i) => l.ids && <li key={i}>{l.ids}</li>)}
+              </ul>
+            </details>
+          )}
+        </>
       )}
     </div>
   );
