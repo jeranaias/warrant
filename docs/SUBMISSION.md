@@ -198,4 +198,4 @@ analysis and AI engineering.
 
 - Live demo: https://warrant-demo-bt31.onrender.com (access code in the submission's description on HackerEarth).
 - Repo: https://github.com/jeranaias/warrant (public).
-- Video: linked in the submission's description on HackerEarth (script: `docs/VIDEO.md`).
+- Video: https://youtu.be/OhGSd7jZzUI (3:21; script: `docs/VIDEO.md`).

@@ -1,5 +1,7 @@
 # Demo video script
 
+Watch: https://youtu.be/OhGSd7jZzUI
+
 The submitted video, 3:21 long, 1080p. Narration is a synthetic voice reading the lines below. On-screen labels say what each shot is: live model, scripted worst-case agent, live run on testnet and sandbox, or hosted demo. Screen footage is the real dashboard driven with the mouse; nothing is mocked up.
 
 ## Cold open (0:00-0:10)
