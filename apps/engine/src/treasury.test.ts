@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentTask } from "@warrant/contracts";
 import type { SpendReviewTask } from "@warrant/contracts";
-import { AGENT_BUDGETS, TOTAL_BUDGET } from "@warrant/control";
+import { AGENT_BUDGETS, LICENCE_FEE, TOTAL_BUDGET } from "@warrant/control";
 import { createEngine } from "./server.js";
 import { spendReview } from "./treasury.js";
 import { makeWorld } from "./world.js";
@@ -113,5 +113,15 @@ describe("POST /treasury/review", () => {
       tasks: SpendReviewTask[];
     };
     expect(tasks[0]?.upstreamPrice).toEqual({ currency: "USDZ", cents: 4 });
+  });
+});
+
+describe("the licence fee comes from business.ts, not the invoice (#26)", () => {
+  it("one licence payment may be at most LICENCE_FEE, in its currency", () => {
+    const w = makeWorld(NOW).warrants.get("wrt_treasury");
+    expect(w?.perPaymentCap).toEqual(LICENCE_FEE);
+    expect(w?.payees.map((p) => [p.payeeId, p.currency])).toEqual([
+      ["pay_licensor", LICENCE_FEE.currency],
+    ]);
   });
 });

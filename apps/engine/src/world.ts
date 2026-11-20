@@ -13,6 +13,7 @@ import type {
 } from "@warrant/contracts";
 import {
   AGENT_BUDGETS,
+  LICENCE_FEE,
   QUERY_PRICE,
   TOTAL_BUDGET,
   canonicalHash,
@@ -207,7 +208,9 @@ export function bodies(
           billingPeriod: "month",
         },
       ],
-      perPaymentCap: eur(5000),
+      // The licence fee is a code constant (business.ts, ADR-009): no invoice can raise what one
+      // licence payment may be. A smaller bill (a credit note) still pays.
+      perPaymentCap: LICENCE_FEE,
       totalBudget: eur(10000),
     },
     ...(card ? [cardBody(common)] : []),
