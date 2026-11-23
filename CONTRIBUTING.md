@@ -1,4 +1,4 @@
-# Warrant: guidance for AI coding tools and humans
+# Warrant: engineering rules
 
 Warrant is our Airwallex Agentic Banking Hackathon entry (Kit 11, x402 Business Agents). Three AI
 agents (sourcing, support, treasury) run a small pay-per-call data business on Metal (x402) and
@@ -7,7 +7,7 @@ Airwallex. A control layer decides whether any payment happens. See `README.md` 
 
 ## Status: BUILD PHASE (shortlisted 2026-10-29)
 
-Submission due 2026-11-15, 11:59 PM PST (ADR-012); we ship 2026-11-12. Work by lane (`docs/LANES.md`);
+Submission due 2026-11-15, 10:29 AM PT (HackerEarth build-phase close). Work by lane (`docs/LANES.md`);
 Kit 11 and Kit 2 facts are in `docs/kits/HACKATHON.md`; the demo checklist is `docs/DEMO.md`.
 Everything that existed before the build phase is tagged `pre-build-2026-10-23`.
 
@@ -72,8 +72,7 @@ pnpm bench            # attack benchmark runner
 
 ## Security
 
-- The Airwallex MCP servers (`.mcp.json`) are for **us** while we build: reading docs, checking real API
-  responses, setting up sandbox data. Never give them, or any Airwallex or Metal credentials, to the
+- Never give Airwallex or Metal credentials, or the Airwallex MCP servers we build with, to the
   Warrant agents. An agent holding them could move money without going through control.
 
 - No secrets in code, prompts, logs, fixtures or commits. Secrets live only in `.env`
@@ -90,5 +89,5 @@ pnpm bench            # attack benchmark runner
 4. If you touched `packages/contracts`, the PR is labeled `contracts` and is separate.
 5. PR template filled in: what, why, how tested, screenshots for dashboard changes.
 
-Each package has its own `CLAUDE.md` with what it may import and what it must never do. Read it
+Each package has its own `RULES.md` with what it may import and what it must never do. Read it
 before editing that package.

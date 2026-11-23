@@ -14,7 +14,7 @@ import {
   payeeName,
 } from "../desk.js";
 import type { AskGroup, DeskFilter, DeskRow, PayRow } from "../desk.js";
-import { leftFraction, passesOf } from "../flow.js";
+import { OTHER, leftFraction, passesOf } from "../flow.js";
 import { benchLine, cents, money, namesOf, time, warrantName } from "../format.js";
 import { sellerMoments } from "../seller.js";
 import { tintOf } from "../tints.js";
@@ -256,7 +256,7 @@ export function Desk({
   }
 
   return (
-    <div className={`desk${stopped ? " is-stopped" : ""}`}>
+    <div className={`desk${stopped ? " is-stopped" : ""}${page === "live" ? " wide-page" : ""}`}>
       {top}
       {banner && <div className="desk-banner">{banner}</div>}
 
@@ -448,6 +448,12 @@ function RowList({
   /** On a narrow screen the picked row opens in place. */
   inline?: (r: DeskRow) => ReactNode;
 }) {
+  // Lines that arrive while the list is open get a short pulse; the first render has none.
+  const seen = useRef<Set<string> | null>(null);
+  const first = seen.current === null;
+  const known = (seen.current ??= new Set());
+  const fresh = new Set(first ? [] : rows.filter((r) => !known.has(r.key)).map((r) => r.key));
+  for (const r of rows) known.add(r.key);
   if (rows.length === 0)
     return (
       <p className="desk-empty muted">
@@ -457,7 +463,7 @@ function RowList({
   return (
     <ol className="desk-rows">
       {rows.map((r) => (
-        <li key={r.key}>
+        <li key={r.key} className={fresh.has(r.key) ? "fresh" : undefined}>
           <button
             className={`desk-row ${r.kind === "pay" ? r.fate : r.moment.ok ? "store" : "blocked"}`}
             aria-pressed={r.key === picked}
@@ -655,7 +661,7 @@ function PayDetail({
         <dt>Agent</dt>
         <dd>{r.who}</dd>
         <dt>To</dt>
-        <dd>{r.to}</dd>
+        <dd title={r.payeeId === OTHER ? undefined : r.payeeId}>{r.to}</dd>
         <dt>Amount</dt>
         <dd className="num">{money(r.amount)}</dd>
         {r.n > 1 && (
@@ -667,6 +673,15 @@ function PayDetail({
         <dt>{r.n > 1 ? "Latest" : "When"}</dt>
         <dd className="num">{time(r.at)}</dd>
       </dl>
+      {r.payeeId !== OTHER && r.payeeId !== r.to && (
+        <details className="approval-tech">
+          <summary>Technical details</summary>
+          <dl className="facts">
+            <dt>Payee</dt>
+            <dd className="mono">{r.payeeId}</dd>
+          </dl>
+        </details>
+      )}
       {steps(r.proposalId, r.n > 1)}
     </section>
   );

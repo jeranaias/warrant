@@ -68,17 +68,20 @@ export function sellerMoments(events: readonly LoggedEvent[]): SellerMoment[] {
         at: l.at,
         kind: "dispute",
         ok: true,
-        title: `Dispute ${e.disputeId} · ${words(e.claim)}`,
+        title: `Dispute · ${words(e.claim)}`,
         summary:
           `${n} order${n === 1 ? "" : "s"} · refund ${refunded} · kept ${n - refunded}` +
           (e.refund.cents > 0 ? ` · ${money(e.refund)} back to the payer` : ""),
-        rows: e.orders.map((o) => ({
-          label: o.orderId,
-          value:
-            (o.refundCents > 0 ? `refund ${cents(o.refundCents, e.refund.currency)}` : "kept") +
-            ` · ${words(o.reason)}` +
-            (o.verified && o.txHash ? ` · on chain ${short(o.txHash)}` : ""),
-        })),
+        rows: [
+          ...e.orders.map((o) => ({
+            label: o.orderId,
+            value:
+              (o.refundCents > 0 ? `refund ${cents(o.refundCents, e.refund.currency)}` : "kept") +
+              ` · ${words(o.reason)}` +
+              (o.verified && o.txHash ? ` · on chain ${short(o.txHash)}` : ""),
+          })),
+          { label: "Dispute", value: e.disputeId, mono: true },
+        ],
       });
     }
   }

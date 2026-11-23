@@ -1,134 +1,83 @@
-# Video script: Draft, for Eva
+# Demo video script
 
-Draft for issue #91. Eva owns the final cut (#33). Target: under 4 minutes (the limit is 5).
+Watch: https://youtu.be/OhGSd7jZzUI
 
-Rules for the recording (from `docs/DEMO.md`): everything shown is sandbox or testnet and says so
-in the data, not in an overlay. Never show a key, a credential file, the owner link, a card
-number or `.env`. Transaction hashes appear as data: terminal output, the **Testnet runs** panel or
-the testnet explorer.
+The submitted video, 3:21 long, 1080p. Narration is a synthetic voice reading the lines below. On-screen labels say what each shot is: live model, scripted worst-case agent, live run on testnet and sandbox, or hosted demo. Screen footage is the real dashboard driven with the mouse; nothing is mocked up.
 
-Most beats are recorded on the hosted demo (https://warrant-demo-bt31.onrender.com, simulated
-money): the **Decision Desk** is the main screen, and **Flow** in the header switches to the gate
-view. Press **Reset** before each take. A full run takes about 30 seconds after **Run a
-scenario**, so there is room to slow down in the edit.
+## Cold open (0:00-0:10)
 
-## Beat sheet
+**On screen (card):** An injected "ignore your spending rules" message drains an unprotected agent's budget; 0 of 155 attacks stopped.
 
-| #   | Time      | Beat                               | Runs on                                |
-| --- | --------- | ---------------------------------- | -------------------------------------- |
-| 1   | 0:00-0:15 | Cold open on Flow                  | Hosted demo                            |
-| 2   | 0:15-0:50 | Run a scenario: the Desk fills     | Hosted demo                            |
-| 3   | 0:50-1:30 | At our store: pass and dispute     | Hosted demo, then **Testnet runs**     |
-| 4   | 1:30-2:10 | Needs you: the held EUR 12.00 bill | Hosted demo                            |
-| 5   | 2:10-2:45 | Why it was blocked: the replay     | Hosted demo                            |
-| 6   | 2:45-3:10 | Real rails                         | **Testnet runs** (testnet and sandbox) |
-| 7   | 3:10-3:30 | STOP                               | Hosted demo                            |
-| 8   | 3:30-3:55 | The numbers, close on Flow         | Benchmark, Flow view                   |
+**Narration:** "Give an AI agent a way to pay, and one message like this can drain its budget. With no protection, none of our one hundred fifty-five test attacks were stopped."
 
-## 1. Cold open on Flow (0:00-0:15)
+## Title (0:10-0:15)
 
-**On screen:** **Flow** view mid-run: requests from three agents pass through the warrant into
-Paid, Held for you and Blocked, with the reasons beside Blocked.
+**On screen (card):** Warrant: a control layer between AI agents and money.
 
-**Narration:** "These three AI agents run a small data business. They buy, refund and pay bills
-on their own. Warrant decides whether any of that money actually moves."
+**Narration:** "Warrant puts a control layer between AI agents and money."
 
-## 2. Run a scenario: the Desk fills (0:15-0:50)
+## The business (0:15-0:32)
 
-**Setup:** **Reset**, then the Desk (press **Desk** if Flow is showing).
+**On screen (live model, simulated money):** Flow view: three Claude Haiku 4.5 agents run a scenario; every request passes through the signed warrant.
 
-**On screen:** press **Run a scenario** in the three-step strip. Lines arrive in the middle
-column, one sentence each, newest first: "Sourcing agent paid 0.02 USDZ to Upstream data
-provider." and "Sourcing agent asked to pay 0.04 USDZ to Upstream data provider. Blocked." with
-the reason under it. The 20-purchase burst folds into one blocked line marked "× 19". The left
-column counts Needs you, Everything, Blocked, Paid and At our store, and shows each agent's budget
-left.
+**Narration:** "Three AI agents, running on Claude Haiku, run a small data business. They buy data, refund customers, and pay bills on their own. Every request goes through the warrant that its owner signed: paid, held for the owner, or blocked."
 
-**Narration:** "Agents never pay anyone. They ask, and every request is checked against the
-warrant the owner signed. Paid, or blocked with the reason, in one sentence."
+## Attacks (0:32-1:20)
 
-The burst: one purchase from that offer is paid (the one the offer allows) and every repeat is
-blocked.
+**On screen (live model, then scripted worst case):** The attack scenario on Claude Haiku 4.5 (it pays the real supplier; the one bogus refund it agrees to is blocked at the gate), then the worst-case agent that obeys every message: changed payee, 200 pre-approved purchases, fake urgent invoice, each blocked with its reasons and replayable step by step.
 
-## 3. At our store: pass and dispute (0:50-1:30)
+**Narration:** "Agents never hold the money. They ask, and each request is checked against the warrant: who it may pay, how much, on which rail, and until when. Under attack, Claude Haiku ignored the fake address, the flood, and the fake invoice. It did agree to one bogus refund. That request hit the gate, and was blocked: it doesn't match an order. But you can't count on a model to say no. So we also test the worst case: an agent that obeys every message. A changed payment address? Not on the warrant. Blocked. Two hundred purchases the owner supposedly pre-approved? One goes through. Every repeat is blocked. A fake urgent invoice: blocked, with its reasons. And every decision replays, step by step."
 
-This is Metal's ask: dispute handling, and a seller proving an agent paid under a mandate a human
-signed.
+## Needs you (1:20-1:33)
 
-**On screen:** filter **At our store**. "Buyer's warrant pass checked" (the owner who signed, the
-mandate, the cap against the price), "Buyer refused at the store" (no warrant pass: not served,
-not charged), and a dispute decided order by order: one refunded for wrong data with its on-chain
-transaction, the others kept ("data was correct", "order not found"). Then **Testnet runs**, the
-Metal testnet dispute row: purchases `0x32a27368…` and `0x6f658444…` with their passes, the
-refund by mandate pull `0x2314f9bc…`, the repeat refund refused, and "my agent never agreed"
-rejected with 11 of 11 checks holding. Cut to the explorer page for the refund.
+**On screen (live model):** A second EUR 12.00 licence bill in one month is held; the owner sees every field and approves exactly that.
 
-**Narration:** "Our store checks every buyer's warrant pass before serving: proof a real person
-authorised that agent at that price. When a customer disputes, the store decides from its
-records, order by order."
+**Narration:** "Some calls aren't for an agent to make. A second bill, from the same licensor, in one month, waits for the owner, who sees exactly what they're approving, and approves that, and only that."
 
-## 4. Needs you: the held EUR 12.00 bill (1:30-2:10)
+## At our store (1:33-1:47)
 
-**On screen:** **Needs you** at the top: "Treasury · licence → Data licensor (EUR) · EUR 12.00",
-reason "Data licensor (EUR) bills once a month and was already paid this month". A second item
-sits there too: treasury's sweep of earnings to Airwallex, which always waits for the owner. The card on the
-right shows exactly what is being approved and its fingerprint. Press **Approve EUR 12.00**; the
-line moves to Paid and step 2 of the strip ticks.
+**On screen (live model):** Our store checks each buyer's warrant pass before serving.
 
-**Narration:** "A second bill from the same licensor in the same month isn't the agent's call.
-It waits for the owner, who sees exactly what they are approving, and approves that, and only
-that."
+**Narration:** "On the other side, our store checks each buyer's warrant pass, before it serves anything: proof that a real person authorized that agent, at that price. No pass, no data, no charge."
 
-Option: the same card on the phone page (narrow window, or **Phone** in the header).
+## Real rails (1:47-2:03)
 
-## 5. Why it was blocked: the replay (2:10-2:45)
+**On screen (live run, 14 Nov 2026):** One live run on Metal testnet and the Airwallex sandbox: an on-chain payment with its transaction hash, and the EUR 50 licence fee sent by SWIFT (scheduled).
 
-**On screen:** click the blocked 0.04 USDZ line. The right side shows it step by step: the
-request, then "Rules: 1 of 9 failed" with each check ticked and "over the per-payment cap ·
-0.04 USDZ > 0.03 USDZ" crossed, then the purpose check not run, then nothing reserved.
+**Narration:** "The demo runs on simulated money. These rails are real. Here, the same agents run against Metal testnet and the Airwallex sandbox, in one live run. Payments settle on chain, and a fifty-euro licence fee goes out by SWIFT."
 
-**Narration:** "Every decision can be replayed: which rule, which reason, what was held and what
-moved. Nothing to take on trust."
+## On chain (2:03-2:15)
 
-## 6. Real rails (2:45-3:10)
+**On screen (testnet runs):** Testnet runs: with Warrant's rules off, a 4-cent payment over the mandate's 3-cent cap is refused on chain.
 
-**On screen:** **Testnet runs**. The other flows on Metal testnet and the Airwallex sandbox, with
-dates and links: the mandate refusing a 4-cent purchase on chain,
-the EUR 50.00 licence fee by SWIFT (PAID), and the virtual Visa card (over-limit purchase declined
-by the card, STOP froze it in 627 ms). Cut to one explorer page for a hash.
+**Narration:** "Every warrant sits on a Metal mandate, with the same limits. Turn Warrant's own rules off, and the chain still says no: a four-cent payment, over a three-cent cap, is refused on chain."
 
-**Narration:** "The demo runs on simulated money. These are the same flows on Metal testnet and
-the Airwallex sandbox."
+## Airwallex (2:15-2:31)
 
-## 7. STOP (3:10-3:30)
+**On screen (sandbox runs):** USD global account -> EUR conversion -> SWIFT payout; a virtual Visa card with the same limits declines an over-limit purchase.
 
-**On screen:** press **STOP**, then **Yes, stop all money now**. The receipt shows "Stopped in …"
-and the Sourcing, Support and Treasury agents' warrants revoked.
+**Narration:** "On Airwallex, earnings land in a US dollar global account, convert to euros, and the licence fee is paid by SWIFT. A virtual Visa card carries the same limits. An over-limit purchase is blocked by our rules, and declined by the card."
 
-**Narration:** "And if anything looks wrong, one button stops everything. Every warrant revoked,
-the agents' mandates revoked, nothing new gets through."
+## STOP (2:31-2:43)
 
-## 8. The numbers, close on Flow (3:30-3:55)
+**On screen (live run, 14 Nov 2026):** STOP on the live run: payments refused, 3 warrants and 2 Metal mandates revoked on chain (20.1 s, the chain confirmations).
 
-**On screen:** the benchmark (from `bench/results.json`; 155 attacks, 30 normal payments), then
-end on the **Flow** view.
+**Narration:** "And if anything looks wrong, one button stops everything. Payments are refused at once. Every warrant is revoked, and on testnet, the mandates are revoked on chain."
 
-| Setup       | Attacks blocked | Normal payments wrongly blocked |
-| ----------- | --------------- | ------------------------------- |
-| unprotected | 0 of 155        | 0 of 30                         |
-| limits only | 110 of 155      | 0 of 30                         |
-| Warrant     | 150 of 155      | 1 of 30                         |
+## The numbers (2:43-3:01)
 
-**Narration:** "We attacked it 155 ways. Mandate limits alone stop 110. Warrant stops 150. Five
-still get through and one normal payment is held; we list every one and why."
+**On screen (card, from bench/results.json):** 155 attacks against the worst-case agent: no protection 0, mandate limits alone 110, Warrant 150; 5 get through, 1 of 30 normal payments wrongly blocked.
 
-TODO: re-take the numbers from the latest `pnpm bench` before recording.
+**Narration:** "Against that worst-case agent, we ran one hundred fifty-five attacks. Mandate limits alone stop one hundred ten. Warrant stops one hundred fifty. Five still get through, and one normal payment in thirty is wrongly blocked. Each one is listed, with the reason."
 
-## Not in this cut
+## Try it (3:01-3:08)
 
-The terminal scenes (`pnpm scene`, `pnpm scene:dispute`, `pnpm scene:earnings --sandbox`,
-`pnpm scene:card --sandbox`) show the same beats with live hashes; use them as cutaways if
-**Testnet runs** isn't enough. Raising a limit (**Scenarios** → **Raise to 4 cents** → **Ask
-treasury to review spending** — needs the agents running (`pnpm live`, or `pnpm agents` in the
-3-terminal setup) to reach **Needs you** → **Sign new limits**) fits if there is time under 4
-minutes.
+**On screen (hosted demo):** The hosted demo's Agents dialog: bring your own Anthropic key.
+
+**Narration:** "Try it now, with no install. Bring your own Anthropic key, and watch a real model hit the same walls."
+
+## Close (3:08-3:15)
+
+**On screen (card):** Agents propose. Control decides. Money only leaves through control. Links and team.
+
+**Narration:** "Agents propose. Control decides. Money only leaves through control."

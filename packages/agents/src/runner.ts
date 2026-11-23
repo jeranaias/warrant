@@ -118,7 +118,7 @@ function describe(o: ProposalOutcome): string {
   return `control: blocked${o.blockedBy ? ` by ${o.blockedBy}` : ""} (final, do not retry)`;
 }
 
-/** The engine's HTTP API, as the agents use it (apps/engine/CLAUDE.md). */
+/** The engine's HTTP API, as the agents use it (apps/engine/RULES.md). */
 export class EngineClient {
   constructor(private readonly base: string) {}
 

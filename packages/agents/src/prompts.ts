@@ -5,7 +5,7 @@ import type { AgentContext } from "./context.js";
 
 /**
  * System prompts. Each role's job lives in `<role>/prompt.md` so it can be reviewed as text.
- * Rule (CLAUDE.md): describe the job only. No amounts, limits, payee lists or validation rules:
+ * Rule (RULES.md): describe the job only. No amounts, limits, payee lists or validation rules:
  * those are enforced in control from the signed warrant.
  */
 const load = (role: AgentRole) =>

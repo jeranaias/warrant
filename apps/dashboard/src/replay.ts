@@ -1,5 +1,5 @@
 import type { Money } from "./api.js";
-import { money, short, warrantName } from "./format.js";
+import { money, short, unlistedPayee, warrantName } from "./format.js";
 import type { Names, Tone } from "./format.js";
 import { REASONS } from "./flow.js";
 
@@ -165,11 +165,14 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
     switch (s.kind) {
       case "asked": {
         const who = warrantName(s.warrantId, s.agentRole);
-        const to = names.payee(s.payeeId);
+        const listed = names.payee(s.payeeId);
+        // A refund to the literal "customer" names no one; any other unlisted payee is said
+        // plainly ("0x0000…dEaD", "unknown vendor") and its raw id kept in the ids.
+        const to = listed ?? (s.payeeId === "customer" ? undefined : unlistedPayee(s.payeeId));
         const text = s.refundOfOrderId
           ? `${who} asked to refund ${money(s.amount)}${to ? ` to ${to}` : ""}`
           : `${who} asked to pay ${money(s.amount)}${to ? ` to ${to}` : ""}`;
-        const ids = [r.proposalId, s.warrantId, words(s.rail), ...(to ? [] : [s.payeeId])];
+        const ids = [r.proposalId, s.warrantId, words(s.rail), ...(listed ? [] : [s.payeeId])];
         if (s.refundOfOrderId) ids.push(`order ${s.refundOfOrderId}`);
         return { at: s.at, tone: "info", text, ids: ids.join(" · ") };
       }
@@ -189,7 +192,9 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
           tone: s.pass ? "ok" : "stop",
           text: s.pass
             ? `Rules: all ${s.checks.length} checks passed`
-            : `Rules: ${failed.length} of ${s.checks.length} failed`,
+            : `Rules: ${failed.length} of ${s.checks.length} failed: ${failed
+                .map((c) => REASONS[c.rule] ?? words(c.rule))
+                .join(", ")}`,
           checks: s.checks.map((c) => {
             const label = c.pass
               ? (RULE_LABELS[c.rule] ?? words(c.rule))
@@ -199,7 +204,7 @@ export function replayLines(r: Replay, names: Names): ReplayLine[] {
             const detail = MONEY_RULES.has(c.rule) ? moneyDetail(c.detail, currency) : c.detail;
             return { ok: c.pass, label, ...(extra ? { detail } : {}) };
           }),
-          // Each failed check carries its own detail beside it, so no line-level why.
+          // The headline names what failed; the full list opens under it (Replay.tsx).
         };
       }
       case "purpose":

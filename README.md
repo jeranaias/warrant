@@ -6,6 +6,8 @@ The owner signs a **warrant** for each agent: who it may pay, how much per payme
 on which rails, and until when. Every payment an agent asks for is checked against it before any
 money moves. Risky requests wait for the owner, and one STOP button stops everything.
 
+**Demo video (3:21):** https://youtu.be/OhGSd7jZzUI
+
 ![Warrant demo (mock rails, scripted agents): Run a scenario; payments are paid or blocked with the reason; the owner denies a second licence bill and approves the treasury sweep; STOP revokes every warrant](docs/media/warrant-demo.gif)
 
 **Try it:** https://warrant-demo-bt31.onrender.com (access code from the team). Press **Run a
@@ -14,8 +16,7 @@ their own copy. The first visit after a quiet spell can take a minute to wake. T
 scripted; **Agents** in the top line runs them on Haiku with your own Anthropic key instead
 (memory only, never stored, at most 150 calls; ADR-023).
 
-Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents) ·
-[task board](https://github.com/users/jeranaias/projects/1)
+Our entry for the Airwallex Agentic Banking Hackathon (Kit 11, x402 business agents).
 
 ## How it works
 
@@ -212,7 +213,7 @@ docs/                architecture, decisions, demo script, runbook, testnet evid
 
 [Architecture](docs/ARCHITECTURE.md) · [Decisions (ADRs)](docs/DECISIONS.md) ·
 [Runbook](docs/RUNBOOK.md) · [Testnet evidence](docs/TESTNET.md) · [Demo script](docs/DEMO.md) ·
-[Contracts](docs/CONTRACTS.md) · [Submission draft](docs/SUBMISSION.md) ·
-[Video draft](docs/VIDEO.md)
+[Contracts](docs/CONTRACTS.md) · [Submission](docs/SUBMISSION.md) ·
+[Video script](docs/VIDEO.md)
 
 Everything here is sandbox or testnet. Nothing points at production Airwallex or mainnet.

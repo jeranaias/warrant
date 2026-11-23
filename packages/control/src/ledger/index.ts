@@ -28,7 +28,7 @@ export interface Reservation extends ReserveInput {
 type Draft = Omit<LedgerEntry, "seq" | "entryId" | "prevHash" | "hash" | "at">;
 
 /**
- * Append-only, hash-chained ledger (ADR-002, CLAUDE.md money rules).
+ * Append-only, hash-chained ledger (ADR-002, CONTRIBUTING.md money rules).
  *
  *   reserve -> rail call -> confirm | release
  *   reserve -> timeout   -> unconfirmed -> (status check) -> confirm | release

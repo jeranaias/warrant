@@ -1,5 +1,5 @@
 import type { Execution, LoggedEvent, Money, WarrantRow } from "./api.js";
-import { pendingLabel } from "./format.js";
+import { pendingLabel, unlistedPayee } from "./format.js";
 
 /**
  * The gate's data (components/Gate.tsx): every payment an agent asks for, what the warrant did
@@ -62,7 +62,7 @@ export function isCustomerPayee(p: {
 
 /**
  * Name a payee from any warrant in the world that lists it; only use "a customer" for real
- * refund/customer payees, and otherwise show the payee id.
+ * refund/customer payees, and otherwise say the unlisted payee plainly (unlistedPayee).
  */
 export function payeeName(
   payeeId: string,
@@ -73,7 +73,7 @@ export function payeeName(
     const found = w.payees.find((p) => p.payeeId === payeeId);
     if (found) return found.displayName;
   }
-  return isCustomerPayee({ payeeId, ...proposal }) ? "a customer" : payeeId;
+  return isCustomerPayee({ payeeId, ...proposal }) ? "a customer" : unlistedPayee(payeeId);
 }
 
 export function payeeNodes(warrants: WarrantRow[]): { id: string; name: string }[] {

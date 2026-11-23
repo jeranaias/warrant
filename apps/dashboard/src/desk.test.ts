@@ -341,10 +341,13 @@ describe("payeeName", () => {
     );
   });
 
-  it("uses 'a customer' only for real refund/customer payees and otherwise shows the payee id", () => {
+  it("uses 'a customer' only for real refund/customer payees and otherwise says the payee plainly", () => {
     const liveWarrants = [wrtTreasury];
-    expect(payeeName("pay_treasury", liveWarrants)).toBe("pay_treasury");
-    expect(payeeName("pay_rogue", liveWarrants)).toBe("pay_rogue");
+    expect(payeeName("pay_treasury", liveWarrants)).toBe("treasury");
+    expect(payeeName("pay_unknown_vendor", liveWarrants)).toBe("unknown vendor");
+    expect(payeeName("0x000000000000000000000000000000000000dEaD", liveWarrants)).toBe(
+      "0x0000…dEaD",
+    );
     expect(payeeName("customer", liveWarrants)).toBe("a customer");
     expect(payeeName("cus_1001", liveWarrants)).toBe("a customer");
     expect(payeeName(OTHER, liveWarrants)).toBe("a customer");
@@ -399,6 +402,7 @@ describe("payeeName", () => {
       (id) => (id === "wrt_treasury" ? "Treasury · licence" : "Support agent"),
       (id) => payeeName(id, liveWarrants),
     ) as PayRow[];
-    expect(built.map((r) => r.to)).toEqual(["a customer", "pay_treasury"]);
+    expect(built.map((r) => r.to)).toEqual(["a customer", "treasury"]);
+    expect(built.map((r) => r.payeeId)).toEqual([OTHER, "pay_treasury"]);
   });
 });
