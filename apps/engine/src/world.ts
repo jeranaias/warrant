@@ -112,9 +112,10 @@ export interface MetalTerms {
   sweep?: { version: number; mandate: MandateRef };
 }
 
-const DEMO_EXPIRY = "2026-11-20T00:00:00Z";
+const DEMO_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const demoExpiry = (now: Date) => new Date(now.getTime() + DEMO_LIFETIME_MS).toISOString();
 
-function demoTerms(): MetalTerms {
+function demoTerms(expiresAt: string): MetalTerms {
   const on = (role: MetalRole) => ({
     version: 1,
     mandate: {
@@ -123,7 +124,7 @@ function demoTerms(): MetalTerms {
       principal: PRINCIPAL,
       cap: AGENT_BUDGETS[role].perPaymentCap,
       budget: AGENT_BUDGETS[role].budget,
-      expiresAt: DEMO_EXPIRY,
+      expiresAt,
     },
   });
   return {
@@ -155,12 +156,12 @@ function onMandate(t: { version: number; mandate: MandateRef }) {
 
 export function bodies(
   now: Date,
-  terms: MetalTerms = demoTerms(),
+  terms: MetalTerms = demoTerms(demoExpiry(now)),
   licensorRef = "ben_licensor",
   card = false,
 ): WarrantBody[] {
   const notBefore = new Date(now.getTime() - 60_000).toISOString();
-  const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt: DEMO_EXPIRY };
+  const common = { version: 1, ownerId: OWNER_ID, notBefore, expiresAt: demoExpiry(now) };
   return [
     {
       ...common,
@@ -278,7 +279,7 @@ const STORE_QUERY_URL = "http://127.0.0.1:4021/query/fx-eurusd";
  * The customer's own warrant: their owner signed a grant for data purchases from our store, and
  * their control signed a pass for each purchase. The store kept each pass with the order.
  */
-function customerPasses(at: Date) {
+function customerPasses(at: Date, notAfter: string) {
   const owner = generateKeyPairSync("ed25519");
   const control = generateKeyPairSync("ed25519");
   const grant = issueGrant(
@@ -295,7 +296,7 @@ function customerPasses(at: Date) {
       ownerKeyId: "customer-owner-1",
       ownerKey: keyB64(owner.publicKey),
       mandateId: CUSTOMER_MANDATE,
-      notAfter: DEMO_EXPIRY,
+      notAfter,
     },
     owner.privateKey,
   );
@@ -550,24 +551,27 @@ export function recordingRunner(run: CliRunner, settled: string[]): CliRunner {
 
 export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
   const { card } = opts;
+  const expiresAt = demoExpiry(now);
+  const startedAt = Date.now();
+  const worldClock = () => new Date(now.getTime() + (Date.now() - startedAt));
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const warrants = new Map(
-    bodies(now, demoTerms(), opts.airwallex?.licensorRef, card !== undefined).map((b) => [
+    bodies(now, demoTerms(expiresAt), opts.airwallex?.licensorRef, card !== undefined).map((b) => [
       b.warrantId,
       signWarrant(b, privateKey, "owner-demo"),
     ]),
   );
-  const passes = customerPasses(now);
+  const passes = customerPasses(now, expiresAt);
   const orders = new Map(
     ["ord_1", "ord_2", "ord_3"].map((id) => [id, order(id, now, passes.forOrder)]),
   );
   const sold = new Set([...orders.values()].map((o) => o.txHash));
 
   // One mandate per Metal agent, same limits as its warrant (ADR-009 #2).
-  const chain = new MockMetalChain();
+  const chain = new MockMetalChain(worldClock);
   chain.fund(PRINCIPAL, 2000);
   const upstream = addUpstream(chain, 2);
-  const expires = new Date(DEMO_EXPIRY);
+  const expires = new Date(expiresAt);
   chain.addMandate({
     credential: "sourcing.json",
     principal: PRINCIPAL,
@@ -622,7 +626,7 @@ export function makeWorld(now = new Date(), opts: WorldOptions = {}): World {
 
   return {
     mode: "mock",
-    storeSale: storeDoor(passes, () => new Date()),
+    storeSale: storeDoor(passes, worldClock),
     ownerPublicKey: publicKey,
     credentials,
     applyBudgetChange,
